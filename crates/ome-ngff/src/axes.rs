@@ -1,4 +1,6 @@
-use serde::{Serialize, Deserialize};
+use std::fmt::{format, Formatter};
+use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use serde::de::{MapAccess, Visitor};
 
 // https://ngff.openmicroscopy.org/0.4/#axes-md
 
@@ -71,7 +73,20 @@ pub struct SpaceAxis {
     pub name: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub unit: Option<SpaceUnit>
+    pub unit: Option<SpaceUnit>,
+
+    //#[serde(rename = "type")]
+    //axis_type: String,
+}
+
+impl SpaceAxis {
+    pub fn new(name: String, unit: Option<SpaceUnit>) -> Self {
+        Self{
+            name,
+            unit,
+            //axis_type: "space".to_string(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -80,11 +95,36 @@ pub struct TimeAxis {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unit: Option<TimeUnit>,
+
+    //#[serde(rename = "type")]
+    //axis_type: String,
+}
+
+impl TimeAxis {
+    pub fn new(name: String, unit: Option<TimeUnit>) -> Self {
+        Self{
+            name,
+            unit,
+            //axis_type: "time".to_string(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct ChannelAxis {
     pub name: String,
+
+    //#[serde(rename = "type")]
+    //axis_type: String,
+}
+
+impl ChannelAxis {
+    pub fn new(name: String) -> Self {
+        Self{
+            name,
+            //axis_type: "channel".to_string(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -99,130 +139,124 @@ pub struct CustomAxis {
     pub unit: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AxisType {
-    Space,
-    Time,
-    Channel,
-    // todo: translate to unknown
-    Unknown,
-}
-
-// TODO: maybe do this with an enum variant?
-/// Represen
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AxisUnit {
-    // Space Units
-    Angstrom,
-    Attometer,
-    Centimeter,
-    Decimeter,
-    Exameter,
-    Femtometer,
-    Foot,
-    Gigameter,
-    Hectometer,
-    Inch,
-    Kilometer,
-    Megameter,
-    Meter,
-    Micrometer,
-    Mile,
-    Millimeter,
-    Anometer,
-    Parsec,
-    Petameter,
-    Picometer,
-    Terameter,
-    Yard,
-    Yoctometer,
-    Yottameter,
-    Zeptometer,
-    Zettameter,
-
-    // Time units
-    Attosecond,
-    Centisecond,
-    Day,
-    Decisecond,
-    Exasecond,
-    Femtosecond,
-    Gigasecond,
-    Hectosecond,
-    Hour,
-    Kilosecond,
-    Megasecond,
-    Microsecond,
-    Millisecond,
-    Minute,
-    Nanosecond,
-    Petasecond,
-    Picosecond,
-    Second,
-    Terasecond,
-    Yoctosecond,
-    Yottasecond,
-    Zeptosecond,
-    Zettasecond
-}
-
-impl AxisUnit {
-    /// Checks whether the `AxisUnit` is a 'space' axis unit.
-    /// See also: `is_time_unit`
-    pub fn is_space_unit(&self) -> bool {
-        match self {
-            AxisUnit::Angstrom |
-            AxisUnit::Attometer |
-            AxisUnit::Centimeter |
-            AxisUnit::Decimeter |
-            AxisUnit::Exameter |
-            AxisUnit::Femtometer |
-            AxisUnit::Foot |
-            AxisUnit::Gigameter |
-            AxisUnit::Hectometer |
-            AxisUnit::Inch |
-            AxisUnit::Kilometer |
-            AxisUnit::Megameter |
-            AxisUnit::Meter |
-            AxisUnit::Micrometer |
-            AxisUnit::Mile |
-            AxisUnit::Millimeter |
-            AxisUnit::Anometer |
-            AxisUnit::Parsec |
-            AxisUnit::Petameter |
-            AxisUnit::Picometer |
-            AxisUnit::Terameter |
-            AxisUnit::Yard |
-            AxisUnit::Yoctometer |
-            AxisUnit::Yottameter |
-            AxisUnit::Zeptometer |
-            AxisUnit::Zettameter => true,
-            _ => false
+impl CustomAxis {
+    pub fn new(name: String, axis_type: Option<String>, unit: Option<String>) -> Self {
+        Self{
+            name,
+            axis_type,
+            unit,
         }
     }
+}
 
-    /// Checks whether the `AxisUnit` is a 'time' axis unit.
-    /// See also: `is_space_unit`
-    pub fn is_time_unit(&self) -> bool {
-        !self.is_space_unit()
+// https://github.com/serde-rs/serde/issues/1799#issuecomment-624978919
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[serde(tag = "type")]
+pub enum Axis {
+    Space(SpaceAxis),
+    Time(TimeAxis),
+    Channel(ChannelAxis),
+    Custom(CustomAxis),
+}
+
+/**
+impl Serialize for Axis {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        match self {
+            Axis::Space(value) => {
+                self::SpaceAxis::serialize(value, serializer)
+            }
+            Axis::Time(value) => {
+                self::TimeAxis::serialize(value, serializer)
+            }
+            Axis::Channel(value) => {
+                self::ChannelAxis::serialize(value, serializer)
+            }
+            Axis::Custom(value) => {
+                self::CustomAxis::serialize(value, serializer)
+            }
+        }
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct Axis {
-    pub name: String,
 
-    // todo: this should be "if is Unknown"
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(rename = "type")]
-    pub axis_type: Option<AxisType>,
+impl<'de>  Deserialize<'de> for Axis {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+        struct AxisVisitor;
+        impl<'de> Visitor<'de> for AxisVisitor {
+            type Value = Axis;
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub unit: Option<AxisUnit>,
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                formatter.write_str("an Axis variant")
+            }
+
+            fn visit_map<V>(self, mut access: V) -> Result<Self::Value, V::Error> where V: MapAccess<'de> {
+                let mut name = "".to_string();
+                let mut axis_type: Option<String> = None;
+                let mut unit: Option<String> = None;
+                while let Some((key, value)) = access.next_entry()? {
+                    match key {
+                        "name" => {
+                            name = value;
+                        },
+                        "type" => {
+                            axis_type = Some(value);
+                        },
+                        "unit" => {
+                            unit = Some(value);
+                        },
+                        // ignore other keys
+                        _ => {}
+                    }
+                }
+
+                // todo: err on empty name
+
+                if axis_type.is_some() {
+                    match axis_type.unwrap().as_str() {
+                        "space" => {
+                            // todo: err on invalid unit
+                            Ok(Axis::Space(SpaceAxis::new(
+                                name.to_string(),
+                                None
+                            )))
+                        }
+                        "time" => {
+                            // todo: err on invalid unit
+                            Ok(Axis::Time(TimeAxis::new(
+                                name.to_string(),
+                                None
+                            )))
+                        },
+                        "channel" => {
+                            // todo: warn on lost unit
+                            Ok(Axis::Channel(ChannelAxis::new(
+                                name.to_string()
+                            )))
+                        },
+                        _ => {
+                            Ok(Axis::Custom(CustomAxis::new(
+                                name.to_string(),
+                                axis_type,
+                                unit
+                            )))
+                        }
+                    }
+                } else {
+                    Ok(Axis::Custom(CustomAxis::new(
+                        name,
+                        axis_type,
+                        unit
+                    )))
+                }
+            }
+        }
+        deserializer.deserialize_any(AxisVisitor)
+    }
 }
-
+*/
 
 #[cfg(test)]
 mod tests {

@@ -26,7 +26,7 @@ pub struct Example {
     pub field1: HashMap<u32, String>,
     pub field2: Vec<Vec<f32>>,
     pub field3: [f32; 4],
-    pub axis: axes::Axis,
+    pub axes: Vec<axes::Axis>,
 }
 
 pub fn foo() {

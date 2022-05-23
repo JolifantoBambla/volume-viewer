@@ -42,11 +42,23 @@ pub fn send_example_to_js() -> JsValue {
         field1,
         field2: vec![vec![1., 2.], vec![3., 4.]],
         field3: [1., 2., 3., 4.],
-        axis: ome_ngff::Axis{
-            name: "foo".to_string(),
-            axis_type: Some(ome_ngff::AxisType::Space),
-            unit: Some(ome_ngff::AxisUnit::Angstrom)
-        },
+        axes: vec![
+            ome_ngff::Axis::Space(ome_ngff::axes::SpaceAxis::new(
+                "foo".to_string(),
+                Some(ome_ngff::SpaceUnit::Angstrom)
+            )),
+            ome_ngff::Axis::Time(ome_ngff::axes::TimeAxis::new(
+                "foo".to_string(),
+                Some(ome_ngff::TimeUnit::Attosecond)
+            )),
+            ome_ngff::Axis::Channel(ome_ngff::axes::ChannelAxis::new(
+                "foo".to_string(),
+            )),
+            ome_ngff::Axis::Custom(ome_ngff::axes::CustomAxis::new(
+                "foo".to_string(),
+                Some("dunno".to_string()),
+                Some("unit".to_string()),
+            ))],
     };
 
     JsValue::from_serde(&example).unwrap()
@@ -55,6 +67,6 @@ pub fn send_example_to_js() -> JsValue {
 #[wasm_bindgen(js_name = "receiveExampleFromJS")]
 pub fn receive_example_from_js(val: &JsValue) -> JsValue {
     let mut example: ome_ngff::Example = val.into_serde().unwrap();
-    example.axis.name = "lalala".parse().unwrap();
+    //example.axis.name = "lalala".parse().unwrap();
     JsValue::from_serde(&example).unwrap()
 }
