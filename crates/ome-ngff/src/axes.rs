@@ -6,7 +6,7 @@ use serde::de::{MapAccess, Visitor};
 
 
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SpaceUnit {
     Angstrom,
@@ -37,7 +37,7 @@ pub enum SpaceUnit {
     Zettameter,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TimeUnit {
     Attosecond,
@@ -68,15 +68,12 @@ pub enum TimeUnit {
 
 // axis types
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SpaceAxis {
     pub name: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unit: Option<SpaceUnit>,
-
-    //#[serde(rename = "type")]
-    //axis_type: String,
 }
 
 impl SpaceAxis {
@@ -84,20 +81,16 @@ impl SpaceAxis {
         Self{
             name,
             unit,
-            //axis_type: "space".to_string(),
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TimeAxis {
     pub name: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unit: Option<TimeUnit>,
-
-    //#[serde(rename = "type")]
-    //axis_type: String,
 }
 
 impl TimeAxis {
@@ -105,29 +98,24 @@ impl TimeAxis {
         Self{
             name,
             unit,
-            //axis_type: "time".to_string(),
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ChannelAxis {
     pub name: String,
-
-    //#[serde(rename = "type")]
-    //axis_type: String,
 }
 
 impl ChannelAxis {
     pub fn new(name: String) -> Self {
         Self{
             name,
-            //axis_type: "channel".to_string(),
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CustomAxis {
     pub name: String,
 
@@ -151,14 +139,46 @@ impl CustomAxis {
 
 // https://github.com/serde-rs/serde/issues/1799#issuecomment-624978919
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
+#[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
+enum TaggedAxis {
+    Space(SpaceAxis),
+    Time(TimeAxis),
+    Channel(ChannelAxis),
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum MaybeTaggedAxis {
+    Tagged(TaggedAxis),
+    Untagged(CustomAxis),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[serde(from = "MaybeTaggedAxis")]
 #[serde(tag = "type")]
 pub enum Axis {
     Space(SpaceAxis),
     Time(TimeAxis),
     Channel(ChannelAxis),
     Custom(CustomAxis),
+}
+
+impl From<MaybeTaggedAxis> for Axis {
+    fn from(axis: MaybeTaggedAxis) -> Axis {
+        match axis {
+            MaybeTaggedAxis::Untagged(CustomAxis{ name, axis_type, unit})
+            => Axis::Custom(CustomAxis { name, axis_type, unit }),
+            MaybeTaggedAxis::Tagged(TaggedAxis::Space(SpaceAxis{ name, unit }))
+            => Axis::Space(SpaceAxis { name, unit }),
+            MaybeTaggedAxis::Tagged(TaggedAxis::Time(TimeAxis{ name, unit }))
+            => Axis::Time(TimeAxis { name, unit }),
+            MaybeTaggedAxis::Tagged(TaggedAxis::Channel(ChannelAxis{ name }))
+            => Axis::Channel(ChannelAxis { name }),
+        }
+    }
 }
 
 /**

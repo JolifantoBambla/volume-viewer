@@ -56,9 +56,10 @@ pub fn send_example_to_js() -> JsValue {
             )),
             ome_ngff::Axis::Custom(ome_ngff::axes::CustomAxis::new(
                 "foo".to_string(),
-                Some("dunno".to_string()),
+                Some("lalala".to_string()),
                 Some("unit".to_string()),
-            ))],
+            ))
+        ],
     };
 
     JsValue::from_serde(&example).unwrap()
