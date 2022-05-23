@@ -9,7 +9,7 @@
 
 <body>
     <script type="module">
-        import init, { lala, sendExampleToJS } from "./pkg/volume_viewer.js";
+        import init, { lala, sendExampleToJS, receiveExampleFromJS } from "./pkg/volume_viewer.js";
 
         async function run() {
             await init();
@@ -20,6 +20,7 @@
             }
 
             console.log(sendExampleToJS());
+            console.log(receiveExampleFromJS(sendExampleToJS()));
         }
         run();
     </script>

@@ -32,6 +32,8 @@ pub fn greet() {
     ome_ngff::foo();
 }
 
+// todo: test https://rustwasm.github.io/wasm-bindgen/reference/arbitrary-data-with-serde.html
+
 #[wasm_bindgen(js_name="sendExampleToJS")]
 pub fn send_example_to_js() -> JsValue {
     let mut field1 = HashMap::new();
@@ -42,10 +44,17 @@ pub fn send_example_to_js() -> JsValue {
         field3: [1., 2., 3., 4.],
         axis: ome_ngff::Axis{
             name: "foo".to_string(),
-            axis_type: ome_ngff::AxisType::Space,
-            unit: ome_ngff::AxisUnit::AxisSpaceUnit(ome_ngff::AxisSpaceUnit::Angstrom)
+            axis_type: Some(ome_ngff::AxisType::Space),
+            unit: Some(ome_ngff::AxisUnit::AxisSpaceUnit(ome_ngff::AxisSpaceUnit::Angstrom))
         },
     };
 
+    JsValue::from_serde(&example).unwrap()
+}
+
+#[wasm_bindgen(js_name = "receiveExampleFromJS")]
+pub fn receive_example_from_js(val: &JsValue) -> JsValue {
+    let mut example: ome_ngff::Example = val.into_serde().unwrap();
+    example.axis.name = "lalala".parse().unwrap();
     JsValue::from_serde(&example).unwrap()
 }

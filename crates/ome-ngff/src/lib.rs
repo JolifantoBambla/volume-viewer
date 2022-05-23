@@ -1,6 +1,13 @@
 use std::collections::HashMap;
+use std::fmt;
+use std::fmt::Formatter;
+use std::marker::PhantomData;
+use std::path::Display;
+use std::str::FromStr;
+use std::string::ParseError;
 
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use serde::de::{EnumAccess, Error, MapAccess, SeqAccess, Visitor};
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -8,7 +15,6 @@ pub enum AxisType {
     Space,
     Time,
     Channel,
-    Unknown
 }
 
 #[derive(Serialize, Deserialize)]
@@ -70,12 +76,10 @@ pub enum AxisTimeUnit {
     Zettasecond
 }
 
-#[derive(Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AxisUnit {
     AxisSpaceUnit(AxisSpaceUnit),
     AxisTimeUnit(AxisTimeUnit),
-    Unknown,
 }
 
 impl Serialize for AxisUnit {
@@ -87,23 +91,99 @@ impl Serialize for AxisUnit {
             AxisUnit::AxisTimeUnit(value) => {
                 self::AxisTimeUnit::serialize(value, serializer)
             },
+        }
+    }
+}
+
+impl FromStr for AxisUnit {
+    type Err = ParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "angstrom" |
+            "attometer" |
+            "centimeter" |
+            "decimeter" |
+            "exameter" |
+            "femtometer" |
+            "foot" |
+            "gigameter" |
+            "hectometer" |
+            "inch" |
+            "kilometer" |
+            "megameter" |
+            "meter" |
+            "micrometer" |
+            "mile" |
+            "millimeter" |
+            "anometer" |
+            "parsec" |
+            "petameter" |
+            "picometer" |
+            "terameter" |
+            "yard" |
+            "yoctometer" |
+            "yottameter" |
+            "zeptometer" |
+            "zettameter" => {Ok(Self::AxisSpaceUnit(AxisSpaceUnit::Angstrom))},
+            "Attosecond" |
+            "Centisecond" |
+            "Day" |
+            "Decisecond" |
+            "Exasecond" |
+            "Femtosecond" |
+            "Gigasecond" |
+            "Hectosecond" |
+            "Hour" |
+            "Kilosecond" |
+            "Megasecond" |
+            "Microsecond" |
+            "Millisecond" |
+            "Minute" |
+            "Nanosecond" |
+            "Petasecond" |
+            "Picosecond" |
+            "Second" |
+            "Terasecond" |
+            "Yoctosecond" |
+            "Yottasecond" |
+            "Zeptosecond" |
+            "Zettasecond" => {Ok(Self::AxisTimeUnit(AxisTimeUnit::Attosecond))},
             _ => {
-                serializer.serialize_str("")
+                let err_msg = format!("Can't parse AxisUnit from {}", s);
+                Err(ParseError::from(()))
             }
         }
     }
 }
 
 // use this example to deserialze to one of the two axis unit types: https://serde.rs/string-or-struct.html
-//impl<'de> Deserialize<'de> for AxisUnit {
-//    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {}
-//}
+impl<'de> Deserialize<'de> for AxisUnit {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+        struct AxisUnitDeserializer;
+        impl<'de> Visitor<'de> for AxisUnitDeserializer {
+            type Value = AxisUnit;
+            fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
+                formatter.write_str("AxisUnit")
+            }
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: Error {
+                AxisUnit::from_str(v)
+            }
+        }
+        deserializer.deserialize_any(AxisUnitDeserializer)
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Axis {
     pub name: String,
-    pub axis_type: AxisType,
-    pub unit: AxisUnit,
+    // todo: this should be "if is Unknown"
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "type")]
+    pub axis_type: Option<AxisType>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<AxisUnit>,
 }
 
 // https://ngff.openmicroscopy.org/latest/#metadata
