@@ -45,7 +45,7 @@ pub fn send_example_to_js() -> JsValue {
         axis: ome_ngff::Axis{
             name: "foo".to_string(),
             axis_type: Some(ome_ngff::AxisType::Space),
-            unit: Some(ome_ngff::AxisUnit::AxisSpaceUnit(ome_ngff::AxisSpaceUnit::Angstrom))
+            unit: Some(ome_ngff::AxisUnit::Angstrom)
         },
     };
 
