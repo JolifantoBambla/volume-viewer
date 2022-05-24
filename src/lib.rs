@@ -69,12 +69,60 @@ pub fn send_example_to_js() -> JsValue {
         ],
     };
 
-    JsValue::from_serde(&example).unwrap()
+    let multiscale = ome_ngff::MultiScale {
+        name: Some("foo".to_string()),
+        version: Some("0.4.0".to_string()),
+        downscaling_type: Some("gaussian".to_string()),
+        axes: vec![
+            ome_ngff::Axis::Space(ome_ngff::axes::SpaceAxis::new(
+                "foo".to_string(),
+                Some(ome_ngff::SpaceUnit::Angstrom)
+            )),
+            ome_ngff::Axis::Time(ome_ngff::axes::TimeAxis::new(
+                "foo".to_string(),
+                Some(ome_ngff::TimeUnit::Attosecond)
+            )),
+            ome_ngff::Axis::Channel(ome_ngff::axes::ChannelAxis::new(
+                "foo".to_string(),
+            )),
+            ome_ngff::Axis::Custom(ome_ngff::axes::CustomAxis::new(
+                "foo".to_string(),
+                Some("lalala".to_string()),
+                Some("unit".to_string()),
+            ))
+        ],
+        datasets: vec![
+            ome_ngff::Dataset{
+                path: "0".to_string(),
+                coordinate_transformations: vec![
+                    ome_ngff::CoordinateTransformation::Scale(ome_ngff::Scale::Scale(vec![1.0, 2.0, 3.0])),
+                    ome_ngff::CoordinateTransformation::Translation(ome_ngff::Translation::Translation(vec![1.0, 2.0, 3.0])),
+                ]
+            },
+            ome_ngff::Dataset{
+                path: "1".to_string(),
+                coordinate_transformations: vec![
+                    ome_ngff::CoordinateTransformation::Scale(ome_ngff::Scale::Scale(vec![1.0, 2.0, 3.0])),
+                    ome_ngff::CoordinateTransformation::Translation(ome_ngff::Translation::Translation(vec![1.0, 2.0, 3.0])),
+                ]
+            },
+        ],
+        coordinate_transformations: Some(vec![
+            ome_ngff::CoordinateTransformation::Identity(ome_ngff::Identity{}),
+            ome_ngff::CoordinateTransformation::Translation(ome_ngff::Translation::Translation(vec![1.0, 2.0, 3.0])),
+            ome_ngff::CoordinateTransformation::Translation(ome_ngff::Translation::Path("/path/to/translation.smth".to_string())),
+            ome_ngff::CoordinateTransformation::Scale(ome_ngff::Scale::Scale(vec![1.0, 2.0, 3.0])),
+            ome_ngff::CoordinateTransformation::Scale(ome_ngff::Scale::Path("/path/to/translation.smth".to_string())),
+        ]),
+        metadata: None
+    };
+
+    JsValue::from_serde(&multiscale).unwrap()
 }
 
 #[wasm_bindgen(js_name = "receiveExampleFromJS")]
 pub fn receive_example_from_js(val: &JsValue) -> JsValue {
-    let mut example: ome_ngff::Example = val.into_serde().unwrap();
+    let mut example: ome_ngff::MultiScale = val.into_serde().unwrap();
     //example.axis.name = "lalala".parse().unwrap();
     JsValue::from_serde(&example).unwrap()
 }

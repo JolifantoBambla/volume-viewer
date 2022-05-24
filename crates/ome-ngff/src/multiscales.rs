@@ -7,7 +7,6 @@ use crate::coordinate_transformations;
 pub struct Dataset {
     pub path: String,
 
-    #[serde(flatten)]
     #[serde(rename = "coordinateTransformations")]
     pub coordinate_transformations: Vec<coordinate_transformations::CoordinateTransformation>,
 }
@@ -26,11 +25,14 @@ pub struct MultiScale {
 
     pub axes: Vec<axes::Axis>,
 
+    // ordered by largest (i.e. highest resolution) to smallest.
     pub datasets: Vec<Dataset>,
 
+    // are applied after `coordinate_transformations` in `datasets`
     #[serde(rename = "coordinateTransformations")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub coordinate_transformations: Option<Vec<coordinate_transformations::CoordinateTransformation>>,
 
-    pub metadata: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
