@@ -78,29 +78,3 @@ pub struct Metadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub well: Option<Well>,
 }
-
-// todo: remove this
-#[derive(Serialize, Deserialize)]
-pub struct Example {
-    pub field1: HashMap<u32, String>,
-    pub field2: Vec<Vec<f32>>,
-    pub field3: [f32; 4],
-    pub axes: Vec<axes::Axis>,
-
-    #[serde(rename = "coordinateTransformations")]
-    pub coordinate_transformations: Vec<coordinate_transformations::CoordinateTransformation>,
-}
-
-// todo: remove this
-pub fn foo() {
-    log::info!("logging from ome-ngff");
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-}

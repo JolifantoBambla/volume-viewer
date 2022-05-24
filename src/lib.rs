@@ -29,46 +29,12 @@ extern {
 #[wasm_bindgen(js_name="lala")]
 pub fn greet() {
     log::info!("Logging that mofo {}", instant::now());
-    ome_ngff::foo();
 }
 
 // todo: test https://rustwasm.github.io/wasm-bindgen/reference/arbitrary-data-with-serde.html
 
 #[wasm_bindgen(js_name="sendExampleToJS")]
 pub fn send_example_to_js() -> JsValue {
-    let mut field1 = HashMap::new();
-    field1.insert(0, String::from("eaasdfasdfasdfasdfx"));
-    let example = ome_ngff::Example {
-        field1,
-        field2: vec![vec![1., 2.], vec![3., 4.]],
-        field3: [1., 2., 3., 4.],
-        axes: vec![
-            ome_ngff::Axis::Space(ome_ngff::axes::SpaceAxis::new(
-                "foo".to_string(),
-                Some(ome_ngff::SpaceUnit::Angstrom)
-            )),
-            ome_ngff::Axis::Time(ome_ngff::axes::TimeAxis::new(
-                "foo".to_string(),
-                Some(ome_ngff::TimeUnit::Attosecond)
-            )),
-            ome_ngff::Axis::Channel(ome_ngff::axes::ChannelAxis::new(
-                "foo".to_string(),
-            )),
-            ome_ngff::Axis::Custom(ome_ngff::axes::CustomAxis::new(
-                "foo".to_string(),
-                Some("lalala".to_string()),
-                Some("unit".to_string()),
-            ))
-        ],
-        coordinate_transformations: vec![
-            ome_ngff::CoordinateTransformation::Identity(ome_ngff::Identity{}),
-            ome_ngff::CoordinateTransformation::Translation(ome_ngff::Translation::Translation(vec![1.0, 2.0, 3.0])),
-            ome_ngff::CoordinateTransformation::Translation(ome_ngff::Translation::Path("/path/to/translation.smth".to_string())),
-            ome_ngff::CoordinateTransformation::Scale(ome_ngff::Scale::Scale(vec![1.0, 2.0, 3.0])),
-            ome_ngff::CoordinateTransformation::Scale(ome_ngff::Scale::Path("/path/to/translation.smth".to_string())),
-        ],
-    };
-
     let multiscale = ome_ngff::MultiScale {
         name: Some("foo".to_string()),
         version: Some("0.4.0".to_string()),
