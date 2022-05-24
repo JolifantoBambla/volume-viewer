@@ -15,6 +15,9 @@ default = [
     "console_error_panic_hook"
 ]
 
+[target.wasm32-unknown-unknown]
+runner = 'wasm-bindgen-test-runner'
+
 [dependencies]
 bevy_utils = "0.7.0"
 instant = "0.1.12"
