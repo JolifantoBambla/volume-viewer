@@ -2,8 +2,6 @@ use serde::{Serialize, Deserialize};
 
 // https://ngff.openmicroscopy.org/0.4/#axes-md
 
-
-
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SpaceUnit {
@@ -181,6 +179,18 @@ impl From<MaybeTaggedAxis> for Axis {
 
 #[cfg(test)]
 mod tests {
+    // todo:
+    //  - space without unit
+    //  - space with unit
+    //  - time without unit
+    //  - time with unit
+    //  - channel without unit
+    //  - channel with unit (should be same as without)
+    //  - custom axis without unit and type
+    //  - custom axis with unit and without type
+    //  - custom axis without unit and with type
+    //  - axis without name should throw
+
     #[test]
     fn it_works() {
         let result = 2 + 2;

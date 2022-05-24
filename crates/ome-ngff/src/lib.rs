@@ -1,19 +1,21 @@
+//! OME-NGFF Metadata
+//! https://ngff.openmicroscopy.org/0.4/
+//! https://ngff.openmicroscopy.org/latest/#metadata
+
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-
-// https://ngff.openmicroscopy.org/0.4/
 
 pub mod axes;
 pub mod coordinate_transformations;
 pub mod multiscales;
 pub mod omero;
+pub mod validation;
 
 pub use axes::*;
 pub use coordinate_transformations::*;
 pub use multiscales::*;
 pub use omero::*;
-
-// https://ngff.openmicroscopy.org/latest/#metadata
+pub use validation::*;
 
 #[derive(Serialize, Deserialize)]
 pub struct Metadata {
@@ -27,6 +29,9 @@ pub struct Example {
     pub field2: Vec<Vec<f32>>,
     pub field3: [f32; 4],
     pub axes: Vec<axes::Axis>,
+
+    #[serde(rename = "coordinateTransformations")]
+    pub coordinate_transformations: Vec<coordinate_transformations::CoordinateTransformation>,
 }
 
 pub fn foo() {

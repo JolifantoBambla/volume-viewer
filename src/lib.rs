@@ -60,6 +60,13 @@ pub fn send_example_to_js() -> JsValue {
                 Some("unit".to_string()),
             ))
         ],
+        coordinate_transformations: vec![
+            ome_ngff::CoordinateTransformation::Identity(ome_ngff::Identity{}),
+            ome_ngff::CoordinateTransformation::Translation(ome_ngff::Translation::Translation(vec![1.0, 2.0, 3.0])),
+            ome_ngff::CoordinateTransformation::Translation(ome_ngff::Translation::Path("/path/to/translation.smth".to_string())),
+            ome_ngff::CoordinateTransformation::Scale(ome_ngff::Scale::Scale(vec![1.0, 2.0, 3.0])),
+            ome_ngff::CoordinateTransformation::Scale(ome_ngff::Scale::Path("/path/to/translation.smth".to_string())),
+        ],
     };
 
     JsValue::from_serde(&example).unwrap()
