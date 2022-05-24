@@ -1,4 +1,5 @@
 use serde::{Serialize, Deserialize};
+use serde_json::Value;
 
 use crate::axes;
 use crate::coordinate_transformations;
@@ -33,6 +34,7 @@ pub struct MultiScale {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub coordinate_transformations: Option<Vec<coordinate_transformations::CoordinateTransformation>>,
 
+    // fields in metadata depend on `downscaling_type`
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
+    pub metadata: Option<Value>,
 }
