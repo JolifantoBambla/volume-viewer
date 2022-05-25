@@ -2,7 +2,6 @@
 //! https://ngff.openmicroscopy.org/0.4/
 //! https://ngff.openmicroscopy.org/latest/#metadata
 
-use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
 pub mod axes;
