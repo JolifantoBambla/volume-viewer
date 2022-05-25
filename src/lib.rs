@@ -91,8 +91,14 @@ pub fn send_example_to_js() -> JsValue {
 pub fn receive_example_from_js(val: &JsValue) -> JsValue {
     let mut example: ome_ngff::multiscale::Multiscale = val.into_serde().unwrap();
     match &example {
+        ome_ngff::multiscale::Multiscale::V0_2(m) => {
+            log::info!("got a v0.2!");
+        },
+        ome_ngff::multiscale::Multiscale::V0_3(m) => {
+            log::info!("got a v0.3!");
+        }
         ome_ngff::multiscale::Multiscale::V0_4(m) => {
-            log::info!("multiscale valid (expect false): {}", m.is_valid());
+            log::info!("got a v0.4 and is_valid returned: {}", m.is_valid());
         },
         _ => {}
     }
