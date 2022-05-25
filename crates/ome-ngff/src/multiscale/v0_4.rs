@@ -28,9 +28,6 @@ pub struct Multiscale {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub version: Option<String>,
-
     #[serde(rename = "type")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub downscaling_type: Option<String>,
@@ -325,7 +322,6 @@ mod tests {
     fn multiscale_from_axes(axes: Vec<Axis>) -> Multiscale {
         Multiscale{
             name: None,
-            version: None,
             downscaling_type: None,
             axes,
             datasets: vec![],

@@ -35,9 +35,8 @@ pub fn greet() {
 
 #[wasm_bindgen(js_name="sendExampleToJS")]
 pub fn send_example_to_js() -> JsValue {
-    let multiscale = ome_ngff::multiscale::Multiscale {
+    let multiscale = ome_ngff::multiscale::v0_4::Multiscale {
         name: Some("foo".to_string()),
-        version: Some("0.4.0".to_string()),
         downscaling_type: Some("gaussian".to_string()),
         axes: vec![
             ome_ngff::axis::Axis::Space(ome_ngff::axis::SpaceAxis{
@@ -58,14 +57,14 @@ pub fn send_example_to_js() -> JsValue {
             })
         ],
         datasets: vec![
-            ome_ngff::multiscale::Dataset{
+            ome_ngff::multiscale::v0_4::Dataset{
                 path: "0".to_string(),
                 coordinate_transformations: vec![
                     ome_ngff::coordinate_transformations::CoordinateTransformation::Scale(ome_ngff::coordinate_transformations::Scale::Scale(vec![1.0, 2.0, 3.0])),
                     ome_ngff::coordinate_transformations::CoordinateTransformation::Translation(ome_ngff::coordinate_transformations::Translation::Translation(vec![1.0, 2.0, 3.0])),
                 ]
             },
-            ome_ngff::multiscale::Dataset{
+            ome_ngff::multiscale::v0_4::Dataset{
                 path: "1".to_string(),
                 coordinate_transformations: vec![
                     ome_ngff::coordinate_transformations::CoordinateTransformation::Scale(ome_ngff::coordinate_transformations::Scale::Scale(vec![1.0, 2.0, 3.0])),
@@ -91,6 +90,11 @@ pub fn send_example_to_js() -> JsValue {
 #[wasm_bindgen(js_name = "receiveExampleFromJS")]
 pub fn receive_example_from_js(val: &JsValue) -> JsValue {
     let mut example: ome_ngff::multiscale::Multiscale = val.into_serde().unwrap();
-    log::info!("multiscale valid (expect false): {}", example.is_valid());
+    match &example {
+        ome_ngff::multiscale::Multiscale::V0_4(m) => {
+            log::info!("multiscale valid (expect false): {}", m.is_valid());
+        },
+        _ => {}
+    }
     JsValue::from_serde(&example).unwrap()
 }
