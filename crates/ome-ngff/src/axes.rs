@@ -161,6 +161,53 @@ pub enum Axis {
     Custom(CustomAxis),
 }
 
+impl Axis {
+    pub fn get_space_axes(axes: &Vec<Axis>) -> Vec<SpaceAxis> {
+        axes.iter()
+            .filter(|&a| matches!(a, Axis::Space(SpaceAxis)))
+            .map(|a| {
+                if let Axis::Space(space_axis) = a {
+                   Some(space_axis.clone())
+                } else {
+                    None
+                }.unwrap()
+            }).collect()
+    }
+    pub fn get_time_axes(axes: &Vec<Axis>) -> Vec<TimeAxis> {
+        axes.iter()
+            .filter(|&a| matches!(a, Axis::Time(TimeAxis)))
+            .map(|a| {
+                if let Axis::Time(time_axis) = a {
+                    Some(time_axis.clone())
+                } else {
+                    None
+                }.unwrap()
+            }).collect()
+    }
+    pub fn get_channel_axes(axes: &Vec<Axis>) -> Vec<ChannelAxis> {
+        axes.iter()
+            .filter(|&a| matches!(a, Axis::Channel(ChannelAxis)))
+            .map(|a| {
+                if let Axis::Channel(channel_axis) = a {
+                    Some(channel_axis.clone())
+                } else {
+                    None
+                }.unwrap()
+            }).collect()
+    }
+    pub fn get_custom_axes(axes: &Vec<Axis>) -> Vec<CustomAxis> {
+        axes.iter()
+            .filter(|&a| matches!(a, Axis::Custom(CustomAxis)))
+            .map(|a| {
+                if let Axis::Custom(custom_axis) = a {
+                    Some(custom_axis.clone())
+                } else {
+                    None
+                }.unwrap()
+            }).collect()
+    }
+}
+
 // custom Serialize implementation because otherwise CustomAxis instance without an axis_type get a "type": "custom"
 impl Serialize for Axis {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
