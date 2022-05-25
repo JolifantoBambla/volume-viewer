@@ -27,7 +27,7 @@ wasm-bindgen = { version = "0.2.63", features = ["serde-serialize"] }
 wasm-logger = "0.2.0"
 web-sys = { version = "0.3.57", features = ["Document", "HtmlCanvasElement"] }
 
-ome-ngff = { path = "crates/ome-ngff", default-features = false }
+ome-ngff = { path = "crates/ome-ngff", features = ["log"] }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires

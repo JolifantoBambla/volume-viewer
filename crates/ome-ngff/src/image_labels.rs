@@ -42,3 +42,22 @@ pub struct ImageLabel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<Source>,
 }
+
+impl ImageLabel {
+    pub fn is_valid(&self) -> bool {
+        true
+    }
+
+// todo: image-label
+//  - "image-label.colors": "label-value"s should be unique
+}
+
+#[cfg(test)]
+mod tests {
+    //use super::*;
+
+    // todo: the example in the spec is an invalid JSON, see https://github.com/ome/ngff/issues/125
+    //fn spec_example_json() -> String {
+    //    r#""#.to_string()
+    //}
+}

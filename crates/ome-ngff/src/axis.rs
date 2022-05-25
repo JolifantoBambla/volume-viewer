@@ -143,49 +143,32 @@ impl Axis {
         }
     }
 
-    pub fn get_space_axes(axes: &Vec<Axis>) -> Vec<SpaceAxis> {
-        axes.iter()
-            .filter(|&a| matches!(a, Axis::Space(_)))
-            .map(|a| {
-                if let Axis::Space(space_axis) = a {
-                   Some(space_axis.clone())
-                } else {
-                    None
-                }.unwrap()
-            }).collect()
+    pub fn clone_as_space_axis(&self) -> Option<SpaceAxis> {
+        match self {
+            Axis::Space(axis) => Some(axis.clone()),
+            _ => None
+        }
     }
-    pub fn get_time_axes(axes: &Vec<Axis>) -> Vec<TimeAxis> {
-        axes.iter()
-            .filter(|&a| matches!(a, Axis::Time(_)))
-            .map(|a| {
-                if let Axis::Time(time_axis) = a {
-                    Some(time_axis.clone())
-                } else {
-                    None
-                }.unwrap()
-            }).collect()
+
+    pub fn clone_as_time_axis(&self) -> Option<TimeAxis> {
+        match self {
+            Axis::Time(axis) => Some(axis.clone()),
+            _ => None
+        }
     }
-    pub fn get_channel_axes(axes: &Vec<Axis>) -> Vec<ChannelAxis> {
-        axes.iter()
-            .filter(|&a| matches!(a, Axis::Channel(_)))
-            .map(|a| {
-                if let Axis::Channel(channel_axis) = a {
-                    Some(channel_axis.clone())
-                } else {
-                    None
-                }.unwrap()
-            }).collect()
+
+    pub fn clone_as_channel_axis(&self) -> Option<ChannelAxis> {
+        match self {
+            Axis::Channel(axis) => Some(axis.clone()),
+            _ => None
+        }
     }
-    pub fn get_custom_axes(axes: &Vec<Axis>) -> Vec<CustomAxis> {
-        axes.iter()
-            .filter(|&a| matches!(a, Axis::Custom(_)))
-            .map(|a| {
-                if let Axis::Custom(custom_axis) = a {
-                    Some(custom_axis.clone())
-                } else {
-                    None
-                }.unwrap()
-            }).collect()
+
+    pub fn clone_as_custom_axis(&self) -> Option<CustomAxis> {
+        match self {
+            Axis::Custom(axis) => Some(axis.clone()),
+            _ => None
+        }
     }
 }
 
