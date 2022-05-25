@@ -7,7 +7,7 @@ use crate::coordinate_transformations::{
     Scale,
     Translation,
 };
-use crate::util::{warn, warn_unless};
+use crate::util::warn_unless;
 
 #[derive(Serialize, Deserialize)]
 pub struct Dataset {
@@ -45,11 +45,11 @@ pub struct Multiscale {
 }
 
 impl Multiscale {
-    pub fn is_multiscale_valid(multiscale: &Multiscale) -> bool {
-        let axes_length = multiscale.axes.len();
-        Multiscale::are_multi_scale_axes_valid(&multiscale.axes) &&
-            Multiscale::are_coordinate_transformations_valid(multiscale.coordinate_transformations.as_ref().unwrap_or(&Vec::new()), axes_length) &&
-            multiscale.datasets.iter().all(|d| Multiscale::are_coordinate_transformations_valid(&d.coordinate_transformations, axes_length))
+    pub fn is_valid(&self) -> bool {
+        let axes_length = self.axes.len();
+        Multiscale::are_multi_scale_axes_valid(&self.axes) &&
+            Multiscale::are_coordinate_transformations_valid(self.coordinate_transformations.as_ref().unwrap_or(&Vec::new()), axes_length) &&
+            self.datasets.iter().all(|d| Multiscale::are_coordinate_transformations_valid(&d.coordinate_transformations, axes_length))
     }
 
     fn is_multi_scale_axes_length_valid(axes: &Vec<Axis>) -> bool {

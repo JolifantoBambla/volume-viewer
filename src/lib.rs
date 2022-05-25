@@ -83,6 +83,8 @@ pub fn send_example_to_js() -> JsValue {
         metadata: None
     };
 
+    log::info!("multiscale valid (expect false): {}", multiscale.is_valid());
+
     JsValue::from_serde(&multiscale).unwrap()
 }
 
