@@ -35,27 +35,27 @@ pub fn greet() {
 
 #[wasm_bindgen(js_name="sendExampleToJS")]
 pub fn send_example_to_js() -> JsValue {
-    let multiscale = ome_ngff::MultiScale {
+    let multiscale = ome_ngff::Multiscale {
         name: Some("foo".to_string()),
         version: Some("0.4.0".to_string()),
         downscaling_type: Some("gaussian".to_string()),
         axes: vec![
-            ome_ngff::Axis::Space(ome_ngff::axes::SpaceAxis::new(
-                "foo".to_string(),
-                Some(ome_ngff::SpaceUnit::Angstrom)
-            )),
-            ome_ngff::Axis::Time(ome_ngff::axes::TimeAxis::new(
-                "foo".to_string(),
-                Some(ome_ngff::TimeUnit::Attosecond)
-            )),
-            ome_ngff::Axis::Channel(ome_ngff::axes::ChannelAxis::new(
-                "foo".to_string(),
-            )),
-            ome_ngff::Axis::Custom(ome_ngff::axes::CustomAxis::new(
-                "foo".to_string(),
-                Some("lalala".to_string()),
-                Some("unit".to_string()),
-            ))
+            ome_ngff::Axis::Space(ome_ngff::axis::SpaceAxis{
+                name: "foo".to_string(),
+                unit: Some(ome_ngff::SpaceUnit::Angstrom)
+            }),
+            ome_ngff::Axis::Time(ome_ngff::axis::TimeAxis{
+                name: "foo".to_string(),
+                unit: Some(ome_ngff::TimeUnit::Attosecond)
+            }),
+            ome_ngff::Axis::Channel(ome_ngff::axis::ChannelAxis{
+                name: "foo".to_string(),
+            }),
+            ome_ngff::Axis::Custom(ome_ngff::axis::CustomAxis {
+                name: "foo".to_string(),
+                axis_type: Some("lalala".to_string()),
+                unit: Some("unit".to_string()),
+            })
         ],
         datasets: vec![
             ome_ngff::Dataset{
@@ -88,7 +88,7 @@ pub fn send_example_to_js() -> JsValue {
 
 #[wasm_bindgen(js_name = "receiveExampleFromJS")]
 pub fn receive_example_from_js(val: &JsValue) -> JsValue {
-    let mut example: ome_ngff::MultiScale = val.into_serde().unwrap();
+    let mut example: ome_ngff::Multiscale = val.into_serde().unwrap();
     //example.axis.name = "lalala".parse().unwrap();
     JsValue::from_serde(&example).unwrap()
 }

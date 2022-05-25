@@ -4,16 +4,17 @@
 
 use serde::{Serialize, Deserialize};
 
-pub mod axes;
+pub mod axis;
 pub mod coordinate_transformations;
 pub mod image_labels;
-pub mod multi_scales;
+pub mod multiscale;
 pub mod omero; // todo: test this, check out spec
 pub mod plate;
+pub mod util;
 pub mod validation;
 pub mod well;
 
-pub use axes::{
+pub use axis::{
     Axis,
     ChannelAxis,
     CustomAxis,
@@ -33,9 +34,9 @@ pub use image_labels::{
     Property,
     Source,
 };
-pub use multi_scales::{
+pub use multiscale::{
     Dataset,
-    MultiScale,
+    Multiscale,
 };
 pub use omero::{
     Channel,
@@ -57,7 +58,7 @@ pub use well::{
 pub struct Metadata {
     #[serde(rename = "multiscales")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub multi_scales: Option<Vec<multi_scales::MultiScale>>,
+    pub multi_scales: Option<Vec<multiscale::Multiscale>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub omero: Option<Omero>,

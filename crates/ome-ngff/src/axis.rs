@@ -71,15 +71,6 @@ pub struct SpaceAxis {
     pub unit: Option<SpaceUnit>,
 }
 
-impl SpaceAxis {
-    pub fn new(name: String, unit: Option<SpaceUnit>) -> Self {
-        Self{
-            name,
-            unit,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TimeAxis {
     pub name: String,
@@ -88,26 +79,9 @@ pub struct TimeAxis {
     pub unit: Option<TimeUnit>,
 }
 
-impl TimeAxis {
-    pub fn new(name: String, unit: Option<TimeUnit>) -> Self {
-        Self{
-            name,
-            unit,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ChannelAxis {
     pub name: String,
-}
-
-impl ChannelAxis {
-    pub fn new(name: String) -> Self {
-        Self{
-            name,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -120,16 +94,6 @@ pub struct CustomAxis {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unit: Option<String>,
-}
-
-impl CustomAxis {
-    pub fn new(name: String, axis_type: Option<String>, unit: Option<String>) -> Self {
-        Self{
-            name,
-            axis_type,
-            unit,
-        }
-    }
 }
 
 // https://github.com/serde-rs/serde/issues/1799#issuecomment-624978919
@@ -162,9 +126,26 @@ pub enum Axis {
 }
 
 impl Axis {
+    pub fn get_name(&self) -> String {
+        match self {
+            Axis::Space(axis) => {
+                axis.name.to_string()
+            },
+            Axis::Time(axis) => {
+                axis.name.to_string()
+            },
+            Axis::Channel(axis) => {
+                axis.name.to_string()
+            },
+            Axis::Custom(axis) => {
+                axis.name.to_string()
+            },
+        }
+    }
+
     pub fn get_space_axes(axes: &Vec<Axis>) -> Vec<SpaceAxis> {
         axes.iter()
-            .filter(|&a| matches!(a, Axis::Space(SpaceAxis)))
+            .filter(|&a| matches!(a, Axis::Space(_)))
             .map(|a| {
                 if let Axis::Space(space_axis) = a {
                    Some(space_axis.clone())
@@ -175,7 +156,7 @@ impl Axis {
     }
     pub fn get_time_axes(axes: &Vec<Axis>) -> Vec<TimeAxis> {
         axes.iter()
-            .filter(|&a| matches!(a, Axis::Time(TimeAxis)))
+            .filter(|&a| matches!(a, Axis::Time(_)))
             .map(|a| {
                 if let Axis::Time(time_axis) = a {
                     Some(time_axis.clone())
@@ -186,7 +167,7 @@ impl Axis {
     }
     pub fn get_channel_axes(axes: &Vec<Axis>) -> Vec<ChannelAxis> {
         axes.iter()
-            .filter(|&a| matches!(a, Axis::Channel(ChannelAxis)))
+            .filter(|&a| matches!(a, Axis::Channel(_)))
             .map(|a| {
                 if let Axis::Channel(channel_axis) = a {
                     Some(channel_axis.clone())
@@ -197,7 +178,7 @@ impl Axis {
     }
     pub fn get_custom_axes(axes: &Vec<Axis>) -> Vec<CustomAxis> {
         axes.iter()
-            .filter(|&a| matches!(a, Axis::Custom(CustomAxis)))
+            .filter(|&a| matches!(a, Axis::Custom(_)))
             .map(|a| {
                 if let Axis::Custom(custom_axis) = a {
                     Some(custom_axis.clone())
@@ -257,11 +238,17 @@ mod tests {
     }
 
     fn space_no_unit() -> SpaceAxis {
-        SpaceAxis::new("x".to_string(), None)
+        SpaceAxis{
+            name: "x".to_string(),
+            unit: None,
+        }
     }
 
     fn space() -> SpaceAxis {
-        SpaceAxis::new("y".to_string(), Some(SpaceUnit::Millimeter))
+        SpaceAxis{
+            name: "y".to_string(),
+            unit: Some(SpaceUnit::Millimeter),
+        }
     }
 
     fn time_no_unit_json() -> String {
@@ -273,11 +260,17 @@ mod tests {
     }
 
     fn time_no_unit() -> TimeAxis {
-        TimeAxis::new("t".to_string(), None)
+        TimeAxis {
+            name: "t".to_string(),
+            unit: None,
+        }
     }
 
     fn time() -> TimeAxis {
-        TimeAxis::new("t".to_string(), Some(TimeUnit::Millisecond))
+        TimeAxis{
+            name: "t".to_string(),
+            unit: Some(TimeUnit::Millisecond),
+        }
     }
 
     fn channel_no_unit_json() -> String {
@@ -289,7 +282,9 @@ mod tests {
     }
 
     fn channel() -> ChannelAxis {
-        ChannelAxis::new("c".to_string())
+        ChannelAxis{
+            name: "c".to_string(),
+        }
     }
 
     fn custom_no_unit_no_type_json() -> String {
@@ -309,19 +304,35 @@ mod tests {
     }
 
     fn custom_no_unit_no_type() -> CustomAxis {
-        CustomAxis::new("foo".to_string(), None, None)
+        CustomAxis{
+            name: "foo".to_string(),
+            axis_type: None,
+            unit: None,
+        }
     }
 
     fn custom_no_unit() -> CustomAxis {
-        CustomAxis::new("foo".to_string(), Some("bar".to_string()), None)
+        CustomAxis{
+            name: "foo".to_string(),
+            axis_type: Some("bar".to_string()),
+            unit: None,
+        }
     }
 
     fn custom_no_type() -> CustomAxis {
-        CustomAxis::new("foo".to_string(), None, Some("bar".to_string()))
+        CustomAxis{
+            name: "foo".to_string(),
+            axis_type: None,
+            unit: Some("bar".to_string()),
+        }
     }
 
     fn custom() -> CustomAxis {
-        CustomAxis::new("foo".to_string(), Some("bar".to_string()), Some("baz".to_string()))
+        CustomAxis{
+            name: "foo".to_string(),
+            axis_type: Some("bar".to_string()),
+            unit: Some("baz".to_string()),
+        }
     }
 
     fn space_invalid_json() -> String {
