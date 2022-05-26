@@ -20,6 +20,16 @@ macro_rules! warn_unless {
     }
 }
 
+// todo: proper docs
+/// Creates a serde-capable enum for structs that might be versioned by an optional "version" key,
+/// but might also only be distinguishable by their structure.
+/// See https://ngff.openmicroscopy.org/latest/#multiscale-md
+///
+/// Note that until `std::concat_idents` (https://doc.rust-lang.org/std/macro.concat_idents.html) is
+/// stable only one occurrence per file is valid.
+///
+/// Note that if a variant is structurally a subset of another the superset must be listed above the
+/// subset. (E.g. `multiscale::v0_2::Multiscale` and `multiscale::v0_4::Multiscale`).
 macro_rules! versioned {
     ($name:ident { $($field_name:ident($variant:ty : $version_name:expr)),+ $(,)? }) => {
         #[derive(Serialize, Deserialize)]
