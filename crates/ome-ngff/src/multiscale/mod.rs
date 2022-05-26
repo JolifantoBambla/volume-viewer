@@ -1,5 +1,3 @@
-use serde::{Serialize, Deserialize};
-
 use crate::util::versioned;
 
 pub mod v0_2;

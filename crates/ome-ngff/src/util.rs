@@ -32,6 +32,8 @@ macro_rules! warn_unless {
 /// subset. (E.g. `multiscale::v0_2::Multiscale` and `multiscale::v0_4::Multiscale`).
 macro_rules! versioned {
     ($name:ident { $($field_name:ident($variant:ty : $version_name:expr)),+ $(,)? }) => {
+        use serde::{Serialize, Deserialize};
+
         #[derive(Serialize, Deserialize)]
         #[serde(tag = "version")]
         enum Tagged {

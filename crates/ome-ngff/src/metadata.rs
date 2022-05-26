@@ -2,7 +2,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::multiscale::Multiscale;
 use crate::omero::Omero;
-use crate::image_labels::ImageLabel;
+use crate::image_label::ImageLabel;
 use crate::plate::Plate;
 use crate::well::Well;
 

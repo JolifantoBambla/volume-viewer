@@ -33,8 +33,6 @@ pub struct Omero {
 
     pub name: String,
 
-    pub version: String,
-
     pub channels: Vec<Channel>,
 
     #[serde(rename = "rdefs")]

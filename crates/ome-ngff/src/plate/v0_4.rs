@@ -1,54 +1,21 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize)]
-pub struct Acquisition {
-    pub id: u64,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-
-    #[serde(rename = "maximumfieldcount")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub maximum_field_count: Option<u64>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-
-    #[serde(rename = "starttime")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_time: Option<u64>,
-
-    #[serde(rename = "endtime")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub end_time: Option<u64>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Column {
-    pub name: String,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Row {
-    pub name: String,
-}
+pub use crate::plate::v0_1::{Acquisition, Column, Row};
 
 #[derive(Serialize, Deserialize)]
 pub struct Well {
     pub path: String,
 
     #[serde(rename = "rowIndex")]
-    pub row_index: u64,
+    pub row_index: usize,
 
     #[serde(rename = "columnIndex")]
-    pub column_index: u64,
+    pub column_index: usize,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct Plate {
     pub name: String,
-
-    pub version: String,
 
     // [sic!]
     pub field_count: u64,
@@ -77,3 +44,4 @@ pub struct Plate {
 //  - "plate.wells[*].rowIndex": must be an index into "plate.rows[*]"
 //  - "plate.wells[*].columnIndex": must be an index into "plate.columns[*]"
 //  - "plate.wells": "path" and "rowIndex"+"columnIndex" pair must refer to same row/column pair
+

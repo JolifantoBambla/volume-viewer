@@ -2,14 +2,7 @@ use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
 
-#[derive(Serialize, Deserialize)]
-pub struct Color {
-    #[serde(rename = "label-value")]
-    pub label_value: u64,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rgba: Option<[u8; 4]>,
-}
+pub use crate::image_label::v0_1::{Color, Source};
 
 #[derive(Serialize, Deserialize)]
 pub struct Property {
@@ -23,12 +16,6 @@ pub struct Property {
     // not all label values must share the same key value-pairs within the properties list
     #[serde(flatten)]
     pub extra: HashMap<String, Value>
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Source {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub image: Option<String>,
 }
 
 /// overlapping labels may be represented by using a specially assigned value, e.g. the highest integer available in the pixel range.

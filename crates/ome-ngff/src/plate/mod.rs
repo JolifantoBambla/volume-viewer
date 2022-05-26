@@ -1,0 +1,29 @@
+use serde::{Serialize, Deserialize};
+
+pub mod v0_1;
+pub mod v0_2 {
+    pub use crate::plate::v0_1::*;
+}
+pub mod v0_3 {
+    pub use crate::plate::v0_1::*;
+}
+pub mod v0_4;
+
+// Note: "plate.version" is not explicitly optional, so I treat it as not optional, i.e. it doesn't
+// need util::versioned
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "version")]
+pub enum Plate {
+    #[serde(rename = "0.4")]
+    V0_4(v0_4::Plate),
+
+    #[serde(rename = "0.3")]
+    V0_3(v0_3::Plate),
+
+    #[serde(rename = "0.2")]
+    V0_2(v0_2::Plate),
+
+    #[serde(rename = "0.1")]
+    V0_1(v0_1::Plate),
+}

@@ -4,10 +4,10 @@
 
 pub mod axis;
 pub mod coordinate_transformations;
-pub mod image_labels;
+pub mod image_label;
 pub mod metadata;
 pub mod multiscale;
-pub mod omero; // todo: test this, check out spec
+pub mod omero;
 pub mod plate;
 pub mod util;
 pub mod well;
