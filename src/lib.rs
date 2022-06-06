@@ -1,9 +1,19 @@
+
+use std::path::PathBuf;
+use std::str::FromStr;
+use bevy_window::{WindowDescriptor, WindowId};
+
+use serde_json;
+
 mod util;
 
 use util::init;
+use util::io;
 
 use wasm_bindgen::prelude::*;
 use instant;
+
+pub use numcodecs_wasm::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -25,9 +35,16 @@ extern {
     fn alert(s: &str);
 }
 
+// todo: check out how to use typescript libraries from rust and decode zarr arrays
+// todo: goal on monday is to read my OME-Zarr structure in rust
+//  next goal is to put it into a GPU buffer and render it
+
+
 #[wasm_bindgen(js_name="lala")]
 pub fn greet() {
-    log::info!("Logging that mofo {}", instant::now());
+    log::info!("Logging that mofo!!!!!!! {}", instant::now());
+    use wgpu;
+    wgpu::Instance::new(wgpu::Backends::all());
 }
 
 // todo: test https://rustwasm.github.io/wasm-bindgen/reference/arbitrary-data-with-serde.html
@@ -102,4 +119,32 @@ pub fn receive_example_from_js(val: &JsValue) -> JsValue {
         _ => {}
     }
     JsValue::from_serde(&example).unwrap()
+}
+
+#[wasm_bindgen(js_name = "receiveZarrayFromJS")]
+pub fn receive_zarray_from_js(val: &JsValue) -> JsValue {
+    let mut example: ome_zarr::zarr_v2::ArrayMetadata = val.into_serde().unwrap();
+    JsValue::from_serde(&example).unwrap()
+}
+
+#[wasm_bindgen(js_name = "readMyFile")]
+pub async fn read_my_file() -> JsValue {
+    let foo = io::load_file_as_string(PathBuf::from_str("http://localhost:8005/ome-zarr/m.ome.zarr/0/.zattrs").unwrap())
+        .await;
+    let metadata: ome_ngff::metadata::Metadata = serde_json::from_str(foo.as_str()).unwrap();
+    let multiscales = &metadata.multiscales.unwrap();
+    let multiscale: &ome_ngff::multiscale::Multiscale = multiscales.first().unwrap();
+    match &multiscale {
+        ome_ngff::multiscale::Multiscale::V0_2(m) => {
+            log::info!("got a v0.2!");
+        },
+        ome_ngff::multiscale::Multiscale::V0_3(m) => {
+            log::info!("got a v0.3!");
+        }
+        ome_ngff::multiscale::Multiscale::V0_4(m) => {
+            log::info!("got a v0.4 and is_valid returned: {}", m.is_valid());
+        },
+        _ => {}
+    }
+    JsValue::from_serde(&multiscale).unwrap()
 }

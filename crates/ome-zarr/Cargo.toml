@@ -1,17 +1,16 @@
 [package]
-name = "ome-ngff"
+name = "ome-zarr"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[features]
-log = []
-
 [dependencies]
-log = "0.4.17"
+lz4_flex = "0.9.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.81"
+
+# todo: get from cargo.io as soon as it's there
+ome-ngff = { git = "https://github.com/JolifantoBambla/ome-ngff-metadata.git", features = ["log"] }
