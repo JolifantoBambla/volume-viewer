@@ -30,6 +30,14 @@ pub fn initialize() {
     init::set_logger(None);
 }
 
+// starts an event loop
+#[wasm_bindgen]
+pub fn main() {
+
+}
+
+// playground stuff
+
 #[wasm_bindgen]
 extern {
     fn alert(s: &str);

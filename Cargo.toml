@@ -21,6 +21,8 @@ runner = 'wasm-bindgen-test-runner'
 [dependencies]
 bevy_utils = "0.7.0"
 bevy_window = "0.7.0"
+bevy_winit = "0.7.0"
+
 instant = "0.1.12"
 log = "0.4.17"
 reqwest = "0.11.10"
