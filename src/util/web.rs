@@ -77,7 +77,7 @@ pub fn attach_canvas(canvas: HtmlCanvasElement, parent_id: Option<String>) {
     };
     parent.append_child(&web_sys::Element::from(canvas))
         .ok()
-        .expect("could not append canvas to document");
+        .expect("could not append element to document");
 }
 
 #[inline]
