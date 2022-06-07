@@ -17,13 +17,17 @@
     import { Blosc } from 'https://cdn.skypack.dev/numcodecs';
 
     // todo: publish npm and/or deno package instead
-    import {init, main} from "./pkg/volume_viewer.js";
+    import init, {main, makeContext} from "./pkg/volume_viewer.js";
 
     async function run() {
         // initialize wasm (including module specific initialization)
         await init();
 
-        main();
+        await makeContext();
+
+        console.log(document.getElementById('existing-canvas').getContext('webgpu'));
+
+        main({canvas: '#existing-canvas'});
     }
 
     run();

@@ -19,6 +19,8 @@ default = [
 runner = 'wasm-bindgen-test-runner'
 
 [dependencies]
+bevy_app = "0.7.0"
+bevy_ecs = "0.7.0"
 bevy_utils = "0.7.0"
 bevy_window = "0.7.0"
 bevy_winit = "0.7.0"
@@ -26,12 +28,14 @@ bevy_winit = "0.7.0"
 instant = "0.1.12"
 log = "0.4.17"
 reqwest = "0.11.10"
+serde = "1.0.137"
 serde_json = "1.0.81"
 wasm-bindgen = { version = "0.2.63", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4.30"
 wasm-logger = "0.2.0"
-web-sys = { version = "0.3.57", features = ["Document", "HtmlCanvasElement"] }
+web-sys = { version = "0.3.57", features = ["Document", "HtmlCanvasElement", "GpuDevice"] }
 wgpu = "0.12.0"
+winit = "0.26.1"
 
 # todo: get from cargo.io as soon as it's there
 ome-ngff = { git = "https://github.com/JolifantoBambla/ome-ngff-metadata.git", features = ["log"] }

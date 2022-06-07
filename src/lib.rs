@@ -1,19 +1,25 @@
-
+use std::any::Any;
+use std::convert::{Infallible, TryFrom};
 use std::path::PathBuf;
 use std::str::FromStr;
-use bevy_window::{WindowDescriptor, WindowId};
-
+use std::sync::Arc;
+use instant;
+use serde::{Serialize, Deserialize};
 use serde_json;
 
-mod util;
+use wasm_bindgen::prelude::*;
+
+pub use numcodecs_wasm::*;
+
+pub mod util;
+pub mod renderer;
 
 use util::init;
 use util::io;
+use crate::renderer::GPUContext;
 
-use wasm_bindgen::prelude::*;
-use instant;
 
-pub use numcodecs_wasm::*;
+use web_sys;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -30,10 +36,42 @@ pub fn initialize() {
     init::set_logger(None);
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct Config {
+    pub canvas: Option<String>,
+}
+
 // starts an event loop
 #[wasm_bindgen]
-pub fn main() {
+pub fn main(js_config: &JsValue) {
+    let context_descriptor = renderer::ContextDescriptor::default();
+    log::info!("contextdesscritpor {}", context_descriptor.backends.bits());
 
+    let config: Config = js_config.into_serde().unwrap();
+
+    fn really_annoying_back_seat_kid() {
+        log::info!("Are we there yet? It's already {}", instant::now());
+    }
+
+    bevy_app::App::new()
+        .insert_resource(bevy_window::WindowDescriptor{
+            title: "I am a window!".to_string(),
+            width: 500.,
+            height: 300.,
+            canvas: config.canvas,
+            ..bevy_window::WindowDescriptor::default()
+        })
+        .add_plugin(bevy_window::WindowPlugin::default())
+        .add_plugin(bevy_winit::WinitPlugin::default())
+        .add_plugin(bevy_app::ScheduleRunnerPlugin::default())
+        .add_system_to_stage(bevy_app::CoreStage::Update, really_annoying_back_seat_kid)
+        .run()
+}
+
+#[wasm_bindgen(js_name = "makeContext")]
+pub async fn make_context() {
+    let ctx = renderer::GPUContext::new(&renderer::ContextDescriptor::default()).await;
+    log::info!("created ctx");
 }
 
 // playground stuff
@@ -51,8 +89,6 @@ extern {
 #[wasm_bindgen(js_name="lala")]
 pub fn greet() {
     log::info!("Logging that mofo!!!!!!! {}", instant::now());
-    use wgpu;
-    wgpu::Instance::new(wgpu::Backends::all());
 }
 
 // todo: test https://rustwasm.github.io/wasm-bindgen/reference/arbitrary-data-with-serde.html
