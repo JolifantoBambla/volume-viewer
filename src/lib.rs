@@ -20,6 +20,8 @@ use crate::renderer::GPUContext;
 
 
 use web_sys;
+use winit::dpi::PhysicalSize;
+use winit::window::WindowBuilder;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -50,7 +52,7 @@ pub fn main(js_config: &JsValue) {
     let config: Config = js_config.into_serde().unwrap();
 
     fn really_annoying_back_seat_kid() {
-        log::info!("Are we there yet? It's already {}", instant::now());
+        //log::debug!("Are we there yet? It's already {}", instant::now());
     }
 
     bevy_app::App::new()
@@ -68,10 +70,29 @@ pub fn main(js_config: &JsValue) {
         .run()
 }
 
-#[wasm_bindgen(js_name = "makeContext")]
-pub async fn make_context() {
-    let ctx = renderer::GPUContext::new(&renderer::ContextDescriptor::default()).await;
-    log::info!("created ctx");
+#[wasm_bindgen(js_name = "runComputeExample")]
+pub fn run_compute_example() {
+    wasm_bindgen_futures::spawn_local(foo());
+}
+
+async fn foo() {
+    use winit::platform::web::WindowExtWebSys;
+    use winit::platform::web::WindowBuilderExtWebSys;
+
+
+    let event_loop = winit::event_loop::EventLoop::new();
+    let mut builder = WindowBuilder::new()
+        .with_title("compute example")
+        .with_inner_size(PhysicalSize { width: 800, height: 600 });
+    let canvas = util::web::get_canvas_by_id("existing-canvas");
+    let canvas_size = PhysicalSize{width: canvas.width(), height: canvas.height()};
+    builder = builder.with_canvas(Some(canvas))
+        .with_inner_size(canvas_size);
+    let window = builder.build(&event_loop).unwrap();
+
+    log::info!("running compute");
+    renderer::compute_image(&window).await;
+    log::info!("ran compute");
 }
 
 // playground stuff

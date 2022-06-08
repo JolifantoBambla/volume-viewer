@@ -17,24 +17,24 @@
     import { Blosc } from 'https://cdn.skypack.dev/numcodecs';
 
     // todo: publish npm and/or deno package instead
-    import init, {main, makeContext} from "./pkg/volume_viewer.js";
+    import init, {main, runComputeExample} from "./pkg/volume_viewer.js";
 
     async function run() {
         // initialize wasm (including module specific initialization)
         await init();
 
-        await makeContext();
+        await runComputeExample();
 
         console.log(document.getElementById('existing-canvas').getContext('webgpu'));
 
-        main({canvas: '#existing-canvas'});
+        //main({canvas: '#existing-canvas'});
     }
 
     run();
 </script>
 <div>
     <b>above existing canvas</b>
-    <canvas id="existing-canvas" width="1014" height="768"></canvas>
+    <canvas id="existing-canvas" width="600" height="600"></canvas>
     <b>below existing canvas</b>
 </div>
 </body>
