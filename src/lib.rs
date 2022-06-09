@@ -72,10 +72,10 @@ pub fn main(js_config: &JsValue) {
 
 #[wasm_bindgen(js_name = "runComputeExample")]
 pub fn run_compute_example() {
-    wasm_bindgen_futures::spawn_local(foo());
+    wasm_bindgen_futures::spawn_local(compute_example());
 }
 
-async fn foo() {
+async fn compute_example() {
     use winit::platform::web::WindowExtWebSys;
     use winit::platform::web::WindowBuilderExtWebSys;
 
@@ -91,6 +91,31 @@ async fn foo() {
 
     log::info!("running compute");
     renderer::playground::compute_to_image_test(&window).await;
+    log::info!("ran compute");
+}
+
+
+#[wasm_bindgen(js_name = "runVolumeExample")]
+pub fn run_volume_example(data: &[u8], shape: &[u32]) {
+    wasm_bindgen_futures::spawn_local(volume_example(data.to_vec(), shape.to_vec()));
+}
+
+async fn volume_example(data: Vec<u8>, shape: Vec<u32>) {
+    use winit::platform::web::WindowExtWebSys;
+    use winit::platform::web::WindowBuilderExtWebSys;
+
+    let event_loop = winit::event_loop::EventLoop::new();
+    let mut builder = WindowBuilder::new()
+        .with_title("compute example")
+        .with_inner_size(PhysicalSize { width: 800, height: 600 });
+    let canvas = util::web::get_canvas_by_id("existing-canvas");
+    let canvas_size = PhysicalSize{width: canvas.width(), height: canvas.height()};
+    builder = builder.with_canvas(Some(canvas))
+        .with_inner_size(canvas_size);
+    let window = builder.build(&event_loop).unwrap();
+
+    log::info!("running compute");
+    renderer::playground::volume_test(&window, data.as_slice(), shape.as_slice()).await;
     log::info!("ran compute");
 }
 
@@ -111,16 +136,6 @@ async fn get_device() {
     print_gpu_device_limits(expose_device().await);
 }
 
-macro_rules! transmute_copy {
-    ($src:expr, $dst_type:ty) => {
-        unsafe {
-            let transmuted: $dst_type = std::mem::transmute($src);
-            $src = std::mem::transmute(transmuted.clone());
-            transmuted
-        }
-    }
-}
-
 async fn expose_device() -> web_sys::GpuDevice {
     // helper structs to extract private fields
     struct Context(web_sys::Gpu);
@@ -134,7 +149,10 @@ async fn expose_device() -> web_sys::GpuDevice {
     let mut ctx = renderer::GPUContext::new(&renderer::ContextDescriptor::default(), None).await;
 
     // memcopy device
-    let device = transmute_copy!(ctx.device, Device);
+    //let device = transmute_copy!(ctx.device, Device);
+    //let device = util::resource::copy_device(&ctx.device);
+
+    let device = util::transmute::transmute_copy!(ctx.device, util::transmute::Device);
 
     // make sure ctx still has its device
     log::info!("max bind groups: {}", ctx.device.limits().max_bind_groups);
@@ -142,6 +160,10 @@ async fn expose_device() -> web_sys::GpuDevice {
     device.id
 }
 
+#[wasm_bindgen(js_name = "printZSlice")]
+pub fn print_z_slice(data: &[u16]) {
+    log::info!("data: {:?}", data);
+}
 
 // playground stuff
 

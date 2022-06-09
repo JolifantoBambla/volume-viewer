@@ -19,7 +19,7 @@
     import { printGpuDeviceLimits } from "./shared-gpu.js";
 
     // todo: publish npm and/or deno package instead
-    import init, {main, runComputeExample, testDeviceSharing} from "./pkg/volume_viewer.js";
+    import init, {main, runComputeExample, testDeviceSharing, printZSlice, runVolumeExample} from "./pkg/volume_viewer.js";
 
     // todo:
     //  - read whole single channel in single resolution into a rust created arraybuffer
@@ -60,6 +60,7 @@
 
         const { data: rawData, strides, shape } = await z.getRaw([0, 0]);
         console.log("foo:", rawData, strides, shape);
+        printZSlice(rawData);
 
         console.log(z);
         console.log(z.chunkDataShape, z.chunks);
@@ -70,6 +71,9 @@
         console.log("Index 0:", await z.get([0, slice(6, 10)]));
         console.log("Index 0:", await z.get([0, slice(null, 5)])); // z[0, :5]
 
+        await runVolumeExample(
+            Uint8Array.from(rawData), //new Uint8Array(rawData.buffer),
+            shape);
     }
 
     async function run() {
@@ -80,7 +84,7 @@
 
         await testOmeZarrStuff();
 
-        await runComputeExample();
+        //await runComputeExample();
 
         //main({canvas: '#existing-canvas'});
     }

@@ -1,4 +1,5 @@
 use wgpu;
+use wgpu::util::DeviceExt;
 use winit;
 
 pub mod full_screen_pass;
@@ -127,11 +128,12 @@ impl GPUContext {
     }
 }
 
-
 // todo: remove
 // this is just a small module where I test stuff out
 pub mod playground {
     use std::{borrow::Cow, str::FromStr};
+    use bytemuck;
+    use wgpu::util::DeviceExt;
     use crate::renderer::{GPUContext, ContextDescriptor};
 
     pub struct FullScreenPass {
@@ -140,7 +142,6 @@ pub mod playground {
         pipeline: wgpu::RenderPipeline,
     }
 
-    // todo: refactor into trait
     impl FullScreenPass {
         pub fn new(texture_view: &wgpu::TextureView, sampler: &wgpu::Sampler, ctx: &GPUContext) -> Self {
             let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
@@ -242,6 +243,14 @@ pub mod playground {
         input_texture_height: u32,
     }
 
+    pub struct EdgeDetectPass3D {
+        bind_group_layout: wgpu::BindGroupLayout,
+        bind_group: wgpu::BindGroup,
+        pipeline: wgpu::ComputePipeline,
+        input_texture_width: u32,
+        input_texture_height: u32,
+    }
+
     impl EdgeDetectPass {
         pub fn new(input_texture_view: &wgpu::TextureView, output_texture_view: &wgpu::TextureView, input_texture_width: u32, input_texture_height: u32, ctx: &GPUContext) -> Self {
             let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
@@ -309,10 +318,165 @@ pub mod playground {
         }
     }
 
-    pub async fn compute_to_image_test(window: &winit::window::Window) {
-        use bytemuck;
-        use wgpu::util::DeviceExt;
+    impl EdgeDetectPass3D {
+        pub fn new(input_texture_view: &wgpu::TextureView, output_texture_view: &wgpu::TextureView, input_texture_width: u32, input_texture_height: u32, ctx: &GPUContext) -> Self {
+            let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("edgedetect_3d.wgsl"))),
+            });
+            let pipeline = ctx.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: None,
+                layout: None,
+                module: &shader_module,
+                entry_point: "main",
+            });
+            let bind_group_layout = pipeline.get_bind_group_layout(0);
+            let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&input_texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&output_texture_view),
+                    }
+                ],
+            });
+            Self {
+                bind_group_layout,
+                bind_group,
+                pipeline,
+                input_texture_width,
+                input_texture_height
+            }
+        }
 
+        pub fn update_bind_group(&mut self, input_texture_view: &wgpu::TextureView, output_texture_view: &wgpu::TextureView, input_texture_width: u32, input_texture_height: u32, ctx: &GPUContext) {
+            self.bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &self.bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&input_texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&output_texture_view),
+                    }
+                ],
+            });
+            self.input_texture_width = input_texture_width;
+            self.input_texture_height = input_texture_height;
+        }
+
+        pub fn add_to_command(&self, mut command_encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
+            {
+                let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+                cpass.set_pipeline(&self.pipeline);
+                cpass.set_bind_group(0, &self.bind_group, &[]);
+                cpass.insert_debug_marker("compute collatz iterations");
+                cpass.dispatch(self.input_texture_width / 16, self.input_texture_height / 16, 1);
+            }
+            command_encoder
+        }
+    }
+
+    fn create_storage_texture(device: &wgpu::Device, width: u32, height: u32) -> (wgpu::Texture, wgpu::TextureView) {
+        let texture_extent = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: texture_extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+        });
+        let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        (texture, texture_view)
+    }
+
+    // let's see if this works - data is u16, but we'll get the u8 array buffer instead
+    pub fn make_texture_3d(texels: &[u8], extent: wgpu::Extent3d, ctx: &GPUContext) -> (wgpu::Texture, wgpu::TextureView) {
+        log::info!("got this nice data: {:?}", texels);
+        let texture = ctx.device.create_texture_with_data(
+            &ctx.queue,
+            &wgpu::TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D3,
+                format: wgpu::TextureFormat::R8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            },
+            texels
+        );
+        let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        (texture, texture_view)
+    }
+
+    pub async fn volume_test(window: &winit::window::Window, data: &[u8], shape: &[u32]) {
+        let ctx = GPUContext::new(&ContextDescriptor::default(), Some(window)).await;
+
+        let tex_width = shape[1];
+        let tex_height = shape[2];
+
+        let (input_texture, input_texture_view) = make_texture_3d(
+            data,
+            wgpu::Extent3d {
+                width: tex_height,
+                height: tex_height,
+                depth_or_array_layers: shape[0]
+            },
+            &ctx
+        );
+        let (storage_texture, storage_texture_view) = create_storage_texture(&ctx.device, tex_width, tex_height);
+        let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
+        let edge_detect_pass = EdgeDetectPass3D::new(
+            &input_texture_view,
+            &storage_texture_view,
+            tex_width, tex_height,
+            &ctx
+        );
+        let full_screen_pass = FullScreenPass::new(&storage_texture_view, &sampler, &ctx);
+
+        let frame = ctx.surface.as_ref().unwrap().get_current_texture().unwrap();
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        // A command encoder executes one or many pipelines.
+        // It is to WebGPU what a command buffer is to Vulkan.
+        let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder = edge_detect_pass.add_to_command(encoder);
+        encoder = full_screen_pass.add_to_command(encoder, &view);
+
+        // Submits command encoder for processing
+        ctx.queue.submit(Some(encoder.finish()));
+
+        // Poll the device in a blocking manner so that our future resolves.
+        // In an actual application, `device.poll(...)` should
+        // be called in an event loop or on another thread.
+        ctx.device.poll(wgpu::Maintain::Wait);
+
+        frame.present();
+    }
+
+    pub async fn compute_to_image_test(window: &winit::window::Window) {
         fn create_mandelbrot_texels(size: usize) -> Vec<u8> {
             (0..size * size)
                 .map(|id| {
@@ -359,30 +523,12 @@ pub mod playground {
             );
             (texture, texture_view)
         }
-        fn create_storage_texture(device: &wgpu::Device, size: u32) -> (wgpu::Texture, wgpu::TextureView) {
-            let texture_extent = wgpu::Extent3d {
-                width: size,
-                height: size,
-                depth_or_array_layers: 1,
-            };
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: None,
-                size: texture_extent,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
-            });
-            let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            (texture, texture_view)
-        }
 
         let ctx = GPUContext::new(&ContextDescriptor::default(), Some(window)).await;
 
         let tex_size = window.inner_size().width;
         let (input_texture, input_texture_view) = create_input_texture(&ctx.device, &ctx.queue, tex_size);
-        let (storage_texture, storage_texture_view) = create_storage_texture(&ctx.device, tex_size);
+        let (storage_texture, storage_texture_view) = create_storage_texture(&ctx.device, tex_size, tex_size);
         let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,

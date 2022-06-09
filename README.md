@@ -1,6 +1,8 @@
 # volume-viewer
 A web-based volume viewer for large-scale multichannel volume data
 
+**Currently, this is more of a playground.**
+
 ## Install build dependencies
 * [Install Rust](https://www.rust-lang.org/tools/install)
 * Install `wasm-pack`: `cargo install wasm-pack`
