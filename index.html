@@ -11,28 +11,93 @@
 <script type="module">
     //import { openGroup, slice, openArray } from 'https://unpkg.com/zarr@0.5.1/zarr.mjs';
     // Import invidual classes and functions.
-    import { openGroup, openArray, slice } from "https://cdn.skypack.dev/zarr";
+    import { openGroup, openArray, slice } from 'https://cdn.skypack.dev/zarr';
 
     // Main entry point (exports all codecs)
     import { Blosc } from 'https://cdn.skypack.dev/numcodecs';
 
+    import { printGpuDeviceLimits } from "./shared-gpu.js";
+
     // todo: publish npm and/or deno package instead
-    import init, {main, runComputeExample} from "./pkg/volume_viewer.js";
+    import init, {main, runComputeExample, testDeviceSharing} from "./pkg/volume_viewer.js";
+
+    // todo:
+    //  - read whole single channel in single resolution into a rust created arraybuffer
+    //  - construct 3D texture from buffer
+    //  - render volume into texture via compute
+    async function testOmeZarrStuff() {
+        const store = document.getElementById('ome-zarr-store').value;
+        const path = document.getElementById('ome-zarr-path').value
+
+        const omeZarrGroup = await openGroup(store, path);
+        const omeZarrMetadata = await omeZarrGroup.attrs.asObject();
+
+        let paths = ['0'];
+        // Default axes used for v0.1 and v0.2.
+        let labels = ['t', 'c', 'z', 'y', 'x'];
+        if ('multiscales' in omeZarrMetadata) {
+            const { datasets, axes } = omeZarrMetadata.multiscales[0];
+            paths = datasets.map(d => d.path);
+            if (axes) {
+                labels = axes;
+            }
+        }
+        console.log(labels);
+
+        const data = paths.map(path => omeZarrGroup.getItem(path));
+        const arr = {
+            data: await Promise.all(data),
+            rootAttrs: omeZarrMetadata,
+            labels
+        };
+        console.log(arr);
+
+        const z = await openArray({
+            store,
+            path: `${path}/2`,
+            mode: "r"
+        });
+
+        const { data: rawData, strides, shape } = await z.getRaw([0, 0]);
+        console.log("foo:", rawData, strides, shape);
+
+        console.log(z);
+        console.log(z.chunkDataShape, z.chunks);
+        console.log("Channel 1: ", await z.get([0, 0]));
+        console.log("Channel 2: ", await z.get([0, 1]));
+        console.log("Channel 3: ", await z.get([0, 2]));
+        console.log("Channel 4: ", await z.get([0, 3]));
+        console.log("Index 0:", await z.get([0, slice(6, 10)]));
+        console.log("Index 0:", await z.get([0, slice(null, 5)])); // z[0, :5]
+
+    }
 
     async function run() {
         // initialize wasm (including module specific initialization)
         await init();
 
-        await runComputeExample();
+        testDeviceSharing();
 
-        console.log(document.getElementById('existing-canvas').getContext('webgpu'));
+        await testOmeZarrStuff();
+
+        await runComputeExample();
 
         //main({canvas: '#existing-canvas'});
     }
 
     run();
 </script>
+
 <div>
+    <div>
+        <label for="ome-zarr-store">OME-Zarr file store:</label>
+        <input type="text" id="ome-zarr-store" name="ome-zarr-store" value="http://localhost:8005/"><br><br>
+    </div>
+    <div>
+        <label for="ome-zarr-path">OME-Zarr file path:</label>
+        <input type="text" id="ome-zarr-path" name="ome-zarr-path" value="ome-zarr/m.ome.zarr/0"><br><br>
+    </div>
+
     <b>above existing canvas</b>
     <canvas id="existing-canvas" width="600" height="600"></canvas>
     <b>below existing canvas</b>

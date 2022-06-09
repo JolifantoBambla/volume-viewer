@@ -412,7 +412,5 @@ pub mod playground {
         ctx.device.poll(wgpu::Maintain::Wait);
 
         frame.present();
-
-        log::info!("finished rendering");
     }
 }

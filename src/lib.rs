@@ -43,7 +43,7 @@ pub struct Config {
     pub canvas: Option<String>,
 }
 
-// starts an event loop
+// starts an event loop using bevy stuff
 #[wasm_bindgen]
 pub fn main(js_config: &JsValue) {
     let context_descriptor = renderer::ContextDescriptor::default();
@@ -52,7 +52,7 @@ pub fn main(js_config: &JsValue) {
     let config: Config = js_config.into_serde().unwrap();
 
     fn really_annoying_back_seat_kid() {
-        //log::debug!("Are we there yet? It's already {}", instant::now());
+        log::debug!("Are we there yet? It's already {}", instant::now());
     }
 
     bevy_app::App::new()
@@ -79,7 +79,6 @@ async fn foo() {
     use winit::platform::web::WindowExtWebSys;
     use winit::platform::web::WindowBuilderExtWebSys;
 
-
     let event_loop = winit::event_loop::EventLoop::new();
     let mut builder = WindowBuilder::new()
         .with_title("compute example")
@@ -95,6 +94,55 @@ async fn foo() {
     log::info!("ran compute");
 }
 
+// Test device sharing between WASM and JS context, could be useful at some point
+
+#[wasm_bindgen(module = "/shared-gpu.js")]
+extern {
+    #[wasm_bindgen(js_name = "printGpuDeviceLimits")]
+    fn print_gpu_device_limits(device: web_sys::GpuDevice);
+}
+
+#[wasm_bindgen(js_name = "testDeviceSharing")]
+pub fn test_device_sharing() {
+    wasm_bindgen_futures::spawn_local(get_device());
+}
+
+async fn get_device() {
+    print_gpu_device_limits(expose_device().await);
+}
+
+macro_rules! transmute_copy {
+    ($src:expr, $dst_type:ty) => {
+        unsafe {
+            let transmuted: $dst_type = std::mem::transmute($src);
+            $src = std::mem::transmute(transmuted.clone());
+            transmuted
+        }
+    }
+}
+
+async fn expose_device() -> web_sys::GpuDevice {
+    // helper structs to extract private fields
+    struct Context(web_sys::Gpu);
+    #[derive(Clone)]
+    struct Device {
+        context: Arc<Context>,
+        pub id: web_sys::GpuDevice,
+    }
+
+    // create ctx to capture device from
+    let mut ctx = renderer::GPUContext::new(&renderer::ContextDescriptor::default(), None).await;
+
+    // memcopy device
+    let device = transmute_copy!(ctx.device, Device);
+
+    // make sure ctx still has its device
+    log::info!("max bind groups: {}", ctx.device.limits().max_bind_groups);
+
+    device.id
+}
+
+
 // playground stuff
 
 #[wasm_bindgen]
@@ -105,12 +153,6 @@ extern {
 // todo: check out how to use typescript libraries from rust and decode zarr arrays
 // todo: goal on monday is to read my OME-Zarr structure in rust
 //  next goal is to put it into a GPU buffer and render it
-
-
-#[wasm_bindgen(js_name="lala")]
-pub fn greet() {
-    log::info!("Logging that mofo!!!!!!! {}", instant::now());
-}
 
 // todo: test https://rustwasm.github.io/wasm-bindgen/reference/arbitrary-data-with-serde.html
 
