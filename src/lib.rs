@@ -91,7 +91,7 @@ async fn foo() {
     let window = builder.build(&event_loop).unwrap();
 
     log::info!("running compute");
-    renderer::compute_image(&window).await;
+    renderer::playground::compute_to_image_test(&window).await;
     log::info!("ran compute");
 }
 
