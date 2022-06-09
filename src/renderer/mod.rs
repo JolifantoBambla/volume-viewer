@@ -1,7 +1,8 @@
+use std::{borrow::Cow, str::FromStr};
 use wgpu;
 use winit;
 
-use wasm_bindgen::prelude::*;
+pub mod full_screen_pass;
 
 // todo: proper documentation
 
@@ -46,6 +47,7 @@ pub struct GPUContext {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub surface: Option<wgpu::Surface>,
+    pub surface_configuration: Option<wgpu::SurfaceConfiguration>,
 }
 
 impl GPUContext {
@@ -103,18 +105,151 @@ impl GPUContext {
             None
         };
 
+        let surface_configuration = if surface.is_some() {
+            let surface_configuration = wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format: surface.as_ref().unwrap().get_preferred_format(&adapter).unwrap(),
+                width: window.as_ref().unwrap().inner_size().width,
+                height: window.as_ref().unwrap().inner_size().height,
+                present_mode: wgpu::PresentMode::Mailbox,
+            };
+            surface.as_ref().unwrap().configure(&device, &surface_configuration);
+            Some(surface_configuration)
+        } else {
+            None
+        };
+
         Self {
             instance,
             adapter,
             device,
             queue,
             surface,
+            surface_configuration,
         }
     }
 }
 
+
+pub struct FullScreenPass {
+    bind_group_layout: wgpu::BindGroupLayout,
+    bind_group: wgpu::BindGroup,
+    pipeline: wgpu::RenderPipeline,
+}
+
+// todo: refactor into trait
+impl FullScreenPass {
+    pub fn new(texture_view: &wgpu::TextureView, sampler: &wgpu::Sampler, ctx: &GPUContext) -> Self {
+        let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("full_screen_quad.wgsl"))),
+        });
+        let pipeline = ctx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: None,
+            layout: None, //Some(&full_screen_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader_module,
+                entry_point: "vert_main",
+                buffers: &[]
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader_module,
+                entry_point: "frag_main",
+                targets: &[ctx.surface_configuration.as_ref().unwrap().format.into()],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            multiview: None
+        });
+        let bind_group_layout = pipeline.get_bind_group_layout(0);
+        let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(texture_view),
+                }
+            ]
+        });
+        Self {
+            bind_group_layout,
+            bind_group,
+            pipeline,
+        }
+    }
+
+    pub fn update_bind_group(&mut self, texture_view: &wgpu::TextureView, sampler: &wgpu::Sampler, ctx: &GPUContext) {
+        self.bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &self.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(texture_view),
+                }
+            ]
+        });
+    }
+
+    pub fn add_to_command(&self, mut command_encoder: wgpu::CommandEncoder, view: &wgpu::TextureView) -> wgpu::CommandEncoder {
+        {
+            let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 1.0
+                        }),
+                        store: true
+                    }
+                }],
+                depth_stencil_attachment: None
+            });
+            rpass.set_pipeline(&self.pipeline);
+            rpass.set_bind_group(0, &self.bind_group, &[]);
+            rpass.draw(0..6, 0..1);
+        }
+        command_encoder
+    }
+}
+
+pub struct CommandBuffer {
+    passes: Vec<FullScreenPass>,
+}
+
+impl CommandBuffer {
+    pub fn new(pass: FullScreenPass) -> Self {
+        Self {
+            passes: vec![pass],
+        }
+    }
+
+    pub fn encode_commands(ctx: &GPUContext) -> wgpu::CommandEncoder {
+        let mut encoder =
+            ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder
+    }
+}
+
 pub async fn compute_image(window: &winit::window::Window) {
-    use std::{borrow::Cow, str::FromStr};
     use bytemuck;
     use wgpu::util::DeviceExt;
 
@@ -229,76 +364,9 @@ pub async fn compute_image(window: &winit::window::Window) {
         ],
     });
 
-    let full_screen_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("full_screen_quad.wgsl"))),
-    });
+    let full_screen_pass = FullScreenPass::new(&storage_texture_view, &sampler, &ctx);
 
-    /*
-    let full_screen_bind_group_layout = ctx.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: None,
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: Default::default(),
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false
-                },
-                count: None,
-            }
-        ]
-    });
-    let full_screen_pipeline_layout = ctx.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: None,
-        bind_group_layouts: &[&full_screen_bind_group_layout],
-        push_constant_ranges: &[],
-    });
-    */
-    let render_pipeline = ctx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: None,
-        layout: None, //Some(&full_screen_pipeline_layout),
-        vertex: wgpu::VertexState {
-            module: &full_screen_module,
-            entry_point: "vert_main",
-            buffers: &[]
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &full_screen_module,
-            entry_point: "frag_main",
-            targets: &[surface_configuration.format.into()],
-        }),
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: Default::default(),
-        multiview: None
-    });
-    let full_screen_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout: &render_pipeline.get_bind_group_layout(0),
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Sampler(&sampler),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::TextureView(&storage_texture_view),
-            }
-        ]
-    });
-
-    let frame =ctx.surface.as_ref().unwrap().get_current_texture().unwrap();
+    let frame = ctx.surface.as_ref().unwrap().get_current_texture().unwrap();
     let view = frame
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
@@ -317,26 +385,7 @@ pub async fn compute_image(window: &winit::window::Window) {
     }
 
     {
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: None,
-            color_attachments: &[wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 1.0
-                    }),
-                    store: true
-                }
-            }],
-            depth_stencil_attachment: None
-        });
-        rpass.set_pipeline(&render_pipeline);
-        rpass.set_bind_group(0, &full_screen_bind_group, &[]);
-        rpass.draw(0..6, 0..1,);
+        encoder = full_screen_pass.add_to_command(encoder, &view);
     }
 
     // Submits command encoder for processing
@@ -350,118 +399,4 @@ pub async fn compute_image(window: &winit::window::Window) {
     frame.present();
 
     log::info!("finished rendering");
-}
-
-pub async fn compute_example() {
-    use std::{borrow::Cow, str::FromStr};
-    use bytemuck;
-    use wgpu::util::DeviceExt;
-
-    let ctx = GPUContext::new(&ContextDescriptor::default(), None).await;
-
-    // set up buffer
-    let numbers = vec![1, 2, 3, 4];
-    log::info!("numbers: {:?}", numbers);
-    // Gets the size in bytes of the buffer.
-    let slice_size = numbers.len() * std::mem::size_of::<u32>();
-    let size = slice_size as wgpu::BufferAddress;
-
-    // Instantiates buffer without data.
-    // `usage` of buffer specifies how it can be used:
-    //   `BufferUsages::MAP_READ` allows it to be read (outside the shader).
-    //   `BufferUsages::COPY_DST` allows it to be the destination of the copy.
-    let staging_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
-        label: None,
-        size,
-        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-
-    // Instantiates buffer with data (`numbers`).
-    // Usage allowing the buffer to be:
-    //   A storage buffer (can be bound within a bind group and thus available to a shader).
-    //   The destination of a copy.
-    //   The source of a copy.
-    let storage_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Storage Buffer"),
-        contents: bytemuck::cast_slice(&numbers),
-        usage: wgpu::BufferUsages::STORAGE
-            | wgpu::BufferUsages::COPY_DST
-            | wgpu::BufferUsages::COPY_SRC,
-    });
-
-    // set up pipeline
-    let cs_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
-    });
-    // Instantiates the pipeline.
-    let compute_pipeline = ctx.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: None,
-        layout: None,
-        module: &cs_module,
-        entry_point: "main",
-    });
-    // Instantiates the bind group, once again specifying the binding of buffers.
-    let bind_group_layout = compute_pipeline.get_bind_group_layout(0);
-    let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout: &bind_group_layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: storage_buffer.as_entire_binding(),
-        }],
-    });
-
-    // A command encoder executes one or many pipelines.
-    // It is to WebGPU what a command buffer is to Vulkan.
-    let mut encoder =
-        ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-    {
-        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-        cpass.set_pipeline(&compute_pipeline);
-        cpass.set_bind_group(0, &bind_group, &[]);
-        cpass.insert_debug_marker("compute collatz iterations");
-        cpass.dispatch(numbers.len() as u32, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
-    }
-    // Sets adds copy operation to command encoder.
-    // Will copy data from storage buffer on GPU to staging buffer on CPU.
-    encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, size);
-
-    // Submits command encoder for processing
-    ctx.queue.submit(Some(encoder.finish()));
-
-    // Note that we're not calling `.await` here.
-    let buffer_slice = staging_buffer.slice(..);
-    // Sets the buffer up for mapping, sending over the result of the mapping back to us when it is finished.
-    // Gets the future representing when `staging_buffer` can be read from
-    let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
-
-    // Poll the device in a blocking manner so that our future resolves.
-    // In an actual application, `device.poll(...)` should
-    // be called in an event loop or on another thread.
-    ctx.device.poll(wgpu::Maintain::Wait);
-
-    // Awaits until `buffer_future` can be read from
-    let result: Option<Vec<u32>> = if let Ok(()) = buffer_future.await {
-        // Gets contents of buffer
-        let data = buffer_slice.get_mapped_range();
-        // Since contents are got in bytes, this converts these bytes back to u32
-        let result = bytemuck::cast_slice(&data).to_vec();
-
-        // With the current interface, we have to make sure all mapped views are
-        // dropped before we unmap the buffer.
-        drop(data);
-        staging_buffer.unmap(); // Unmaps buffer from memory
-        // If you are familiar with C++ these 2 lines can be thought of similarly to:
-        //   delete myPointer;
-        //   myPointer = NULL;
-        // It effectively frees the memory
-
-        // Returns data from buffer
-        Some(result)
-    } else {
-        None
-    };
-    log::info!("result {:?}", result);
 }
