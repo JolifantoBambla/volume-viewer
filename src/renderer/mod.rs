@@ -129,9 +129,10 @@ impl GPUContext {
 }
 
 // todo: remove
-// this is just a small module where I test stuff out
+// this is just a small module where I test stuff
 pub mod playground {
     use std::{borrow::Cow, str::FromStr};
+    use std::convert::TryInto;
     use bytemuck;
     use winit::{
         event::{self, WindowEvent},
@@ -319,6 +320,7 @@ pub mod playground {
     #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
     pub struct ZSliceUniforms {
         zslice: i32,
+        zmax: f32,
     }
 
     pub struct ZSlicePass {
@@ -328,7 +330,6 @@ pub mod playground {
         input_texture_width: u32,
         input_texture_height: u32,
     }
-
 
     impl ZSlicePass {
         pub fn new(input_texture_view: &wgpu::TextureView, output_texture_view: &wgpu::TextureView, input_texture_width: u32, input_texture_height: u32, z_slice_buffer: &wgpu::Buffer, ctx: &GPUContext) -> Self {
@@ -421,7 +422,7 @@ pub mod playground {
     }
 
     // let's see if this works - data is u16, but we'll get the u8 array buffer instead
-    pub fn create_volume_texture(texels: &[u8], extent: wgpu::Extent3d, ctx: &GPUContext) -> Texture {
+    pub fn create_volume_texture(texels: &[u32], extent: wgpu::Extent3d, ctx: &GPUContext) -> Texture {
         let texture = ctx.device.create_texture_with_data(
             &ctx.queue,
             &wgpu::TextureDescriptor {
@@ -430,10 +431,10 @@ pub mod playground {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D3,
-                format: wgpu::TextureFormat::R8Unorm,
+                format: wgpu::TextureFormat::R32Uint,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             },
-            texels
+            bytemuck::cast_slice(texels),//bytemuck::cast_slice::<u32,u8>(bytemuck::cast_slice::<u16, u32>(texels))
         );
         let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -444,8 +445,19 @@ pub mod playground {
     }
 
     pub struct RawVolume {
-        pub data: Vec<u8>,
+        pub data: Vec<u32>,
         pub shape: Vec<u32>,
+    }
+
+    impl RawVolume {
+        pub fn max_per_slice(&self) -> Vec<u32> {
+            let stride = (self.shape[1] * self.shape[2]) as usize;
+            let mut result: Vec<u32> = Vec::with_capacity(self.shape[0] as _);
+            for i in 0..result.capacity() {
+                result.push(*self.data[i*stride..(i+1)*stride].iter().max().unwrap());
+            }
+            result
+        }
     }
 
     pub struct Texture {
@@ -464,25 +476,29 @@ pub mod playground {
         z_slice_pass: ZSlicePass,
         full_screen_pass: FullScreenPass,
 
-        // todo: slider access
         z_slider: web_sys::HtmlInputElement,
         z_slice_uniform_buffer: wgpu::Buffer,
+        z_max: Vec<u32>,
     }
 
     impl ZSlicer {
         pub async fn new(window: Window, volume: RawVolume, z_slider_id: String) -> Self {
             let ctx = GPUContext::new(&ContextDescriptor::default(), Some(&window)).await;
 
+            let z_max = volume.max_per_slice();
+
             let z_slider = crate::util::web::get_input_element_by_id(z_slider_id.as_str());
             let z_slice = z_slider.value().parse::<i32>().unwrap();
             let z_slice_uniforms = ZSliceUniforms {
-                zslice: z_slice
+                zslice: z_slice,
+                zmax: z_max[z_slice as usize] as f32,
             };
             let z_slice_uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
                 contents: bytemuck::bytes_of(&z_slice_uniforms),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
+
 
             let tex_width = volume.shape[2];
             let tex_height = volume.shape[1];
@@ -532,12 +548,15 @@ pub mod playground {
                 full_screen_pass,
                 z_slider,
                 z_slice_uniform_buffer,
+                z_max,
             }
         }
 
         pub fn update(&self) {
+            let z_slice = self.z_slider.value().parse::<i32>().unwrap();
             let uniforms = ZSliceUniforms {
-                zslice: self.z_slider.value().parse::<i32>().unwrap(),
+                zslice: z_slice,
+                zmax: self.z_max[z_slice as usize] as f32,
             };
             self.ctx.queue.write_buffer(
                 &self.z_slice_uniform_buffer,

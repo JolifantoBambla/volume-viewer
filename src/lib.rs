@@ -85,18 +85,18 @@ async fn compute_example() {
 
 
 #[wasm_bindgen(js_name = "runVolumeExample")]
-pub fn run_volume_example(data: &[u8], shape: &[u32]) {
+pub fn run_volume_example(data: &[u16], shape: &[u32]) {
     wasm_bindgen_futures::spawn_local(volume_example(data.to_vec(), shape.to_vec()));
 }
 
-async fn volume_example(data: Vec<u8>, shape: Vec<u32>) {
+async fn volume_example(data: Vec<u16>, shape: Vec<u32>) {
     let (window, event_loop) = window::create_window("compute example".to_string(), "existing-canvas".to_string());
 
     log::info!("creating example");
     let z_slicer = renderer::playground::ZSlicer::new(
         window,
         RawVolume{
-            data,
+            data: data.iter().map(|x| *x as u32).collect(),
             shape,
         },
         "z-slice".to_string(),

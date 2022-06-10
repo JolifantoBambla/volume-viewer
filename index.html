@@ -58,16 +58,12 @@
             mode: "r"
         });
 
-        const { data: rawData, strides, shape } = await z.getRaw([0, 0]);
-        console.log("foo:", rawData, strides, shape);
-        printZSlice(rawData);
+        const { data: rawData, _, shape } = await z.getRaw([0, 0]);
 
-        console.log(z);
-        console.log(z.chunkDataShape, z.chunks);
+        const slider = document.getElementById('z-slice');
+        slider.max = shape[0] - 1;
 
-        await runVolumeExample(
-            Uint8Array.from(rawData), //new Uint8Array(rawData.buffer),
-            shape);
+        await runVolumeExample(rawData, shape);
     }
 
     async function run() {
@@ -101,7 +97,7 @@
 
     <div>
         <label for="z-slice">Z Slice:</label>
-        <input type="range" id="z-slice" name="z-slice" min="0" max="40">
+        <input type="range" id="z-slice" name="z-slice" min="0" max="0">
     </div>
 
     <b>below existing canvas</b>
