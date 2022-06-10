@@ -602,7 +602,6 @@ pub mod playground {
                             .create_view(&wgpu::TextureViewDescriptor::default());
 
                         z_slicer.render(&view);
-                        log::info!("rendered");
 
                         frame.present();
                     }
