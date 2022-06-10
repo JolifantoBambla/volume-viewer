@@ -64,12 +64,6 @@
 
         console.log(z);
         console.log(z.chunkDataShape, z.chunks);
-        console.log("Channel 1: ", await z.get([0, 0]));
-        console.log("Channel 2: ", await z.get([0, 1]));
-        console.log("Channel 3: ", await z.get([0, 2]));
-        console.log("Channel 4: ", await z.get([0, 3]));
-        console.log("Index 0:", await z.get([0, slice(6, 10)]));
-        console.log("Index 0:", await z.get([0, slice(null, 5)])); // z[0, :5]
 
         await runVolumeExample(
             Uint8Array.from(rawData), //new Uint8Array(rawData.buffer),
@@ -104,6 +98,12 @@
 
     <b>above existing canvas</b>
     <canvas id="existing-canvas" width="600" height="600"></canvas>
+
+    <div>
+        <label for="z-slice">Z Slice:</label>
+        <input type="range" id="z-slice" name="z-slice" min="0" max="40">
+    </div>
+
     <b>below existing canvas</b>
 </div>
 </body>

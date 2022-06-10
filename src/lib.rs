@@ -7,7 +7,7 @@ use instant;
 use serde::{Serialize, Deserialize};
 use serde_json;
 
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{prelude::*, JsCast};
 
 pub use numcodecs_wasm::*;
 
@@ -16,12 +16,12 @@ pub mod renderer;
 
 use util::init;
 use util::io;
+use util::window;
+
 use crate::renderer::GPUContext;
 
-
 use web_sys;
-use winit::dpi::PhysicalSize;
-use winit::window::WindowBuilder;
+use crate::renderer::playground::{RawVolume, ZSlicer};
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -76,18 +76,7 @@ pub fn run_compute_example() {
 }
 
 async fn compute_example() {
-    use winit::platform::web::WindowExtWebSys;
-    use winit::platform::web::WindowBuilderExtWebSys;
-
-    let event_loop = winit::event_loop::EventLoop::new();
-    let mut builder = WindowBuilder::new()
-        .with_title("compute example")
-        .with_inner_size(PhysicalSize { width: 800, height: 600 });
-    let canvas = util::web::get_canvas_by_id("existing-canvas");
-    let canvas_size = PhysicalSize{width: canvas.width(), height: canvas.height()};
-    builder = builder.with_canvas(Some(canvas))
-        .with_inner_size(canvas_size);
-    let window = builder.build(&event_loop).unwrap();
+    let (window, event_loop) = window::create_window("compute example".to_string(), "existing-canvas".to_string());
 
     log::info!("running compute");
     renderer::playground::compute_to_image_test(&window).await;
@@ -101,22 +90,36 @@ pub fn run_volume_example(data: &[u8], shape: &[u32]) {
 }
 
 async fn volume_example(data: Vec<u8>, shape: Vec<u32>) {
-    use winit::platform::web::WindowExtWebSys;
-    use winit::platform::web::WindowBuilderExtWebSys;
+    let (window, event_loop) = window::create_window("compute example".to_string(), "existing-canvas".to_string());
 
-    let event_loop = winit::event_loop::EventLoop::new();
-    let mut builder = WindowBuilder::new()
-        .with_title("compute example")
-        .with_inner_size(PhysicalSize { width: 800, height: 600 });
-    let canvas = util::web::get_canvas_by_id("existing-canvas");
-    let canvas_size = PhysicalSize{width: canvas.width(), height: canvas.height()};
-    builder = builder.with_canvas(Some(canvas))
-        .with_inner_size(canvas_size);
-    let window = builder.build(&event_loop).unwrap();
+    log::info!("creating example");
+    let z_slicer = renderer::playground::ZSlicer::new(
+        window,
+        RawVolume{
+            data,
+            shape,
+        }).await;
+    log::info!("starting example");
+    let start_closure = Closure::once_into_js(move || ZSlicer::run(z_slicer, event_loop));
 
-    log::info!("running compute");
-    renderer::playground::volume_test(&window, data.as_slice(), shape.as_slice()).await;
-    log::info!("ran compute");
+    // make sure to handle JS exceptions thrown inside start.
+    // Otherwise wasm_bindgen_futures Queue would break and never handle any tasks again.
+    // This is required, because winit uses JS exception for control flow to escape from `run`.
+    if let Err(error) = call_catch(&start_closure) {
+        let is_control_flow_exception = error.dyn_ref::<js_sys::Error>().map_or(false, |e| {
+            e.message().includes("Using exceptions for control flow", 0)
+        });
+
+        if !is_control_flow_exception {
+            web_sys::console::error_1(&error);
+        }
+    }
+
+    #[wasm_bindgen]
+    extern "C" {
+        #[wasm_bindgen(catch, js_namespace = Function, js_name = "prototype.call.call")]
+        fn call_catch(this: &JsValue) -> Result<(), JsValue>;
+    }
 }
 
 // Test device sharing between WASM and JS context, could be useful at some point

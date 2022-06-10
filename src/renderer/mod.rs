@@ -133,7 +133,13 @@ impl GPUContext {
 pub mod playground {
     use std::{borrow::Cow, str::FromStr};
     use bytemuck;
+    use winit::{
+        event::{self, WindowEvent},
+        event_loop::{ControlFlow, EventLoop},
+        window::Window
+    };
     use wgpu::util::DeviceExt;
+    use crate::util::window::create_window;
     use crate::renderer::{GPUContext, ContextDescriptor};
 
     pub struct FullScreenPass {
@@ -243,7 +249,7 @@ pub mod playground {
         input_texture_height: u32,
     }
 
-    pub struct EdgeDetectPass3D {
+    pub struct ZSlicePass {
         bind_group_layout: wgpu::BindGroupLayout,
         bind_group: wgpu::BindGroup,
         pipeline: wgpu::ComputePipeline,
@@ -318,11 +324,11 @@ pub mod playground {
         }
     }
 
-    impl EdgeDetectPass3D {
+    impl ZSlicePass {
         pub fn new(input_texture_view: &wgpu::TextureView, output_texture_view: &wgpu::TextureView, input_texture_width: u32, input_texture_height: u32, ctx: &GPUContext) -> Self {
             let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("edgedetect_3d.wgsl"))),
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("z_slice.wgsl"))),
             });
             let pipeline = ctx.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: None,
@@ -405,8 +411,7 @@ pub mod playground {
     }
 
     // let's see if this works - data is u16, but we'll get the u8 array buffer instead
-    pub fn make_texture_3d(texels: &[u8], extent: wgpu::Extent3d, ctx: &GPUContext) -> (wgpu::Texture, wgpu::TextureView) {
-        log::info!("got this nice data: {:?}", texels);
+    pub fn create_volume_texture(texels: &[u8], extent: wgpu::Extent3d, ctx: &GPUContext) -> Texture {
         let texture = ctx.device.create_texture_with_data(
             &ctx.queue,
             &wgpu::TextureDescriptor {
@@ -421,59 +426,134 @@ pub mod playground {
             texels
         );
         let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        (texture, texture_view)
+
+        Texture {
+            texture,
+            view: texture_view
+        }
     }
 
-    pub async fn volume_test(window: &winit::window::Window, data: &[u8], shape: &[u32]) {
-        let ctx = GPUContext::new(&ContextDescriptor::default(), Some(window)).await;
+    pub struct RawVolume {
+        pub data: Vec<u8>,
+        pub shape: Vec<u32>,
+    }
 
-        let tex_width = shape[1];
-        let tex_height = shape[2];
+    pub struct Texture {
+        pub texture: wgpu::Texture,
+        pub view: wgpu::TextureView,
+    }
 
-        let (input_texture, input_texture_view) = make_texture_3d(
-            data,
-            wgpu::Extent3d {
-                width: tex_height,
-                height: tex_height,
-                depth_or_array_layers: shape[0]
-            },
-            &ctx
-        );
-        let (storage_texture, storage_texture_view) = create_storage_texture(&ctx.device, tex_width, tex_height);
-        let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
+    pub struct ZSlicer {
+        window: winit::window::Window,
+        ctx: GPUContext,
 
-        let edge_detect_pass = EdgeDetectPass3D::new(
-            &input_texture_view,
-            &storage_texture_view,
-            tex_width, tex_height,
-            &ctx
-        );
-        let full_screen_pass = FullScreenPass::new(&storage_texture_view, &sampler, &ctx);
+        volume_texture: Texture,
+        storage_texture: Texture,
+        sampler: wgpu::Sampler,
 
-        let frame = ctx.surface.as_ref().unwrap().get_current_texture().unwrap();
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        z_slice_pass: ZSlicePass,
+        full_screen_pass: FullScreenPass,
 
-        // A command encoder executes one or many pipelines.
-        // It is to WebGPU what a command buffer is to Vulkan.
-        let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        encoder = edge_detect_pass.add_to_command(encoder);
-        encoder = full_screen_pass.add_to_command(encoder, &view);
+        // todo: slider access
+    }
 
-        // Submits command encoder for processing
-        ctx.queue.submit(Some(encoder.finish()));
+    impl ZSlicer {
+        pub async fn new(window: Window, volume: RawVolume) -> Self {
+            let ctx = GPUContext::new(&ContextDescriptor::default(), Some(&window)).await;
 
-        // Poll the device in a blocking manner so that our future resolves.
-        // In an actual application, `device.poll(...)` should
-        // be called in an event loop or on another thread.
-        ctx.device.poll(wgpu::Maintain::Wait);
+            let tex_width = volume.shape[2];
+            let tex_height = volume.shape[1];
 
-        frame.present();
+            let volume_texture = create_volume_texture(
+                volume.data.as_slice(),
+                wgpu::Extent3d {
+                    width: tex_width,
+                    height: tex_height,
+                    depth_or_array_layers: volume.shape[0]
+                },
+                &ctx
+            );
+
+            let (storage_texture_handle, storage_texture_view) = create_storage_texture(&ctx.device, tex_width, tex_height);
+            let storage_texture = Texture {
+                texture: storage_texture_handle,
+                view: storage_texture_view
+            };
+
+            let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                ..Default::default()
+            });
+
+            let z_slice_pass = ZSlicePass::new(
+                &volume_texture.view,
+                &storage_texture.view,
+                tex_width, tex_height,
+                &ctx
+            );
+            let full_screen_pass = FullScreenPass::new(
+                &storage_texture.view,
+                &sampler,
+                &ctx
+            );
+
+            Self {
+                window,
+                ctx,
+                volume_texture,
+                storage_texture,
+                sampler,
+                z_slice_pass,
+                full_screen_pass
+            }
+        }
+
+        pub fn render(&self, canvas_view: &wgpu::TextureView) {
+            let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            encoder = self.z_slice_pass.add_to_command(encoder);
+            encoder = self.full_screen_pass.add_to_command(encoder, &canvas_view);
+            self.ctx.queue.submit(Some(encoder.finish()));
+        }
+
+        pub fn run(z_slicer: Self, event_loop: EventLoop<()>) {
+            event_loop.run(move |event, _, control_flow| {
+                // force ownership by the closure
+                let _ = (&z_slicer.ctx.instance, &z_slicer.ctx.adapter);
+
+                *control_flow = winit::event_loop::ControlFlow::Poll;
+
+                match event {
+                    event::Event::RedrawEventsCleared => {
+                        z_slicer.window.request_redraw();
+                    }
+                    event::Event::RedrawRequested(_) => {
+                        // todo: also read z-slice slider
+
+                        let frame = match z_slicer.ctx.surface.as_ref().unwrap().get_current_texture() {
+                            Ok(frame) => frame,
+                            Err(_) => {
+                                z_slicer.ctx.surface.as_ref().unwrap().configure(&z_slicer.ctx.device, &z_slicer.ctx.surface_configuration.as_ref().unwrap());
+                                z_slicer.ctx.surface
+                                    .as_ref()
+                                    .unwrap()
+                                    .get_current_texture()
+                                    .expect("Failed to acquire next surface texture!")
+                            }
+                        };
+                        let view = frame
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+
+                        z_slicer.render(&view);
+                        log::info!("rendered");
+
+                        frame.present();
+                    }
+                    _ => {}
+                }
+            });
+        }
     }
 
     pub async fn compute_to_image_test(window: &winit::window::Window) {
