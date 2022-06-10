@@ -139,7 +139,6 @@ pub mod playground {
         window::Window
     };
     use wgpu::util::DeviceExt;
-    use crate::util::window::create_window;
     use crate::renderer::{GPUContext, ContextDescriptor};
 
     pub struct FullScreenPass {
@@ -249,14 +248,6 @@ pub mod playground {
         input_texture_height: u32,
     }
 
-    pub struct ZSlicePass {
-        bind_group_layout: wgpu::BindGroupLayout,
-        bind_group: wgpu::BindGroup,
-        pipeline: wgpu::ComputePipeline,
-        input_texture_width: u32,
-        input_texture_height: u32,
-    }
-
     impl EdgeDetectPass {
         pub fn new(input_texture_view: &wgpu::TextureView, output_texture_view: &wgpu::TextureView, input_texture_width: u32, input_texture_height: u32, ctx: &GPUContext) -> Self {
             let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
@@ -324,8 +315,23 @@ pub mod playground {
         }
     }
 
+    #[repr(C)]
+    #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+    pub struct ZSliceUniforms {
+        zslice: i32,
+    }
+
+    pub struct ZSlicePass {
+        bind_group_layout: wgpu::BindGroupLayout,
+        bind_group: wgpu::BindGroup,
+        pipeline: wgpu::ComputePipeline,
+        input_texture_width: u32,
+        input_texture_height: u32,
+    }
+
+
     impl ZSlicePass {
-        pub fn new(input_texture_view: &wgpu::TextureView, output_texture_view: &wgpu::TextureView, input_texture_width: u32, input_texture_height: u32, ctx: &GPUContext) -> Self {
+        pub fn new(input_texture_view: &wgpu::TextureView, output_texture_view: &wgpu::TextureView, input_texture_width: u32, input_texture_height: u32, z_slice_buffer: &wgpu::Buffer, ctx: &GPUContext) -> Self {
             let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("z_slice.wgsl"))),
@@ -348,6 +354,10 @@ pub mod playground {
                     wgpu::BindGroupEntry {
                         binding: 1,
                         resource: wgpu::BindingResource::TextureView(&output_texture_view),
+                    },
+                    wgpu::BindGroupEntry{
+                        binding: 2,
+                        resource: z_slice_buffer.as_entire_binding(),
                     }
                 ],
             });
@@ -455,11 +465,24 @@ pub mod playground {
         full_screen_pass: FullScreenPass,
 
         // todo: slider access
+        z_slider: web_sys::HtmlInputElement,
+        z_slice_uniform_buffer: wgpu::Buffer,
     }
 
     impl ZSlicer {
-        pub async fn new(window: Window, volume: RawVolume) -> Self {
+        pub async fn new(window: Window, volume: RawVolume, z_slider_id: String) -> Self {
             let ctx = GPUContext::new(&ContextDescriptor::default(), Some(&window)).await;
+
+            let z_slider = crate::util::web::get_input_element_by_id(z_slider_id.as_str());
+            let z_slice = z_slider.value().parse::<i32>().unwrap();
+            let z_slice_uniforms = ZSliceUniforms {
+                zslice: z_slice
+            };
+            let z_slice_uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::bytes_of(&z_slice_uniforms),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
 
             let tex_width = volume.shape[2];
             let tex_height = volume.shape[1];
@@ -490,6 +513,7 @@ pub mod playground {
                 &volume_texture.view,
                 &storage_texture.view,
                 tex_width, tex_height,
+                &z_slice_uniform_buffer,
                 &ctx
             );
             let full_screen_pass = FullScreenPass::new(
@@ -505,8 +529,21 @@ pub mod playground {
                 storage_texture,
                 sampler,
                 z_slice_pass,
-                full_screen_pass
+                full_screen_pass,
+                z_slider,
+                z_slice_uniform_buffer,
             }
+        }
+
+        pub fn update(&self) {
+            let uniforms = ZSliceUniforms {
+                zslice: self.z_slider.value().parse::<i32>().unwrap(),
+            };
+            self.ctx.queue.write_buffer(
+                &self.z_slice_uniform_buffer,
+                0,
+                bytemuck::bytes_of(&uniforms),
+            );
         }
 
         pub fn render(&self, canvas_view: &wgpu::TextureView) {
@@ -528,7 +565,7 @@ pub mod playground {
                         z_slicer.window.request_redraw();
                     }
                     event::Event::RedrawRequested(_) => {
-                        // todo: also read z-slice slider
+                        z_slicer.update();
 
                         let frame = match z_slicer.ctx.surface.as_ref().unwrap().get_current_texture() {
                             Ok(frame) => frame,

@@ -98,7 +98,9 @@ async fn volume_example(data: Vec<u8>, shape: Vec<u32>) {
         RawVolume{
             data,
             shape,
-        }).await;
+        },
+        "z-slice".to_string(),
+    ).await;
     log::info!("starting example");
     let start_closure = Closure::once_into_js(move || ZSlicer::run(z_slicer, event_loop));
 

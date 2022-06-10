@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use wasm_bindgen::JsCast;
-use web_sys::{Document, Element, HtmlCanvasElement, HtmlElement, Performance, Window};
+use web_sys::{Document, Element, HtmlCanvasElement, HtmlElement, HtmlInputElement, Performance, Window};
 
 #[inline]
 pub fn window() -> Window {
@@ -49,6 +49,14 @@ pub fn get_element_by_id(id: &str) -> Element {
     document()
         .get_element_by_id(id)
         .expect(format!("document has no element with id {}", id).to_string().as_str())
+}
+
+#[inline]
+pub fn get_input_element_by_id(id: &str) -> HtmlInputElement {
+    get_element_by_id(id)
+        .dyn_into::<HtmlInputElement>()
+        .map_err(|_| ())
+        .expect(format!("element with id {} was no input element", id).to_string().as_str())
 }
 
 #[inline]
