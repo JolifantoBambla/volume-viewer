@@ -18,8 +18,6 @@ use util::init;
 use util::io;
 use util::window;
 
-use crate::renderer::GPUContext;
-
 use web_sys;
 use crate::renderer::playground::{RawVolume, ZSlicer};
 
@@ -46,7 +44,7 @@ pub struct Config {
 // starts an event loop using bevy stuff
 #[wasm_bindgen]
 pub fn main(js_config: &JsValue) {
-    let context_descriptor = renderer::ContextDescriptor::default();
+    let context_descriptor = renderer::context::ContextDescriptor::default();
     log::info!("contextdesscritpor {}", context_descriptor.backends.bits());
 
     let config: Config = js_config.into_serde().unwrap();
@@ -149,7 +147,7 @@ async fn expose_device() -> web_sys::GpuDevice {
     }
 
     // create ctx to capture device from
-    let mut ctx = renderer::GPUContext::new(&renderer::ContextDescriptor::default(), None).await;
+    let mut ctx = renderer::context::GPUContext::new(&renderer::context::ContextDescriptor::default(), None).await;
 
     // memcopy device
     //let device = transmute_copy!(ctx.device, Device);
