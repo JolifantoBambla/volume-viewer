@@ -19,7 +19,7 @@ jobs:
     - name: Install Clippy
       run: rustup component add clippy
     - name: Lint
-      run: cargo clippy -p volume-viewer
+      run: cargo clippy -p volume-viewer -- no-deps
     - name: Build
       run: cargo build --verbose
     - name: Run tests
