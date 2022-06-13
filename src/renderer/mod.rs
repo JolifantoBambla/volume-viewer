@@ -2,8 +2,11 @@ use wgpu;
 use wgpu::util::DeviceExt;
 use winit;
 
+pub mod camera;
 pub mod context;
 pub mod full_screen_pass;
+pub mod pass;
+pub mod volume;
 
 // todo: remove
 // this is just a small module where I test stuff
@@ -91,30 +94,27 @@ pub mod playground {
             });
         }
 
-        pub fn add_to_command(&self, mut command_encoder: wgpu::CommandEncoder, view: &wgpu::TextureView) -> wgpu::CommandEncoder {
-            {
-                let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: None,
-                    color_attachments: &[wgpu::RenderPassColorAttachment {
-                        view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.0,
-                                g: 0.0,
-                                b: 0.0,
-                                a: 1.0
-                            }),
-                            store: true
-                        }
-                    }],
-                    depth_stencil_attachment: None
-                });
-                rpass.set_pipeline(&self.pipeline);
-                rpass.set_bind_group(0, &self.bind_group, &[]);
-                rpass.draw(0..6, 0..1);
-            }
-            command_encoder
+        pub fn add_to_command(&self, command_encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView) {
+            let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 1.0
+                        }),
+                        store: true
+                    }
+                }],
+                depth_stencil_attachment: None
+            });
+            rpass.set_pipeline(&self.pipeline);
+            rpass.set_bind_group(0, &self.bind_group, &[]);
+            rpass.draw(0..6, 0..1);
         }
     }
 
@@ -181,15 +181,12 @@ pub mod playground {
             self.input_texture_height = input_texture_height;
         }
 
-        pub fn add_to_command(&self, mut command_encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
-            {
-                let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-                cpass.set_pipeline(&self.pipeline);
-                cpass.set_bind_group(0, &self.bind_group, &[]);
-                cpass.insert_debug_marker("compute collatz iterations");
-                cpass.dispatch(self.input_texture_width / 16, self.input_texture_height / 16, 1);
-            }
-            command_encoder
+        pub fn add_to_command(&self, command_encoder: &mut wgpu::CommandEncoder) {
+            let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            cpass.set_pipeline(&self.pipeline);
+            cpass.set_bind_group(0, &self.bind_group, &[]);
+            cpass.insert_debug_marker("compute collatz iterations");
+            cpass.dispatch(self.input_texture_width / 16, self.input_texture_height / 16, 1);
         }
     }
 
@@ -267,15 +264,12 @@ pub mod playground {
             self.input_texture_height = input_texture_height;
         }
 
-        pub fn add_to_command(&self, mut command_encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
-            {
-                let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-                cpass.set_pipeline(&self.pipeline);
-                cpass.set_bind_group(0, &self.bind_group, &[]);
-                cpass.insert_debug_marker("compute collatz iterations");
-                cpass.dispatch(self.input_texture_width / 16, self.input_texture_height / 16, 1);
-            }
-            command_encoder
+        pub fn add_to_command(&self, command_encoder: &mut wgpu::CommandEncoder) {
+            let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            cpass.set_pipeline(&self.pipeline);
+            cpass.set_bind_group(0, &self.bind_group, &[]);
+            cpass.insert_debug_marker("compute collatz iterations");
+            cpass.dispatch(self.input_texture_width / 16, self.input_texture_height / 16, 1);
         }
     }
 
@@ -444,8 +438,8 @@ pub mod playground {
 
         pub fn render(&self, canvas_view: &wgpu::TextureView) {
             let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            encoder = self.z_slice_pass.add_to_command(encoder);
-            encoder = self.full_screen_pass.add_to_command(encoder, &canvas_view);
+            self.z_slice_pass.add_to_command(&mut encoder);
+            self.full_screen_pass.add_to_command(&mut encoder, &canvas_view);
             self.ctx.queue.submit(Some(encoder.finish()));
         }
 
@@ -558,8 +552,8 @@ pub mod playground {
         // A command encoder executes one or many pipelines.
         // It is to WebGPU what a command buffer is to Vulkan.
         let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        encoder = edge_detect_pass.add_to_command(encoder);
-        encoder = full_screen_pass.add_to_command(encoder, &view);
+        edge_detect_pass.add_to_command(&mut encoder);
+        full_screen_pass.add_to_command(&mut encoder, &view);
 
         // Submits command encoder for processing
         ctx.queue.submit(Some(encoder.finish()));
