@@ -6,6 +6,7 @@ pub mod camera;
 pub mod context;
 pub mod full_screen_pass;
 pub mod pass;
+pub mod present_to_screen;
 pub mod volume;
 
 // todo: remove
