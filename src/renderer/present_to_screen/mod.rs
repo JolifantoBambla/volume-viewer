@@ -14,13 +14,23 @@ use crate::renderer::{
     pass::{GPUPass, AsBindGroupEntries},
 };
 
-pub struct PresentToScreenBindGroup {
-
+pub struct PresentToScreenBindGroup<'a> {
+    pub sampler: &'a wgpu::Sampler,
+    pub source_texture: &'a wgpu::TextureView,
 }
 
-impl AsBindGroupEntries for PresentToScreenBindGroup {
+impl<'a> AsBindGroupEntries for PresentToScreenBindGroup<'a> {
     fn as_bind_group_entries(&self) -> Vec<BindGroupEntry> {
-        Vec::new()
+        vec![
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Sampler(self.sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(self.source_texture),
+            }
+        ]
     }
 }
 
@@ -89,7 +99,7 @@ impl PresentToScreen {
     }
 }
 
-impl GPUPass<PresentToScreenBindGroup> for PresentToScreen {
+impl<'a> GPUPass<PresentToScreenBindGroup<'a>> for PresentToScreen {
     fn ctx(&self) -> &Arc<GPUContext> {
         &self.ctx
     }
