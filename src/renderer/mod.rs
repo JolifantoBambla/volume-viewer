@@ -7,6 +7,7 @@ pub mod context;
 pub mod full_screen_pass;
 pub mod pass;
 pub mod passes;
+pub mod resources;
 pub mod volume;
 
 // todo: remove
@@ -153,89 +154,6 @@ pub mod playground {
                     wgpu::BindGroupEntry {
                         binding: 1,
                         resource: wgpu::BindingResource::TextureView(&output_texture_view),
-                    }
-                ],
-            });
-            Self {
-                bind_group_layout,
-                bind_group,
-                pipeline,
-                input_texture_width,
-                input_texture_height
-            }
-        }
-
-        pub fn update_bind_group(&mut self, input_texture_view: &wgpu::TextureView, output_texture_view: &wgpu::TextureView, input_texture_width: u32, input_texture_height: u32, ctx: &GPUContext) {
-            self.bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &self.bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&input_texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&output_texture_view),
-                    }
-                ],
-            });
-            self.input_texture_width = input_texture_width;
-            self.input_texture_height = input_texture_height;
-        }
-
-        pub fn add_to_command(&self, command_encoder: &mut wgpu::CommandEncoder) {
-            let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-            cpass.set_pipeline(&self.pipeline);
-            cpass.set_bind_group(0, &self.bind_group, &[]);
-            cpass.insert_debug_marker("compute collatz iterations");
-            cpass.dispatch(self.input_texture_width / 16, self.input_texture_height / 16, 1);
-        }
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-    pub struct ZSliceUniforms {
-        zslice: i32,
-        zmax: f32,
-    }
-
-    pub struct ZSlicePass {
-        bind_group_layout: wgpu::BindGroupLayout,
-        bind_group: wgpu::BindGroup,
-        pipeline: wgpu::ComputePipeline,
-        input_texture_width: u32,
-        input_texture_height: u32,
-    }
-
-    impl ZSlicePass {
-        pub fn new(input_texture_view: &wgpu::TextureView, output_texture_view: &wgpu::TextureView, input_texture_width: u32, input_texture_height: u32, z_slice_buffer: &wgpu::Buffer, ctx: &GPUContext) -> Self {
-            let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("z_slice.wgsl"))),
-            });
-            let pipeline = ctx.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: None,
-                layout: None,
-                module: &shader_module,
-                entry_point: "main",
-            });
-            let bind_group_layout = pipeline.get_bind_group_layout(0);
-            let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&input_texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&output_texture_view),
-                    },
-                    wgpu::BindGroupEntry{
-                        binding: 2,
-                        resource: z_slice_buffer.as_entire_binding(),
                     }
                 ],
             });
