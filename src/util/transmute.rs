@@ -15,7 +15,7 @@ pub(crate) use transmute_copy;
 
 
 // helper structs to extract private fields - sorry :/
-
+// todo: ignore dead-code
 struct Context(web_sys::Gpu);
 
 #[derive(Clone)]

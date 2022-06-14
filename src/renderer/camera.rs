@@ -1,5 +1,3 @@
-use glam::Mat4;
-
 pub trait Camera {}
 
 pub struct OrthographicCamera {}

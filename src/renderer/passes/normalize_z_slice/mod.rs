@@ -2,7 +2,7 @@ use std::{
     borrow::Cow,
     sync::Arc,
 };
-use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Extent3d, Label, TextureView};
+use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Label};
 use crate::renderer::{
     context::GPUContext,
     pass::{GPUPass, AsBindGroupEntries},
@@ -26,11 +26,11 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
         vec![
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::TextureView(&self.volume),
+                resource: wgpu::BindingResource::TextureView(self.volume),
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::TextureView(&self.output),
+                resource: wgpu::BindingResource::TextureView(self.output),
             },
             wgpu::BindGroupEntry{
                 binding: 2,
@@ -69,7 +69,7 @@ impl NormalizeZSlice {
     pub fn encode(&self, command_encoder: &mut wgpu::CommandEncoder, bind_group: &BindGroup, volume_extent: &wgpu::Extent3d) {
         let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: self.label() });
         cpass.set_pipeline(&self.pipeline);
-        cpass.set_bind_group(0, &bind_group, &[]);
+        cpass.set_bind_group(0, bind_group, &[]);
         cpass.insert_debug_marker("compute collatz iterations");
         cpass.dispatch(volume_extent.width / 16, volume_extent.height / 16, 1);
     }

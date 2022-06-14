@@ -1,6 +1,5 @@
-use std::borrow::Cow;
 use std::sync::Arc;
-use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, CommandEncoder, Label, TextureView};
+use wgpu::BindGroupEntry;
 use crate::renderer::context::GPUContext;
 
 pub trait AsBindGroupEntries {

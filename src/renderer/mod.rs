@@ -1,7 +1,3 @@
-use wgpu;
-use wgpu::util::DeviceExt;
-use winit;
-
 pub mod camera;
 pub mod context;
 pub mod full_screen_pass;
@@ -13,12 +9,11 @@ pub mod volume;
 // todo: remove
 // this is just a small module where I test stuff
 pub mod playground {
-    use std::{borrow::Cow, str::FromStr, sync::Arc};
-    use std::convert::TryInto;
+    use std::{borrow::Cow, sync::Arc};
     use bytemuck;
     use winit::{
-        event::{self, WindowEvent},
-        event_loop::{ControlFlow, EventLoop},
+        event::{self},
+        event_loop::EventLoop,
         window::Window
     };
     use wgpu::util::DeviceExt;
@@ -149,11 +144,11 @@ pub mod playground {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&input_texture_view),
+                        resource: wgpu::BindingResource::TextureView(input_texture_view),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&output_texture_view),
+                        resource: wgpu::BindingResource::TextureView(output_texture_view),
                     }
                 ],
             });
@@ -173,11 +168,11 @@ pub mod playground {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&input_texture_view),
+                        resource: wgpu::BindingResource::TextureView(input_texture_view),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&output_texture_view),
+                        resource: wgpu::BindingResource::TextureView(output_texture_view),
                     }
                 ],
             });
@@ -366,7 +361,7 @@ pub mod playground {
         pub fn render(&self, canvas_view: &wgpu::TextureView) {
             let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
             self.z_slice_pass.encode(&mut encoder, &self.z_slice_bind_group, &self.volume_extent);
-            self.full_screen_pass.encode(&mut encoder, &self.full_screen_bind_group, &canvas_view);
+            self.full_screen_pass.encode(&mut encoder, &self.full_screen_bind_group, canvas_view);
             self.ctx.queue.submit(Some(encoder.finish()));
         }
 
@@ -387,7 +382,7 @@ pub mod playground {
                         let frame = match z_slicer.ctx.surface.as_ref().unwrap().get_current_texture() {
                             Ok(frame) => frame,
                             Err(_) => {
-                                z_slicer.ctx.surface.as_ref().unwrap().configure(&z_slicer.ctx.device, &z_slicer.ctx.surface_configuration.as_ref().unwrap());
+                                z_slicer.ctx.surface.as_ref().unwrap().configure(&z_slicer.ctx.device, z_slicer.ctx.surface_configuration.as_ref().unwrap());
                                 z_slicer.ctx.surface
                                     .as_ref()
                                     .unwrap()
@@ -427,7 +422,7 @@ pub mod playground {
                 })
                 .collect()
         }
-        fn create_input_texture(device: &wgpu::Device, mut queue: &wgpu::Queue, size: u32) -> (wgpu::Texture, wgpu::TextureView) {
+        fn create_input_texture(device: &wgpu::Device, queue: &wgpu::Queue, size: u32) -> (wgpu::Texture, wgpu::TextureView) {
             let texels = create_mandelbrot_texels(size as usize);
             let texture_extent = wgpu::Extent3d {
                 width: size,
@@ -460,8 +455,8 @@ pub mod playground {
         let ctx = GPUContext::new(&ContextDescriptor::default(), Some(window)).await;
 
         let tex_size = window.inner_size().width;
-        let (input_texture, input_texture_view) = create_input_texture(&ctx.device, &ctx.queue, tex_size);
-        let (storage_texture, storage_texture_view) = create_storage_texture(&ctx.device, tex_size, tex_size);
+        let (_, input_texture_view) = create_input_texture(&ctx.device, &ctx.queue, tex_size);
+        let (_, storage_texture_view) = create_storage_texture(&ctx.device, tex_size, tex_size);
         let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,

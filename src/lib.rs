@@ -1,11 +1,5 @@
-use std::any::Any;
-use std::convert::{Infallible, TryFrom};
-use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
-use instant;
 use serde::{Serialize, Deserialize};
-use serde_json;
 
 use wasm_bindgen::{prelude::*, JsCast};
 
@@ -15,10 +9,8 @@ pub mod util;
 pub mod renderer;
 
 use util::init;
-use util::io;
 use util::window;
 
-use web_sys;
 use crate::renderer::playground::{RawVolume, ZSlicer};
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -74,7 +66,7 @@ pub fn run_compute_example() {
 }
 
 async fn compute_example() {
-    let (window, event_loop) = window::create_window("compute example".to_string(), "existing-canvas".to_string());
+    let (window, _) = window::create_window("compute example".to_string(), "existing-canvas".to_string());
 
     log::info!("running compute");
     renderer::playground::compute_to_image_test(&window).await;
@@ -140,6 +132,8 @@ async fn get_device() {
 async fn expose_device() -> web_sys::GpuDevice {
     // helper structs to extract private fields
     struct Context(web_sys::Gpu);
+
+    // todo: ignore dead-code
     #[derive(Clone)]
     struct Device {
         context: Arc<Context>,

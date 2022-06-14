@@ -1,5 +1,4 @@
 use wgpu;
-use wgpu::util::DeviceExt;
 use winit;
 
 /// Helper struct for constructing a `GPUContext`.

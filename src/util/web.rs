@@ -48,7 +48,7 @@ pub fn now() -> f64 {
 pub fn get_element_by_id(id: &str) -> Element {
     document()
         .get_element_by_id(id)
-        .expect(format!("document has no element with id {}", id).to_string().as_str())
+        .expect(format!("document has no element with id {}", id).as_str())
 }
 
 #[inline]
@@ -56,7 +56,7 @@ pub fn get_input_element_by_id(id: &str) -> HtmlInputElement {
     get_element_by_id(id)
         .dyn_into::<HtmlInputElement>()
         .map_err(|_| ())
-        .expect(format!("element with id {} was no input element", id).to_string().as_str())
+        .expect(format!("element with id {} was no input element", id).as_str())
 }
 
 #[inline]
@@ -64,7 +64,7 @@ pub fn get_canvas_by_id(id: &str) -> HtmlCanvasElement {
     get_element_by_id(id)
         .dyn_into::<HtmlCanvasElement>()
         .map_err(|_| ())
-        .expect(format!("element with id {} was no canvas", id).to_string().as_str())
+        .expect(format!("element with id {} was no canvas", id).as_str())
 }
 
 /// Attaches a given HtmlCanvasElement to the document.
@@ -84,7 +84,6 @@ pub fn attach_canvas(canvas: HtmlCanvasElement, parent_id: Option<String>) {
             .unwrap()
     };
     parent.append_child(&web_sys::Element::from(canvas))
-        .ok()
         .expect("could not append element to document");
 }
 

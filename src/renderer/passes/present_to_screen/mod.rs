@@ -94,7 +94,7 @@ impl PresentToScreen {
             depth_stencil_attachment: None
         });
         rpass.set_pipeline(&self.pipeline);
-        rpass.set_bind_group(0, &bind_group, &[]);
+        rpass.set_bind_group(0, bind_group, &[]);
         rpass.draw(0..6, 0..1);
     }
 }

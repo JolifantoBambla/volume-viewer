@@ -10,5 +10,5 @@ pub fn set_panic_hook() {
 }
 
 pub fn set_logger(config: Option<wasm_logger::Config>) {
-    wasm_logger::init(config.unwrap_or(wasm_logger::Config::default()));
+    wasm_logger::init(config.unwrap_or_default());
 }

@@ -12,7 +12,7 @@ use reqwest::{
 
 pub async fn load_files_as_strings(mut paths: Vec<PathBuf>) -> Result<HashMap<PathBuf, String>, Error> {
     let mut result = HashMap::new();
-    if paths.len() > 0 {
+    if !paths.is_empty() {
         let mut handles = Vec::new();
         let client = Client::new();
         for path in paths.drain(..) {
@@ -33,7 +33,7 @@ pub async fn load_files_as_strings(mut paths: Vec<PathBuf>) -> Result<HashMap<Pa
 
 pub async fn load_files_as_bytes(mut paths: Vec<PathBuf>) -> Result<HashMap<PathBuf, Vec<u8>>, Error> {
     let mut result = HashMap::new();
-    if paths.len() > 0 {
+    if !paths.is_empty() {
         let mut handles = Vec::new();
         let client = Client::new();
         for path in paths.drain(..) {
