@@ -14,12 +14,12 @@ use crate::renderer::{
     pass::{GPUPass, AsBindGroupEntries},
 };
 
-pub struct PresentToScreenBindGroup<'a> {
+pub struct Resources<'a> {
     pub sampler: &'a wgpu::Sampler,
     pub source_texture: &'a wgpu::TextureView,
 }
 
-impl<'a> AsBindGroupEntries for PresentToScreenBindGroup<'a> {
+impl<'a> AsBindGroupEntries for Resources<'a> {
     fn as_bind_group_entries(&self) -> Vec<BindGroupEntry> {
         vec![
             wgpu::BindGroupEntry {
@@ -75,7 +75,7 @@ impl PresentToScreen {
         }
     }
 
-    pub fn encode(&self, bind_group: &BindGroup, command_encoder: &mut wgpu::CommandEncoder, view: &TextureView) {
+    pub fn encode(&self, command_encoder: &mut wgpu::CommandEncoder, bind_group: &BindGroup, view: &TextureView) {
         let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[wgpu::RenderPassColorAttachment {
@@ -99,7 +99,7 @@ impl PresentToScreen {
     }
 }
 
-impl<'a> GPUPass<PresentToScreenBindGroup<'a>> for PresentToScreen {
+impl<'a> GPUPass<Resources<'a>> for PresentToScreen {
     fn ctx(&self) -> &Arc<GPUContext> {
         &self.ctx
     }

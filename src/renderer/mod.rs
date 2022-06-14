@@ -6,13 +6,13 @@ pub mod camera;
 pub mod context;
 pub mod full_screen_pass;
 pub mod pass;
-pub mod present_to_screen;
+pub mod passes;
 pub mod volume;
 
 // todo: remove
 // this is just a small module where I test stuff
 pub mod playground {
-    use std::{borrow::Cow, str::FromStr};
+    use std::{borrow::Cow, str::FromStr, sync::Arc};
     use std::convert::TryInto;
     use bytemuck;
     use winit::{
@@ -22,6 +22,8 @@ pub mod playground {
     };
     use wgpu::util::DeviceExt;
     use crate::renderer::context::{GPUContext, ContextDescriptor};
+    use crate::renderer::pass::GPUPass;
+    use crate::renderer::passes::{normalize_z_slice, present_to_screen};
 
     pub struct FullScreenPass {
         bind_group_layout: wgpu::BindGroupLayout,
@@ -330,6 +332,10 @@ pub mod playground {
             }
             result
         }
+
+        pub fn max(&self) -> u32 {
+            *self.max_per_slice().iter().max().unwrap()
+        }
     }
 
     pub struct Texture {
@@ -339,38 +345,37 @@ pub mod playground {
 
     pub struct ZSlicer {
         window: winit::window::Window,
-        ctx: GPUContext,
+        ctx: Arc<GPUContext>,
 
-        volume_texture: Texture,
-        storage_texture: Texture,
-        sampler: wgpu::Sampler,
+        z_slice_pass: normalize_z_slice::NormalizeZSlice,
+        full_screen_pass: present_to_screen::PresentToScreen,
 
-        z_slice_pass: ZSlicePass,
-        full_screen_pass: FullScreenPass,
+        z_slice_bind_group: wgpu::BindGroup,
+        full_screen_bind_group: wgpu::BindGroup,
 
-        z_slider: web_sys::HtmlInputElement,
         z_slice_uniform_buffer: wgpu::Buffer,
-        z_max: Vec<u32>,
+        z_slider: web_sys::HtmlInputElement,
+        z_max: u32,
+        volume_extent: wgpu::Extent3d,
     }
 
     impl ZSlicer {
         pub async fn new(window: Window, volume: RawVolume, z_slider_id: String) -> Self {
-            let ctx = GPUContext::new(&ContextDescriptor::default(), Some(&window)).await;
+            let ctx = Arc::new(GPUContext::new(&ContextDescriptor::default(), Some(&window)).await);
 
-            let z_max = volume.max_per_slice();
+            let z_max = volume.max();
 
             let z_slider = crate::util::web::get_input_element_by_id(z_slider_id.as_str());
             let z_slice = z_slider.value().parse::<i32>().unwrap();
-            let z_slice_uniforms = ZSliceUniforms {
-                zslice: z_slice,
-                zmax: z_max[z_slice as usize] as f32,
+            let z_slice_uniforms = normalize_z_slice::Uniforms {
+                slice: z_slice,
+                max: z_max as f32,
             };
             let z_slice_uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
                 contents: bytemuck::bytes_of(&z_slice_uniforms),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
-
 
             let tex_width = volume.shape[2];
             let tex_height = volume.shape[1];
@@ -385,11 +390,7 @@ pub mod playground {
                 &ctx
             );
 
-            let (storage_texture_handle, storage_texture_view) = create_storage_texture(&ctx.device, tex_width, tex_height);
-            let storage_texture = Texture {
-                texture: storage_texture_handle,
-                view: storage_texture_view
-            };
+            let (_, storage_texture_view) = create_storage_texture(&ctx.device, tex_width, tex_height);
 
             let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
                 mag_filter: wgpu::FilterMode::Linear,
@@ -397,38 +398,45 @@ pub mod playground {
                 ..Default::default()
             });
 
-            let z_slice_pass = ZSlicePass::new(
-                &volume_texture.view,
-                &storage_texture.view,
-                tex_width, tex_height,
-                &z_slice_uniform_buffer,
-                &ctx
+            let z_slice_pass = normalize_z_slice::NormalizeZSlice::new(&ctx);
+            let full_screen_pass = present_to_screen::PresentToScreen::new(&ctx);
+            let z_slice_bind_group = z_slice_pass.create_bind_group(
+                normalize_z_slice::Resources {
+                    volume: &volume_texture.view,
+                    output: &storage_texture_view,
+                    uniforms: &z_slice_uniform_buffer,
+                }
             );
-            let full_screen_pass = FullScreenPass::new(
-                &storage_texture.view,
-                &sampler,
-                &ctx
+            let full_screen_bind_group = full_screen_pass.create_bind_group(
+                present_to_screen::Resources {
+                    sampler: &sampler,
+                    source_texture: &storage_texture_view,
+                }
             );
 
             Self {
                 window,
                 ctx,
-                volume_texture,
-                storage_texture,
-                sampler,
                 z_slice_pass,
+                z_slice_bind_group,
                 full_screen_pass,
+                full_screen_bind_group,
                 z_slider,
                 z_slice_uniform_buffer,
                 z_max,
+                volume_extent: wgpu::Extent3d {
+                    width: tex_width,
+                    height: tex_height,
+                    depth_or_array_layers: volume.shape[0]
+                }
             }
         }
 
         pub fn update(&self) {
             let z_slice = self.z_slider.value().parse::<i32>().unwrap();
-            let uniforms = ZSliceUniforms {
-                zslice: z_slice,
-                zmax: self.z_max[z_slice as usize] as f32,
+            let uniforms = normalize_z_slice::Uniforms {
+                slice: z_slice,
+                max: self.z_max as f32,
             };
             self.ctx.queue.write_buffer(
                 &self.z_slice_uniform_buffer,
@@ -439,8 +447,8 @@ pub mod playground {
 
         pub fn render(&self, canvas_view: &wgpu::TextureView) {
             let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            self.z_slice_pass.add_to_command(&mut encoder);
-            self.full_screen_pass.add_to_command(&mut encoder, &canvas_view);
+            self.z_slice_pass.encode(&mut encoder, &self.z_slice_bind_group, &self.volume_extent);
+            self.full_screen_pass.encode(&mut encoder, &self.full_screen_bind_group, &canvas_view);
             self.ctx.queue.submit(Some(encoder.finish()));
         }
 
