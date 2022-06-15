@@ -18,6 +18,11 @@ var<uniform> z_slice: Uniforms;
 @stage(compute)
 @workgroup_size(16, 16, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let window_size = textureDimensions(result);
+    if window_size.x < global_id.x || window_size.y < global_id.y {
+        return;
+    }
+
     let pixel = vec2<i32>(global_id.xy);
 
     let raw_value = textureLoad(inputImage, vec3<i32>(pixel, z_slice.z_slice), 0).x;
