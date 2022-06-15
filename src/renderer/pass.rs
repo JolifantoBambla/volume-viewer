@@ -9,7 +9,7 @@ pub trait AsBindGroupEntries {
 pub trait GPUPass<T: AsBindGroupEntries> {
     // todo: maybe move out of pub trait and use in other resources as well
     fn ctx(&self) -> &Arc<GPUContext>;
-    fn label(&self) -> wgpu::Label;
+    fn label(&self) -> &str;
 
     fn bind_group_layout(&self) -> &wgpu::BindGroupLayout;
     fn create_bind_group(&self, resources: T) -> wgpu::BindGroup {

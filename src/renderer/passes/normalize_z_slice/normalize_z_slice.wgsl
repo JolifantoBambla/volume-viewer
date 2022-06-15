@@ -18,7 +18,7 @@ var<uniform> z_slice: Uniforms;
 @stage(compute)
 @workgroup_size(16, 16, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let pixel = bitcast<vec2<i32>>(global_id.xy);
+    let pixel = vec2<i32>(global_id.xy);
 
     let raw_value = textureLoad(inputImage, vec3<i32>(pixel, z_slice.z_slice), 0).x;
     let value = vec3<f32>(f32(raw_value) / z_slice.z_max);

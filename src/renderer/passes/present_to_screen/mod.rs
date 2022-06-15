@@ -6,7 +6,6 @@ use wgpu::{
     BindGroup,
     BindGroupEntry,
     BindGroupLayout,
-    Label,
     TextureView,
 };
 use crate::renderer::{
@@ -95,6 +94,7 @@ impl PresentToScreen {
         });
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(0, bind_group, &[]);
+        rpass.insert_debug_marker(self.label());
         rpass.draw(0..6, 0..1);
     }
 }
@@ -104,8 +104,8 @@ impl<'a> GPUPass<Resources<'a>> for PresentToScreen {
         &self.ctx
     }
 
-    fn label(&self) -> Label {
-        Some("PresentToScreen")
+    fn label(&self) -> &str {
+        "PresentToScreen"
     }
 
     fn bind_group_layout(&self) -> &BindGroupLayout {

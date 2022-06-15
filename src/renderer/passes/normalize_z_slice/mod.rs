@@ -2,7 +2,7 @@ use std::{
     borrow::Cow,
     sync::Arc,
 };
-use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Label};
+use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use crate::renderer::{
     context::GPUContext,
     pass::{GPUPass, AsBindGroupEntries},
@@ -67,10 +67,10 @@ impl NormalizeZSlice {
     }
 
     pub fn encode(&self, command_encoder: &mut wgpu::CommandEncoder, bind_group: &BindGroup, volume_extent: &wgpu::Extent3d) {
-        let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: self.label() });
+        let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, bind_group, &[]);
-        cpass.insert_debug_marker("compute collatz iterations");
+        cpass.insert_debug_marker(self.label());
         cpass.dispatch(volume_extent.width / 16, volume_extent.height / 16, 1);
     }
 }
@@ -80,8 +80,8 @@ impl<'a> GPUPass<Resources<'a>> for NormalizeZSlice {
         &self.ctx
     }
 
-    fn label(&self) -> Label {
-        Some("NormalizeZSlice")
+    fn label(&self) -> &str {
+        "NormalizeZSlice"
     }
 
     fn bind_group_layout(&self) -> &BindGroupLayout {
