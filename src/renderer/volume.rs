@@ -29,7 +29,7 @@ pub struct Volume {
     acceleration_structure: Box<dyn AccelerationStructure>,
 
     // todo: move to struct containing numerical meta stuff?
-    maximum_value: f32,
+    //maximum_value: f32,
 }
 
 impl Volume {

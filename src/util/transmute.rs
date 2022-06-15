@@ -18,6 +18,7 @@ pub(crate) use transmute_copy;
 // todo: ignore dead-code
 struct Context(web_sys::Gpu);
 
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct Device {
     context: Arc<Context>,

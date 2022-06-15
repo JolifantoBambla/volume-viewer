@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 
 use wasm_bindgen::{prelude::*, JsCast};
@@ -130,16 +129,6 @@ async fn get_device() {
 }
 
 async fn expose_device() -> web_sys::GpuDevice {
-    // helper structs to extract private fields
-    struct Context(web_sys::Gpu);
-
-    // todo: ignore dead-code
-    #[derive(Clone)]
-    struct Device {
-        context: Arc<Context>,
-        pub id: web_sys::GpuDevice,
-    }
-
     // create ctx to capture device from
     let mut ctx = renderer::context::GPUContext::new(&renderer::context::ContextDescriptor::default(), None).await;
 

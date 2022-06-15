@@ -5,35 +5,35 @@ use web_sys::{Document, Element, HtmlCanvasElement, HtmlElement, HtmlInputElemen
 #[inline]
 pub fn window() -> Window {
     web_sys::window()
-        .expect("window does not exist")
+        .unwrap_or_else(|| panic!("window does not exist"))
 }
 
 #[inline]
 pub fn document() -> Document {
     window()
         .document()
-        .expect("window has no document")
+        .unwrap_or_else(|| panic!("window has no document"))
 }
 
 #[inline]
 pub fn body() -> HtmlElement {
     document()
         .body()
-        .expect("document has no body")
+        .unwrap_or_else(|| panic!("document has no body"))
 }
 
 #[inline]
 pub fn url() -> String {
     document()
         .url()
-        .expect("document has no URL")
+        .unwrap_or_else(|_| panic!("document has no URL"))
 }
 
 #[inline]
 pub fn performance() -> Performance {
     window()
         .performance()
-        .expect("window has no performance")
+        .unwrap_or_else(|| panic!("window has no performance"))
 }
 
 /// Returns the milliseconds since the HTML document's time origin (i.e the beginning of its lifetime).
@@ -48,7 +48,7 @@ pub fn now() -> f64 {
 pub fn get_element_by_id(id: &str) -> Element {
     document()
         .get_element_by_id(id)
-        .expect(format!("document has no element with id {}", id).as_str())
+        .unwrap_or_else(|| panic!("document has no element with id {}", id))
 }
 
 #[inline]
@@ -56,7 +56,7 @@ pub fn get_input_element_by_id(id: &str) -> HtmlInputElement {
     get_element_by_id(id)
         .dyn_into::<HtmlInputElement>()
         .map_err(|_| ())
-        .expect(format!("element with id {} was no input element", id).as_str())
+        .unwrap_or_else(|_| panic!("element with id {} was no input element", id))
 }
 
 #[inline]
@@ -64,7 +64,7 @@ pub fn get_canvas_by_id(id: &str) -> HtmlCanvasElement {
     get_element_by_id(id)
         .dyn_into::<HtmlCanvasElement>()
         .map_err(|_| ())
-        .expect(format!("element with id {} was no canvas", id).as_str())
+        .unwrap_or_else(|_| panic!("element with id {} was no canvas", id))
 }
 
 /// Attaches a given HtmlCanvasElement to the document.
@@ -72,19 +72,19 @@ pub fn get_canvas_by_id(id: &str) -> HtmlCanvasElement {
 /// Otherwise, the canvas as attached to the body of the document.
 #[inline]
 pub fn attach_canvas(canvas: HtmlCanvasElement, parent_id: Option<String>) {
-    let parent = if parent_id.is_none() {
-        body()
+    let parent = if let Some(parent_id) = parent_id {
+        get_element_by_id(parent_id.as_str())
             .dyn_into::<HtmlElement>()
             .map_err(|_| ())
             .unwrap()
     } else {
-        get_element_by_id(parent_id.unwrap().as_str())
+        body()
             .dyn_into::<HtmlElement>()
             .map_err(|_| ())
             .unwrap()
     };
     parent.append_child(&web_sys::Element::from(canvas))
-        .expect("could not append element to document");
+        .unwrap_or_else(|_| panic!("could not append element to document"));
 }
 
 #[inline]
