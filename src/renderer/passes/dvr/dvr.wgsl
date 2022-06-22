@@ -19,7 +19,7 @@ struct Uniforms {
     world_to_object: float4x4,
     screen_to_camera: float4x4,
     camera_to_world: float4x4,
-    volume_max: f32,
+    volume_color: float4,
 }
 
 @group(0)
@@ -49,14 +49,14 @@ fn positive_infinity() -> f32 {
 }
 
 fn sample(x: vec3<f32>) -> f32 {
-    return f32(textureSampleLevel(volume_data, volume_sampler, x, 0.).x);// / uniforms.volume_max;
+    return f32(textureSampleLevel(volume_data, volume_sampler, x, 0.).x);
 }
 
 
 /// An Axis Aligned Bounding Box (AABB)
 struct AABB {
-    @size(16) min: vec3<f32>,
-    @size(16) max: vec3<f32>,
+    @size(16) min: float3,
+    @size(16) max: float3,
 }
 
 struct Volume {
@@ -65,8 +65,8 @@ struct Volume {
 }
 
 struct Ray {
-    origin: vec3<f32>,
-    direction: vec3<f32>,
+    origin: float3,
+    direction: float3,
     tmax: f32,
 }
 
@@ -82,11 +82,11 @@ fn transform_ray(ray: Ray, transform: float4x4) -> Ray {
 fn generate_ray(pixel_position: float2, screen_resolution: float2, to_camera: float4x4, to_world: float4x4, to_object: float4x4) -> Ray {
     let camera_point = (float4(pixel_position + 0.5, -10000., 1.) * to_camera).xyz;
 
-    // ortho
+    // persp
     //let origin = float3(0.);
     //let direction = normalize(camera_point);
 
-    // persp
+    // ortho
     let origin = camera_point;
     let direction = float3(0., 0., 1.);
 
@@ -101,6 +101,12 @@ fn generate_ray(pixel_position: float2, screen_resolution: float2, to_camera: fl
         //),
         //to_object
     );
+}
+
+struct Intersection {
+    hit: bool,
+    t_min: f32,
+    t_max: f32,
 }
 
 // x: true/false, y: t_min, z: t_max
@@ -121,7 +127,7 @@ fn intersect_box(ray: Ray, bounds: AABB) -> float3 {
 }
 
 // x: true/false, y: t_min, z: t_max
-fn intersect(ray: Ray, bounds: AABB) -> float3 {
+fn intersect(ray: Ray, bounds: AABB) -> Intersection {
     var t0 = 0.;
     var t1 = ray.tmax;
     for (var i: i32 = 0; i < 3; i += 1) {
@@ -135,9 +141,11 @@ fn intersect(ray: Ray, bounds: AABB) -> float3 {
         }
         t0 = max(t_near, t0);
         t1 = min(t_far, t1);
-        if t0 > t1 { return float3(-1.); }
+        if t0 > t1 {
+            return Intersection();
+        }
     }
-    return float3(1., t0, t1);
+    return Intersection(true, t0, t1);
 }
 
 fn ray_at(ray: Ray, t: f32) -> vec3<f32> {
@@ -251,13 +259,15 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let intersection_record = intersect(ray, volume.bounds);
 
     // early out if we missed the volume
-    if intersection_record.x < 0. {
+    if !intersection_record.hit {
         return;
     }
 
+    let start = ray_at(ray, intersection_record.t_min);
+    let end = ray_at(ray, intersection_record.t_max);
+
+    // todo: remove this
     let volume_scale = float3(textureDimensions(volume_data));
-    let start = ray_at(ray, intersection_record.y);
-    let end = ray_at(ray, intersection_record.z);
 
     let distance = distance(start * volume_scale, end * volume_scale);
     let num_steps = i32(distance / relative_step_size + 0.5);
@@ -273,7 +283,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     //textureStore(result, pixel, float4(value, 1.));
 
     let color = dvr(start, step, num_steps, ray);
-    textureStore(result, pixel, color);
+    if color.a > 0.1 {
+        textureStore(result, pixel, color);
+    }
 
     //add_camera_debug_spheres(ray, pixel);
 }
@@ -282,23 +294,86 @@ fn dvr(start: float3, step: float3, num_steps: i32, ray: Ray) -> float4 {
     var color = float4(0.);
 
     var sample_location = start;
-    // todo: max number of steps
     for (var i: i32 = 0; i < num_steps; i += 1) {
         let value = sample(sample_location);
 
-        // todo: add thresholding to filter out noise
-        // todo: add color map / lighting to produce meaningful results
-        color += float4(value);
+        let dt_scale = 1.;
 
-        // todo: add early out for high alpha values
+        // todo: add thresholding to filter out noise
+        if value > 0.1 {
+            var lighting = compute_lighting(value, sample_location, step, ray.direction);
+            lighting.a = 1. - pow(1. - lighting.a, dt_scale);
+            color += float4(lighting.rgb, 1.) * ((1. - color.a) * lighting.a);
+        }
+
+        // early out for high alpha values
+        if color.a > 0.95 {
+            break;
+        }
 
         sample_location += step;
     }
 
-    // todo: remove
-    color.a = 1.;
-
     return color;
 }
 
+fn central_difference(x: float3, step: float3) -> float3 {
+    var central_difference = float3();
+    for (var i = 0; i < 3; i += 1) {
+        let h = step[i];
+        var offset = float3();
+        offset[i] = h;
+        central_difference[i] = sample(x - offset) - sample(x + offset) / (2. * h);
+    }
+    return central_difference;
+}
 
+/// Computes the normal at point x from the central difference.
+fn compute_volume_normal(x: float3, step: float3, view: float3) -> float3 {
+    let normal = normalize(central_difference(x, step));
+    // flip normal towards viewer if necessary
+    let front_or_back = 2. * f32(dot(normal, view) > 0.) - 1.;
+    return front_or_back * normal;
+}
+
+fn compute_lighting(value: f32, x: float3, step: float3, view_direction: float3) -> float4 {
+    // Calculate color by incorporating lighting
+
+    // View direction
+    let view = normalize(view_direction);
+    // calculate normal vector from gradient
+    let normal = compute_volume_normal(x, step, view);
+
+    // Init colors
+    var ambient_color  = float3(0.1, 0.1, 0.1);
+    var diffuse_color  = float3(0.0, 0.0, 0.0);
+    var specular_color = float3(0.0, 0.0, 0.0);
+    let shininess = 40.;
+
+    // note: could allow multiple lights
+    for (var i = 0; i < 1; i += 1) {
+        // Get light direction (make sure to prevent zero devision)
+        var light_direction = view;	//lightDirs[i];
+
+        // Calculate lighting properties
+        let diffuse = clamp(dot(normal, light_direction), 0., 1.);
+        let halfway = normalize(light_direction + view);
+        let specular = pow(max(dot(halfway, normal), 0.), shininess);
+
+        // Calculate colors
+        ambient_color  += ambient_color;
+        diffuse_color  += diffuse;
+        specular_color += specular * specular_color;
+    }
+
+    // Calculate final color by componing different components
+    return float4(
+        apply_colormap(value) * (ambient_color + diffuse_color) + specular_color,
+        value
+    );
+}
+
+fn apply_colormap(value: f32) -> float3{
+    let u_clim = float2(0., 0.5);
+    return uniforms.volume_color.rgb * (value - u_clim[0]) / (u_clim[1] - u_clim[0]);
+}

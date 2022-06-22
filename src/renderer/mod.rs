@@ -49,7 +49,6 @@ pub mod dvr_playground {
 
         volume_scale: glam::Mat4,
         uniform_buffer: wgpu::Buffer,
-        volume_max: f32,
     }
 
     impl DVR {
@@ -109,7 +108,6 @@ pub mod dvr_playground {
                 dvr_result_extent,
                 volume_scale: volume_tansform,
                 uniform_buffer,
-                volume_max: volume.max as f32,
             }
         }
 
@@ -154,7 +152,6 @@ pub mod dvr_playground {
                 world_to_object: self.volume_scale.clone(),
                 screen_to_camera: raster_to_camera,
                 camera_to_world: view_matrix.clone(),//.inverse(),
-                volume_max: self.volume_max,
                 ..Default::default()
             };
             self.ctx.queue.write_buffer(

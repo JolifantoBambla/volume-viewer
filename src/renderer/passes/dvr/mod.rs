@@ -14,8 +14,7 @@ pub struct Uniforms {
     pub world_to_object: glam::Mat4,
     pub screen_to_camera: glam::Mat4,
     pub camera_to_world: glam::Mat4,
-    pub volume_max: f32,
-    pub padding: glam::Vec3,
+    pub volume_color: glam::Vec4,
 }
 
 impl Default for Uniforms {
@@ -24,8 +23,7 @@ impl Default for Uniforms {
             world_to_object: glam::Mat4::IDENTITY,
             screen_to_camera: glam::Mat4::IDENTITY,
             camera_to_world: glam::Mat4::IDENTITY,
-            volume_max: 1.,
-            padding: glam::Vec3::new(0.,0.,0.),
+            volume_color: glam::Vec4::new(0.,0.,1., 1.),
         }
     }
 }
