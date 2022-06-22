@@ -17,8 +17,12 @@ type float4x4 = mat4x4<f32>;
 // todo: come up with a better name...
 struct Uniforms {
     world_to_object: float4x4,
+    object_to_world: float4x4,
     screen_to_camera: float4x4,
     camera_to_world: float4x4,
+    world_to_camera: float4x4,
+    projection: float4x4,
+    inverse_projection: float4x4,
     volume_color: float4,
 }
 
@@ -48,7 +52,7 @@ fn positive_infinity() -> f32 {
     return 1. / 0.;
 }
 
-fn sample(x: vec3<f32>) -> f32 {
+fn sample(x: float3) -> f32 {
     return f32(textureSampleLevel(volume_data, volume_sampler, x, 0.).x);
 }
 
@@ -97,9 +101,9 @@ fn generate_ray(pixel_position: float2, screen_resolution: float2, to_camera: fl
                 direction,
                 positive_infinity()
             ),
-            to_world
+        //    to_world
         //),
-        //to_object
+        to_object
     );
 }
 
@@ -242,11 +246,55 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // initialize background
     textureStore(result, pixel, float4(background_color, 1.));
 
+    // todo: remove this (should come from CPU
+    let volume_scale = float3(textureDimensions(volume_data));
+
+    let resolution = float2(window_size);
+    let frame = resolution.x / resolution.y;
+    var screen = AABB(
+        float3(-frame, -1., 0.),
+        float3(frame, 1., 0.)
+    );
+    if frame < 1. {
+        screen = AABB(
+            float3(-1., -1. / frame, 0.),
+            float3(1., 1. / frame, 0.)
+        );
+    }
+    let raster_to_screen = float4x4(
+        1., 0., 0., screen.max.x,
+        0., 1., 0., screen.max.y,
+        0., 0., 1., 0.,
+        0., 0., 0., 1.
+    ) * float4x4(
+        (screen.max.x - screen.min.x), 0., 0., 0.,
+        0., (screen.min.y - screen.max.y), 0., 0.,
+        0., 0., 1., 0.,
+        0., 0., 0., 1.
+    ) * float4x4(
+        1. / resolution.x, 0., 0., 0.,
+        0., 1. / resolution.y, 0., 0.,
+        0., 0., 1., 0.,
+        0., 0., 0., 1.
+    );
+
+    let world_to_object = float4x4(
+        1. / volume_scale.x, 0., 0., 0.,
+      0., 1. / volume_scale.y, 0., 0.,
+      0., 0., 1. / volume_scale.z, 0.,
+      0., 0., 0., 1.
+    ) * float4x4(
+      1., 0., 0., 0.5,
+      0., 1., 0., 0.5,
+      0., 0., 1., 0.5,
+      0., 0., 0., 1.
+    );
+
     // todo: clean up ray generation and transform to volume's space s.t. volume shape is preserved and sampling still works
     var ray = generate_ray(
         float2(pixel) - float2(window_size) / 2.,
         float2(window_size),
-        uniforms.screen_to_camera,
+        raster_to_screen, // uniforms.screen_to_camera
         uniforms.camera_to_world,
         uniforms.world_to_object
     );
@@ -261,13 +309,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // early out if we missed the volume
     if !intersection_record.hit {
         return;
+    } else {
+        textureStore(result, pixel, float4(1.));
+        return;
     }
 
     let start = ray_at(ray, intersection_record.t_min);
     let end = ray_at(ray, intersection_record.t_max);
-
-    // todo: remove this
-    let volume_scale = float3(textureDimensions(volume_data));
 
     let distance = distance(start * volume_scale, end * volume_scale);
     let num_steps = i32(distance / relative_step_size + 0.5);

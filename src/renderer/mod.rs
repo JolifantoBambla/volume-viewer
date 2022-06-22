@@ -46,7 +46,7 @@ pub mod dvr_playground {
 
         dvr_result_extent: wgpu::Extent3d,
 
-        volume_scale: glam::Mat4,
+        volume_transform: glam::Mat4,
         uniform_buffer: wgpu::Buffer,
     }
 
@@ -63,9 +63,13 @@ pub mod dvr_playground {
                 ..Default::default()
             });
 
-            let volume_tansform = glam::Mat4::from_scale(volume.create_vec3()).inverse();
+            // the volume is a unit cube ([0,1]^3)
+            // we translate it s.t. its center is the origin and scale it to its original dimensions
+            let volume_transform = glam::Mat4::from_scale(volume.create_vec3())
+                .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(-0.5, -0.5, -0.5)));
+
             let uniforms = dvr::Uniforms {
-                world_to_object: volume_tansform,
+                world_to_object: volume_transform,
                 ..Default::default()
             };
             let uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -105,7 +109,7 @@ pub mod dvr_playground {
                 present_to_screen: full_screen_pass,
                 present_to_screen_bind_group: full_screen_bind_group,
                 dvr_result_extent,
-                volume_scale: volume_tansform,
+                volume_transform,
                 uniform_buffer,
             }
         }
@@ -133,26 +137,46 @@ pub mod dvr_playground {
                 .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(-screen_min.x, -screen_max.y, 0.)));
             let raster_to_screen = screen_to_raster.inverse();
             let camera_to_screen = glam::Mat4::IDENTITY;
-            let raster_to_camera = camera_to_screen.inverse().mul_mat4(&raster_to_screen);
-
-            /*
-            log::info!("0,0: {}\n0,1: {}\n1.0: {}\n1,1: {}\n0.5,0.5: {},-0.5,-0.5: {}",
-                raster_to_camera.mul_vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0)).truncate().truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(0.0, resolution.y, 0.0, 1.0)).truncate().truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x, 0.0, 0.0, 1.0)).truncate().truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x, resolution.y, 0.0, 1.0)).truncate().truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x / 2.0, resolution.y / 2.0, 0.0, 1.0)).truncate().truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(-resolution.x / 2.0, -resolution.y / 2.0, 0.0, 1.0)).truncate().truncate(),
+            let raster_to_camera2 = camera_to_screen.inverse().mul_mat4(&raster_to_screen);
+            let raster_to_camera = glam::Mat4::orthographic_rh(
+                -resolution.x / 2., resolution.x / 2.,
+                -resolution.y / 2., resolution.y / 2.,
+                0., 1000000.,
             );
-             */
+
+            log::info!("ortho:\n0,0: {}\n0,1: {}\n1.0: {}\n1,1: {}\n0.5,0.5: {},\n-0.5,-0.5: {}\n\nraster to camera:\n0,0: {}\n0,1: {}\n1.0: {}\n1,1: {}\n0.5,0.5: {},\n-0.5,-0.5: {}\n\nvolume transform:\n0,0,0: {}\n0,0,1: {}\n0,1.0: {}\n1,0,0: {}\n1,1,1: {},\n0.5,0.5,0.5: {}\n\n",
+                raster_to_camera.mul_vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0)).truncate(),
+                raster_to_camera.mul_vec4(glam::Vec4::new(0.0, resolution.y, 0.0, 1.0)).truncate(),
+                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x, 0.0, 0.0, 1.0)).truncate(),
+                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x, resolution.y, 0.0, 1.0)).truncate(),
+                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x / 2.0, resolution.y / 2.0, 0.0, 1.0)).truncate(),
+                raster_to_camera.mul_vec4(glam::Vec4::new(-resolution.x / 2.0, -resolution.y / 2.0, 0.0, 1.0)).truncate(),
+                raster_to_camera2.mul_vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0)).truncate(),
+                raster_to_camera2.mul_vec4(glam::Vec4::new(0.0, resolution.y, 0.0, 1.0)).truncate(),
+                raster_to_camera2.mul_vec4(glam::Vec4::new(resolution.x, 0.0, 0.0, 1.0)).truncate(),
+                raster_to_camera2.mul_vec4(glam::Vec4::new(resolution.x, resolution.y, 0.0, 1.0)).truncate(),
+                raster_to_camera2.mul_vec4(glam::Vec4::new(resolution.x / 2.0, resolution.y / 2.0, 0.0, 1.0)).truncate(),
+                raster_to_camera2.mul_vec4(glam::Vec4::new(-resolution.x / 2.0, -resolution.y / 2.0, 0.0, 1.0)).truncate(),
+                self.volume_transform.mul_vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0)).truncate(),
+                self.volume_transform.mul_vec4(glam::Vec4::new(0.0, 0.0, 1.0, 1.0)).truncate(),
+                self.volume_transform.mul_vec4(glam::Vec4::new(0.0, 1.0, 0.0, 1.0)).truncate(),
+                self.volume_transform.mul_vec4(glam::Vec4::new(1.0, 0.0, 0.0, 1.0)).truncate(),
+                self.volume_transform.mul_vec4(glam::Vec4::new(1.0, 1.0, 1.0, 1.0)).truncate(),
+                self.volume_transform.mul_vec4(glam::Vec4::new(0.5, 0.5, 0.5, 1.0)).truncate(),
+            );
+
 
             //let raster_to_camera = view_matrix.inverse().mul_mat4(&raster_to_screen);
-            let uniforms = dvr::Uniforms {
-                world_to_object: self.volume_scale,
-                screen_to_camera: raster_to_camera,
-                camera_to_world: *view_matrix,//.inverse(),
-                ..Default::default()
-            };
+            let uniforms = dvr::Uniforms::new(
+                self.volume_transform,
+                *view_matrix,//.inverse(),
+                raster_to_camera,
+                glam::Mat4::orthographic_rh(
+                    -resolution.x / 2., resolution.x / 2.,
+                    -resolution.y / 2., resolution.y / 2.,
+                    0., 1000000.,
+                )
+            );
             self.ctx.queue.write_buffer(
                 &self.uniform_buffer,
                 0,
