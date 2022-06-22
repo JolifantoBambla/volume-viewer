@@ -37,7 +37,7 @@ impl Texture {
 
     pub fn create_texture_3d(device: &Device, queue: &Queue, data: &[u8], extent: Extent3d) -> Self {
         let texture = device.create_texture_with_data(
-            &queue,
+            queue,
             &wgpu::TextureDescriptor {
                 label: Some("Texture3D"),
                 size: extent,

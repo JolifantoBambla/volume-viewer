@@ -9,13 +9,12 @@ pub mod volume;
 // todo: remove
 // this is just a small module where I test stuff
 pub mod dvr_playground {
-    use std::{borrow::Cow, sync::Arc};
+    use std::{sync::Arc};
     use std::collections::HashSet;
     use bytemuck;
     use glam::Vec2;
     use winit::{
         event::{
-            self,
             ElementState,
             Event,
             KeyboardInput,
@@ -66,7 +65,7 @@ pub mod dvr_playground {
 
             let volume_tansform = glam::Mat4::from_scale(volume.create_vec3()).inverse();
             let uniforms = dvr::Uniforms {
-                world_to_object: volume_tansform.clone(),
+                world_to_object: volume_tansform,
                 ..Default::default()
             };
             let uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -149,9 +148,9 @@ pub mod dvr_playground {
 
             //let raster_to_camera = view_matrix.inverse().mul_mat4(&raster_to_screen);
             let uniforms = dvr::Uniforms {
-                world_to_object: self.volume_scale.clone(),
+                world_to_object: self.volume_scale,
                 screen_to_camera: raster_to_camera,
-                camera_to_world: view_matrix.clone(),//.inverse(),
+                camera_to_world: *view_matrix,//.inverse(),
                 ..Default::default()
             };
             self.ctx.queue.write_buffer(
@@ -171,8 +170,10 @@ pub mod dvr_playground {
         pub fn run(dvr: Self, event_loop: EventLoop<()>) {
             let mut left_mouse_pressed = false;
             let mut modifiers: HashSet<Modifier> = HashSet::new();
-            let mut camera_controller = CameraController::default();
-            camera_controller.window_size = glam::Vec2::new(dvr.window.inner_size().width as f32, dvr.window.inner_size().height as f32);
+            let mut camera_controller = CameraController {
+                window_size: glam::Vec2::new(dvr.window.inner_size().width as f32, dvr.window.inner_size().height as f32),
+                ..Default::default()
+            };
             camera_controller.update();
 
             event_loop.run(move |event, _, control_flow| {
@@ -200,7 +201,7 @@ pub mod dvr_playground {
                     Event::WindowEvent {
                         event: WindowEvent::KeyboardInput {
                             input: KeyboardInput {
-                                virtual_keycode,
+                                virtual_keycode: Some(virtual_keycode),
                                 state,
                                 ..
                             },
@@ -208,31 +209,29 @@ pub mod dvr_playground {
                         },
                         ..
                     } => {
-                        if let Some(virtual_keycode) = virtual_keycode {
-                            match virtual_keycode {
-                                VirtualKeyCode::LShift | VirtualKeyCode::RShift => {
-                                    if state == ElementState::Pressed {
-                                        modifiers.insert(Modifier::Shift);
-                                    } else if state == ElementState::Released {
-                                        modifiers.remove(&Modifier::Shift);
-                                    }
+                        match virtual_keycode {
+                            VirtualKeyCode::LShift | VirtualKeyCode::RShift => {
+                                if state == ElementState::Pressed {
+                                    modifiers.insert(Modifier::Shift);
+                                } else if state == ElementState::Released {
+                                    modifiers.remove(&Modifier::Shift);
                                 }
-                                VirtualKeyCode::LAlt | VirtualKeyCode::RAlt => {
-                                    if state == ElementState::Pressed {
-                                        modifiers.insert(Modifier::Alt);
-                                    } else if state == ElementState::Released {
-                                        modifiers.remove(&Modifier::Alt);
-                                    }
-                                }
-                                VirtualKeyCode::LControl | VirtualKeyCode::RControl => {
-                                    if state == ElementState::Pressed {
-                                        modifiers.insert(Modifier::Ctrl);
-                                    } else if state == ElementState::Released {
-                                        modifiers.remove(&Modifier::Ctrl);
-                                    }
-                                }
-                                _ => {}
                             }
+                            VirtualKeyCode::LAlt | VirtualKeyCode::RAlt => {
+                                if state == ElementState::Pressed {
+                                    modifiers.insert(Modifier::Alt);
+                                } else if state == ElementState::Released {
+                                    modifiers.remove(&Modifier::Alt);
+                                }
+                            }
+                            VirtualKeyCode::LControl | VirtualKeyCode::RControl => {
+                                if state == ElementState::Pressed {
+                                    modifiers.insert(Modifier::Ctrl);
+                                } else if state == ElementState::Released {
+                                    modifiers.remove(&Modifier::Ctrl);
+                                }
+                            }
+                            _ => {}
                         }
                     }
                     Event::WindowEvent {

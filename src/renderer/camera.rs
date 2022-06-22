@@ -1,6 +1,6 @@
 use std::collections::HashSet;
-use std::fmt::{Display, Formatter, Write, write};
-use glam::{IVec2, Mat3, Mat4, Vec2, Vec3, Vec4};
+use std::fmt::{Display, Formatter};
+use glam::{Mat3, Mat4, Vec2, Vec3};
 
 pub trait Camera {}
 

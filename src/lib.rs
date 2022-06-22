@@ -1,4 +1,3 @@
-use std::future::Future;
 use serde::{Serialize, Deserialize};
 
 use wasm_bindgen::{prelude::*, JsCast};
@@ -74,14 +73,15 @@ async fn compute_example() {
     log::info!("ran compute");
 }
 
+#[allow(dead_code)]
 enum Examples {
     ZSlicer,
-    DVR,
+    Dvr,
 }
 
 #[wasm_bindgen(js_name = "runVolumeExample")]
 pub fn run_volume_example(data: &[u16], shape: &[u32]) {
-    wasm_bindgen_futures::spawn_local(volume_example(data.to_vec(), shape.to_vec(), Examples::DVR));
+    wasm_bindgen_futures::spawn_local(volume_example(data.to_vec(), shape.to_vec(), Examples::Dvr));
 }
 
 async fn make_z_slicer_example(data: Vec<u16>, shape: Vec<u32>, window: winit::window::Window, event_loop: winit::event_loop::EventLoop<()>) -> JsValue {
@@ -121,7 +121,7 @@ async fn volume_example(data: Vec<u16>, shape: Vec<u32>, example: Examples) {
         Examples::ZSlicer => {
             make_z_slicer_example(data, shape, window, event_loop).await
         }
-        Examples::DVR => {
+        Examples::Dvr => {
             make_dvr_example(data, shape, window, event_loop).await
         }
     };
