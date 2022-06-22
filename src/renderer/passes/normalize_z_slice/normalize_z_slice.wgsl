@@ -18,7 +18,7 @@ var<uniform> z_slice: Uniforms;
 @stage(compute)
 @workgroup_size(16, 16, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let window_size = textureDimensions(result);
+    let window_size = vec2<u32>(textureDimensions(resultImage));
     if window_size.x < global_id.x || window_size.y < global_id.y {
         return;
     }

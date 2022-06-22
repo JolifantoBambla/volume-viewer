@@ -8,6 +8,296 @@ pub mod volume;
 
 // todo: remove
 // this is just a small module where I test stuff
+pub mod dvr_playground {
+    use std::{borrow::Cow, sync::Arc};
+    use std::collections::HashSet;
+    use bytemuck;
+    use glam::Vec2;
+    use winit::{
+        event::{
+            self,
+            ElementState,
+            Event,
+            KeyboardInput,
+            MouseButton,
+            MouseScrollDelta,
+            VirtualKeyCode,
+            WindowEvent,
+        },
+        event_loop::EventLoop,
+        window::Window
+    };
+    use wgpu::util::DeviceExt;
+    use crate::renderer::camera::{CameraController, Modifier};
+    use crate::renderer::context::{GPUContext, ContextDescriptor};
+    use crate::renderer::pass::GPUPass;
+    use crate::renderer::passes::{dvr, present_to_screen};
+    use crate::renderer::{camera, resources};
+    use crate::renderer::volume::RawVolumeBlock;
+
+    pub struct DVR {
+        window: winit::window::Window,
+        ctx: Arc<GPUContext>,
+
+        dvr_pass: dvr::DVR,
+        present_to_screen: present_to_screen::PresentToScreen,
+
+        dvr_bind_group: wgpu::BindGroup,
+        present_to_screen_bind_group: wgpu::BindGroup,
+
+        dvr_result_extent: wgpu::Extent3d,
+
+        volume_scale: glam::Mat4,
+        uniform_buffer: wgpu::Buffer,
+        volume_max: f32,
+    }
+
+    impl DVR {
+        pub async fn new(window: Window, volume: RawVolumeBlock) -> Self {
+            let ctx = Arc::new(GPUContext::new(&ContextDescriptor::default(), Some(&window)).await);
+
+            let volume_texture = resources::Texture::from_raw_volume_block(&ctx.device, &ctx.queue, &volume);
+            let storage_texture = resources::Texture::create_storage_texture(&ctx.device, window.inner_size().width, window.inner_size().height);
+
+            let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                ..Default::default()
+            });
+
+            let volume_tansform = glam::Mat4::from_scale(volume.create_vec3()).inverse();
+            let uniforms = dvr::Uniforms {
+                world_to_object: volume_tansform.clone(),
+                ..Default::default()
+            };
+            let uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::bytes_of(&uniforms),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+            let z_slice_pass = dvr::DVR::new(&ctx);
+            let full_screen_pass = present_to_screen::PresentToScreen::new(&ctx);
+            let z_slice_bind_group = z_slice_pass.create_bind_group(
+                dvr::Resources {
+                    volume: &volume_texture.view,
+                    volume_sampler: &sampler,
+                    output: &storage_texture.view,
+                    uniforms: &uniform_buffer,
+                }
+            );
+            let full_screen_bind_group = full_screen_pass.create_bind_group(
+                present_to_screen::Resources {
+                    sampler: &sampler,
+                    source_texture: &storage_texture.view,
+                }
+            );
+
+            let dvr_result_extent = wgpu::Extent3d {
+                width: window.inner_size().width,
+                height: window.inner_size().height,
+                depth_or_array_layers: 1,
+            };
+
+            Self {
+                window,
+                ctx,
+                dvr_pass: z_slice_pass,
+                dvr_bind_group: z_slice_bind_group,
+                present_to_screen: full_screen_pass,
+                present_to_screen_bind_group: full_screen_bind_group,
+                dvr_result_extent,
+                volume_scale: volume_tansform,
+                uniform_buffer,
+                volume_max: volume.max as f32,
+            }
+        }
+
+        pub fn update(&self, view_matrix: &glam::Mat4) {
+            let resolution = Vec2::new(
+                self.window.inner_size().width as f32,
+                self.window.inner_size().height as f32,
+            );
+            let frame = resolution.x / resolution.y;
+            let (screen_min, screen_max) = if frame > 1.0 {
+                (
+                    Vec2::new(-frame, -1.0),
+                    Vec2::new(frame, 1.0)
+                )
+            } else {
+                (
+                    Vec2::new(-1.0, -1.0 / frame),
+                    Vec2::new(1.0, 1.0 / frame)
+                )
+            };
+
+            let screen_to_raster = glam::Mat4::from_scale(resolution.extend(1.0))
+                .mul_mat4(&glam::Mat4::from_scale(glam::Vec3::new(1.0 / (screen_max.x - screen_min.x), 1.0 / (screen_min.y - screen_max.y), 1.0)))
+                .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(-screen_min.x, -screen_max.y, 0.)));
+            let raster_to_screen = screen_to_raster.inverse();
+            let camera_to_screen = glam::Mat4::IDENTITY;
+            let raster_to_camera = camera_to_screen.inverse().mul_mat4(&raster_to_screen);
+
+            /*
+            log::info!("0,0: {}\n0,1: {}\n1.0: {}\n1,1: {}\n0.5,0.5: {},-0.5,-0.5: {}",
+                raster_to_camera.mul_vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0)).truncate().truncate(),
+                raster_to_camera.mul_vec4(glam::Vec4::new(0.0, resolution.y, 0.0, 1.0)).truncate().truncate(),
+                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x, 0.0, 0.0, 1.0)).truncate().truncate(),
+                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x, resolution.y, 0.0, 1.0)).truncate().truncate(),
+                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x / 2.0, resolution.y / 2.0, 0.0, 1.0)).truncate().truncate(),
+                raster_to_camera.mul_vec4(glam::Vec4::new(-resolution.x / 2.0, -resolution.y / 2.0, 0.0, 1.0)).truncate().truncate(),
+            );
+             */
+
+            //let raster_to_camera = view_matrix.inverse().mul_mat4(&raster_to_screen);
+            let uniforms = dvr::Uniforms {
+                world_to_object: self.volume_scale.clone(),
+                screen_to_camera: raster_to_camera,
+                camera_to_world: view_matrix.clone(),//.inverse(),
+                volume_max: self.volume_max,
+                ..Default::default()
+            };
+            self.ctx.queue.write_buffer(
+                &self.uniform_buffer,
+                0,
+                bytemuck::bytes_of(&uniforms),
+            );
+        }
+
+        pub fn render(&self, canvas_view: &wgpu::TextureView) {
+            let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            self.dvr_pass.encode(&mut encoder, &self.dvr_bind_group, &self.dvr_result_extent);
+            self.present_to_screen.encode(&mut encoder, &self.present_to_screen_bind_group, canvas_view);
+            self.ctx.queue.submit(Some(encoder.finish()));
+        }
+
+        pub fn run(dvr: Self, event_loop: EventLoop<()>) {
+            let mut left_mouse_pressed = false;
+            let mut modifiers: HashSet<Modifier> = HashSet::new();
+            let mut camera_controller = CameraController::default();
+            camera_controller.window_size = glam::Vec2::new(dvr.window.inner_size().width as f32, dvr.window.inner_size().height as f32);
+            camera_controller.update();
+
+            event_loop.run(move |event, _, control_flow| {
+                // force ownership by the closure
+                let _ = (&dvr.ctx.instance, &dvr.ctx.adapter);
+
+                *control_flow = winit::event_loop::ControlFlow::Poll;
+
+                match event {
+                    Event::RedrawEventsCleared => {
+                        dvr.window.request_redraw();
+                    }
+                    Event::WindowEvent {
+                        event: WindowEvent::MouseInput { state, button, .. },
+                        ..
+                    } => {
+                        if button == MouseButton::Left {
+                            if state == ElementState::Pressed {
+                                left_mouse_pressed = true;
+                            } else if state == ElementState::Released {
+                                left_mouse_pressed = false;
+                            }
+                        }
+                    }
+                    Event::WindowEvent {
+                        event: WindowEvent::KeyboardInput {
+                            input: KeyboardInput {
+                                virtual_keycode,
+                                state,
+                                ..
+                            },
+                            ..
+                        },
+                        ..
+                    } => {
+                        if let Some(virtual_keycode) = virtual_keycode {
+                            match virtual_keycode {
+                                VirtualKeyCode::LShift | VirtualKeyCode::RShift => {
+                                    if state == ElementState::Pressed {
+                                        modifiers.insert(Modifier::Shift);
+                                    } else if state == ElementState::Released {
+                                        modifiers.remove(&Modifier::Shift);
+                                    }
+                                }
+                                VirtualKeyCode::LAlt | VirtualKeyCode::RAlt => {
+                                    if state == ElementState::Pressed {
+                                        modifiers.insert(Modifier::Alt);
+                                    } else if state == ElementState::Released {
+                                        modifiers.remove(&Modifier::Alt);
+                                    }
+                                }
+                                VirtualKeyCode::LControl | VirtualKeyCode::RControl => {
+                                    if state == ElementState::Pressed {
+                                        modifiers.insert(Modifier::Ctrl);
+                                    } else if state == ElementState::Released {
+                                        modifiers.remove(&Modifier::Ctrl);
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    Event::WindowEvent {
+                        event: WindowEvent::CursorMoved {
+                            position,
+                            ..
+                        },
+                        ..
+                    } => {
+                        camera_controller.mouse_move(
+                            glam::Vec2::new(position.x as f32, position.y as f32),
+                            if left_mouse_pressed {
+                                camera::MouseButton::Left
+                            } else {
+                                camera::MouseButton::Right
+                            },
+                            &modifiers
+                        );
+                    }
+                    Event::WindowEvent {
+                        event: WindowEvent::MouseWheel {
+                            delta: MouseScrollDelta::LineDelta(x_delta, ..),
+                            ..
+                        },
+                        ..
+                    } => {
+                        // todo: wheel not recognized?
+                        log::info!("wheel {}", x_delta);
+                        camera_controller.wheel(x_delta);
+                    }
+                    Event::RedrawRequested(_) => {
+                        //log::info!("{:?}", camera_controller.matrix);
+                        dvr.update(&camera_controller.matrix);
+
+                        let frame = match dvr.ctx.surface.as_ref().unwrap().get_current_texture() {
+                            Ok(frame) => frame,
+                            Err(_) => {
+                                dvr.ctx.surface.as_ref().unwrap().configure(&dvr.ctx.device, dvr.ctx.surface_configuration.as_ref().unwrap());
+                                dvr.ctx.surface
+                                    .as_ref()
+                                    .unwrap()
+                                    .get_current_texture()
+                                    .expect("Failed to acquire next surface texture!")
+                            }
+                        };
+                        let view = frame
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+
+                        dvr.render(&view);
+
+                        frame.present();
+                    }
+                    _ => {}
+                }
+            });
+        }
+    }
+}
+
+// todo: remove
+// this is just a small module where I test stuff
 pub mod playground {
     use std::{borrow::Cow, sync::Arc};
     use bytemuck;

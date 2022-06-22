@@ -1,3 +1,4 @@
+use std::future::Future;
 use serde::{Serialize, Deserialize};
 
 use wasm_bindgen::{prelude::*, JsCast};
@@ -11,6 +12,7 @@ use util::init;
 use util::window;
 
 use crate::renderer::playground::{RawVolume, ZSlicer};
+use crate::renderer::volume::RawVolumeBlock;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -72,15 +74,17 @@ async fn compute_example() {
     log::info!("ran compute");
 }
 
+enum Examples {
+    ZSlicer,
+    DVR,
+}
 
 #[wasm_bindgen(js_name = "runVolumeExample")]
 pub fn run_volume_example(data: &[u16], shape: &[u32]) {
-    wasm_bindgen_futures::spawn_local(volume_example(data.to_vec(), shape.to_vec()));
+    wasm_bindgen_futures::spawn_local(volume_example(data.to_vec(), shape.to_vec(), Examples::DVR));
 }
 
-async fn volume_example(data: Vec<u16>, shape: Vec<u32>) {
-    let (window, event_loop) = window::create_window("compute example".to_string(), "existing-canvas".to_string());
-
+async fn make_z_slicer_example(data: Vec<u16>, shape: Vec<u32>, window: winit::window::Window, event_loop: winit::event_loop::EventLoop<()>) -> JsValue {
     let z_slicer = renderer::playground::ZSlicer::new(
         window,
         RawVolume{
@@ -89,7 +93,38 @@ async fn volume_example(data: Vec<u16>, shape: Vec<u32>) {
         },
         "z-slice".to_string(),
     ).await;
-    let start_closure = Closure::once_into_js(move || ZSlicer::run(z_slicer, event_loop));
+    Closure::once_into_js(move || ZSlicer::run(z_slicer, event_loop))
+}
+
+async fn make_dvr_example(data: Vec<u16>, shape: Vec<u32>, window: winit::window::Window, event_loop: winit::event_loop::EventLoop<()>) -> JsValue {
+    // preprocess volume
+    let volume_max = *data.iter().max().unwrap() as f32;
+    let volume = RawVolumeBlock::new(
+        data.iter().map(|x| ((*x as f32 / volume_max) * 255.) as u8).collect(),
+        volume_max as u32,
+        shape[2],
+        shape[1],
+        shape[0],
+    );
+
+    let dvr = renderer::dvr_playground::DVR::new(
+        window,
+        volume,
+    ).await;
+    Closure::once_into_js(move || renderer::dvr_playground::DVR::run(dvr, event_loop))
+}
+
+async fn volume_example(data: Vec<u16>, shape: Vec<u32>, example: Examples) {
+    let (window, event_loop) = window::create_window("compute example".to_string(), "existing-canvas".to_string());
+
+    let start_closure = match example {
+        Examples::ZSlicer => {
+            make_z_slicer_example(data, shape, window, event_loop).await
+        }
+        Examples::DVR => {
+            make_dvr_example(data, shape, window, event_loop).await
+        }
+    };
 
     // make sure to handle JS exceptions thrown inside start.
     // Otherwise wasm_bindgen_futures Queue would break and never handle any tasks again.
