@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use glam::{Mat3, Mat4, Vec2, Vec3};
-use crate::renderer::geometry::Bounds2D;
+use crate::renderer::geometry::{Bounds2D, Bounds3D};
 
-pub fn create_raster_to_screen_transform(raster_resolution: Vec2, screen_size: Option<Bounds2D>) -> Mat4 {
+pub fn compute_screen_to_raster(raster_resolution: Vec2, screen_size: Option<Bounds2D>) -> Mat4 {
     let screen = if let Some(screen_size) = screen_size {
         screen_size
     } else {
@@ -29,15 +29,82 @@ pub fn create_raster_to_screen_transform(raster_resolution: Vec2, screen_size: O
             )))
 }
 
-pub trait Camera {}
+pub fn compute_raster_to_screen(raster_resolution: Vec2, screen_size: Option<Bounds2D>) -> Mat4 {
+    compute_screen_to_raster(raster_resolution, screen_size).inverse()
+}
 
-pub struct OrthographicCamera {}
+pub trait Camera {
+    fn compute_raster_to_camera(&self, raster_resolution: Vec2) -> Mat4;
+    fn projection(&self) -> &Mat4;
+    fn screen_size(&self) -> Bounds2D;
+}
 
-impl Camera for OrthographicCamera {}
+pub struct OrthographicCamera {
+    projection: Mat4,
+    frustum: Bounds3D,
+}
 
-pub struct PerspectiveCamera {}
+impl OrthographicCamera {
+    pub fn new(frustum: Bounds3D) -> Self {
+        let projection = Mat4::orthographic_rh(
+            frustum.min.x, frustum.max.x,
+            frustum.min.y, frustum.max.y,
+            frustum.min.z, frustum.max.z
+        );
+        Self {
+            frustum,
+            projection,
+        }
+    }
+}
 
-impl Camera for PerspectiveCamera {}
+impl Camera for OrthographicCamera {
+    fn compute_raster_to_camera(&self, raster_resolution: Vec2) -> Mat4 {
+        compute_raster_to_screen(raster_resolution, Some(self.screen_size()))
+    }
+
+    fn projection(&self) -> &Mat4 {
+        &self.projection
+    }
+
+    fn screen_size(&self) -> Bounds2D {
+        Bounds2D::new(
+            self.frustum.min.truncate(),
+            self.frustum.max.truncate(),
+        )
+    }
+}
+
+pub struct PerspectiveCamera {
+    screen_size: Bounds2D,
+    projection: Mat4,
+}
+
+impl PerspectiveCamera {
+    pub fn new(screen_size: Bounds2D, fov_y_radians: f32, aspect_ratio: f32, z_near: f32, z_far: f32) -> Self {
+        Self {
+            screen_size,
+            projection: Mat4::perspective_rh(fov_y_radians, aspect_ratio, z_far, z_far)
+        }
+    }
+}
+
+impl Camera for PerspectiveCamera {
+    fn compute_raster_to_camera(&self, raster_resolution: Vec2) -> Mat4 {
+        self.projection.inverse().mul_mat4(&compute_raster_to_screen(raster_resolution, Some(self.screen_size())))
+    }
+
+    fn projection(&self) -> &Mat4 {
+        &self.projection
+    }
+
+    fn screen_size(&self) -> Bounds2D {
+        self.screen_size.clone()
+    }
+}
+
+
+
 
 pub trait Motion {
 }

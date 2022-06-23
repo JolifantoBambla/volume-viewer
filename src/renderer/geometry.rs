@@ -4,6 +4,7 @@ use glam::{Vec2, Vec3A};
 pub trait Bounds {}
 
 #[readonly::make]
+#[derive(Clone)]
 pub struct Bounds2D {
     pub min: Vec2,
     pub max: Vec2,
@@ -18,6 +19,7 @@ impl Bounds2D {
 impl Bounds for Bounds2D {}
 
 #[readonly::make]
+#[derive(Clone)]
 pub struct Bounds3D {
     pub min: Vec3A,
     pub max: Vec3A,

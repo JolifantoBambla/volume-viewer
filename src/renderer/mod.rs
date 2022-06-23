@@ -123,7 +123,7 @@ pub mod dvr_playground {
                 self.window.inner_size().height as f32,
             );
 
-            let screen_to_raster = crate::renderer::camera::create_raster_to_screen_transform(
+            let screen_to_raster = crate::renderer::camera::compute_screen_to_raster(
                 resolution,
                 //None
                 Some(crate::renderer::geometry::Bounds2D::new(resolution * -0.5, resolution * 0.5))
