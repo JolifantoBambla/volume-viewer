@@ -123,7 +123,7 @@ fn transform_ray(ray: Ray, transform: float4x4) -> Ray {
 // todo: add camera models
 /// Generates a ray in the volume's space (i.e. where it is a unit cube = [0,1]^3)
 fn generate_ray(pixel_position: float2, screen_resolution: float2, to_camera: float4x4, to_world: float4x4, to_object: float4x4) -> Ray {
-    let camera_point = (float4(pixel_position + 0.5, 0., 1.) * to_camera).xyz;
+    let camera_point = (to_camera * float4(pixel_position + 0.5, 0., 1.)).xyz;
 
     // persp
     //let origin = float3(0.);

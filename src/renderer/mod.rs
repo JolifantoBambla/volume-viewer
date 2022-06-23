@@ -123,11 +123,12 @@ pub mod dvr_playground {
                 self.window.inner_size().height as f32,
             );
 
-            let raster_to_screen = crate::renderer::camera::create_raster_to_screen_transform(
+            let screen_to_raster = crate::renderer::camera::create_raster_to_screen_transform(
                 resolution,
                 //None
                 Some(crate::renderer::geometry::Bounds2D::new(resolution * -0.5, resolution * 0.5))
-            ).inverse();
+            );
+            let raster_to_screen = screen_to_raster.inverse();
 
             let camera_to_screen = glam::Mat4::IDENTITY;
             let raster_to_camera2 = camera_to_screen.inverse().mul_mat4(&raster_to_screen);
@@ -141,8 +142,7 @@ pub mod dvr_playground {
             let uniforms = dvr::Uniforms::new(
                 self.volume_transform,
                 *view_matrix,
-                // am I stupid? why do i have to transpose this?
-                raster_to_screen.transpose(),
+                raster_to_screen,
                 glam::Mat4::orthographic_rh(
                     -resolution.x / 2., resolution.x / 2.,
                     -resolution.y / 2., resolution.y / 2.,
