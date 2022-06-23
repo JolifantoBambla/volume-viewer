@@ -63,6 +63,11 @@ struct AABB {
     @size(16) max: float3,
 }
 
+struct Sphere {
+    center: float3,
+    radius: f32,
+}
+
 struct Volume {
     bounds: AABB,
     max_value: f32,
@@ -76,15 +81,15 @@ struct Ray {
 
 fn transform_ray(ray: Ray, transform: float4x4) -> Ray {
     return Ray(
-        (float4(ray.origin, 1.) * transform).xyz,
-        (float4(ray.direction, 0.) * transform).xyz,
+        (transform * float4(ray.origin, 1.)).xyz,
+        (transform * float4(ray.direction, 0.)).xyz,
         ray.tmax
     );
 }
 
 // todo: add camera models
 fn generate_ray(pixel_position: float2, screen_resolution: float2, to_camera: float4x4, to_world: float4x4, to_object: float4x4) -> Ray {
-    let camera_point = (float4(pixel_position + 0.5, -10000., 1.) * to_camera).xyz;
+    let camera_point = (float4(pixel_position + 0.5, 0., 1.) * to_camera).xyz;
 
     // persp
     //let origin = float3(0.);
@@ -95,69 +100,16 @@ fn generate_ray(pixel_position: float2, screen_resolution: float2, to_camera: fl
     let direction = float3(0., 0., 1.);
 
     return transform_ray(
-        //transform_ray(
+        transform_ray(
             Ray(
                 origin,
                 direction,
                 positive_infinity()
             ),
-        //    to_world
-        //),
+            to_world
+        ),
         to_object
     );
-}
-
-struct Intersection {
-    hit: bool,
-    t_min: f32,
-    t_max: f32,
-}
-
-// x: true/false, y: t_min, z: t_max
-fn intersect_box(ray: Ray, bounds: AABB) -> float3 {
-    let inv_ray_dir = 1. / ray.direction;
-    let t_near = (bounds.min - ray.origin) * inv_ray_dir;
-    let t_far = (bounds.max - ray.origin) * inv_ray_dir;
-    let t0 = max(float3(0.), min(t_near, t_far));
-    let t1 = min(float3(ray.tmax), max(t_near, t_far));
-    if any(t0 > t1) {
-        return float3(-1.);
-    }
-    return float3(
-        1.,
-        max(t0.x, max(t0.y, t0.z)),
-        min(t1.x, max(t1.y, t1.z))
-    );
-}
-
-// x: true/false, y: t_min, z: t_max
-fn intersect(ray: Ray, bounds: AABB) -> Intersection {
-    var t0 = 0.;
-    var t1 = ray.tmax;
-    for (var i: i32 = 0; i < 3; i += 1) {
-        let inv_ray_dir = 1. / ray.direction[i];
-        var t_near = (bounds.min[i] - ray.origin[i]) * inv_ray_dir;
-        var t_far = (bounds.max[i] - ray.origin[i]) * inv_ray_dir;
-        if t_near > t_far {
-            let helper = t_near;
-            t_near = t_far;
-            t_far = helper;
-        }
-        t0 = max(t_near, t0);
-        t1 = min(t_far, t1);
-        if t0 > t1 {
-            return Intersection();
-        }
-    }
-    return Intersection(true, t0, t1);
-}
-
-fn ray_at(ray: Ray, t: f32) -> vec3<f32> {
-    return ray.origin + ray.direction * t;
-}
-
-fn max_steps_for_size(size: vec3<f32>) -> i32 {
-    return i32(ceil((size.x * size.y * size.z) * sqrt(3.)));
 }
 
 // todo: const (not supported yet)
@@ -166,52 +118,6 @@ let relative_step_size: f32 = 1.;
 // todo: customizable background
 let background_color = float3(0.2);
 
-
-fn hit_sphere_at_origin(ray: Ray, radius: f32) -> f32 {
-    return hit_sphere(ray, float3(0.), radius);
-}
-
-fn add_sphere(ray: Ray, pixel: int2, center: float3, radius: f32, color: float3) {
-    let hit = hit_sphere(ray, center, 0.5);
-    if hit > 0. {
-        let normal = normalize(ray_at(ray, hit) - center);
-        let light_dir = normalize(float3(1.));
-        let lighting = dot(normal, light_dir) * color;
-        textureStore(result, pixel, float4(lighting, 1.));
-    }
-}
-
-fn hit_sphere(ray: Ray, center: float3, radius: f32) -> f32 {
-    let origin = ray.origin - center;
-    let a = dot(ray.direction, ray.direction);
-    let b = 2. * dot(ray.direction, origin);
-    let c = dot(origin, origin) - (radius * radius);
-    let discriminant = b * b - 4. * a * c;
-    if discriminant < 0. { return 0.; }
-    var root_discriminant = sqrt(discriminant);
-    if b < 0. {
-        root_discriminant *= -1.;
-    }
-    let q = -0.5 * (b + root_discriminant);
-    var t0 = q / a;
-    var t1 = c / q;
-    if t0 > t1 {
-        let helper = t0;
-        t0 = t1;
-        t1 = helper;
-    }
-    if t0 > ray.tmax || t1 <= 0. { return 0.; }
-    if t0 < 0. && t1 > ray.tmax { return 0.; }
-    if t0 < 0. { return t1; } else { return t0; }
-}
-
-fn add_camera_debug_spheres(ray: Ray, pixel: int2) {
-    add_sphere(ray, pixel, float3(0.), 0.5, float3(1.));
-    add_sphere(ray, pixel, float3(-1., -1., 0.), 0.5, float3(1., 0., 0.));
-    add_sphere(ray, pixel, float3(1., 1., 0.), 0.5, float3(0., 1., 0.));
-    add_sphere(ray, pixel, float3(-1., 1., 0.), 0.5, float3(0., 0., 1.));
-    add_sphere(ray, pixel, float3(1., -1., 0.), 0.5, float3(0.5, 0.5, 0.));
-}
 
 // supported builtins:
 // - local_invocation_id    : vec3<u32>
@@ -261,7 +167,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             float3(1., 1. / frame, 0.)
         );
     }
-    let raster_to_screen = float4x4(
+    let raster_to_screen = tanspose(float4x4(
         1., 0., 0., screen.max.x,
         0., 1., 0., screen.max.y,
         0., 0., 1., 0.,
@@ -276,26 +182,29 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         0., 1. / resolution.y, 0., 0.,
         0., 0., 1., 0.,
         0., 0., 0., 1.
-    );
+    ));
 
-    let world_to_object = float4x4(
-        1. / volume_scale.x, 0., 0., 0.,
+    let world_to_object = transpose(float4x4(
+    /*
+      1. / volume_scale.x, 0., 0., 0.,
       0., 1. / volume_scale.y, 0., 0.,
       0., 0., 1. / volume_scale.z, 0.,
       0., 0., 0., 1.
     ) * float4x4(
+    */
       1., 0., 0., 0.5,
       0., 1., 0., 0.5,
       0., 0., 1., 0.5,
       0., 0., 0., 1.
-    );
+    ));
 
     // todo: clean up ray generation and transform to volume's space s.t. volume shape is preserved and sampling still works
     var ray = generate_ray(
-        float2(pixel) - float2(window_size) / 2.,
+        // todo: figure out why I have to translate the pixel position
+        float2(pixel),// - float2(window_size) / 2.,
         float2(window_size),
-        raster_to_screen, // uniforms.screen_to_camera
-        uniforms.camera_to_world,
+        uniforms.screen_to_camera,
+        uniforms.world_to_camera, //uniforms.camera_to_world,
         uniforms.world_to_object
     );
 
@@ -306,13 +215,18 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let intersection_record = intersect(ray, volume.bounds);
 
+    add_camera_debug_spheres(ray, pixel);
+
     // early out if we missed the volume
     if !intersection_record.hit {
         return;
-    } else {
+    }
+    /*
+    else {
         textureStore(result, pixel, float4(1.));
         return;
     }
+    */
 
     let start = ray_at(ray, intersection_record.t_min);
     let end = ray_at(ray, intersection_record.t_max);
@@ -335,7 +249,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         textureStore(result, pixel, color);
     }
 
-    //add_camera_debug_spheres(ray, pixel);
+
+}
+
+fn max_steps_for_size(size: vec3<f32>) -> i32 {
+    return i32(ceil((size.x * size.y * size.z) * sqrt(3.)));
 }
 
 fn dvr(start: float3, step: float3, num_steps: i32, ray: Ray) -> float4 {
@@ -424,4 +342,84 @@ fn compute_lighting(value: f32, x: float3, step: float3, view_direction: float3)
 fn apply_colormap(value: f32) -> float3{
     let u_clim = float2(0., 0.5);
     return uniforms.volume_color.rgb * (value - u_clim[0]) / (u_clim[1] - u_clim[0]);
+}
+
+// Ray methods
+
+fn ray_at(ray: Ray, t: f32) -> vec3<f32> {
+    return ray.origin + ray.direction * t;
+}
+
+// ray-box intersection
+
+struct Intersection {
+    hit: bool,
+    t_min: f32,
+    t_max: f32,
+}
+
+fn intersect_aabb(ray: Ray, bounds: AABB) -> Intersection {
+    var t0 = 0.;
+    var t1 = ray.tmax;
+    for (var i: i32 = 0; i < 3; i += 1) {
+        let inv_ray_dir = 1. / ray.direction[i];
+        var t_near = (bounds.min[i] - ray.origin[i]) * inv_ray_dir;
+        var t_far = (bounds.max[i] - ray.origin[i]) * inv_ray_dir;
+        if t_near > t_far {
+            let helper = t_near;
+            t_near = t_far;
+            t_far = helper;
+        }
+        t0 = max(t_near, t0);
+        t1 = min(t_far, t1);
+        if t0 > t1 {
+            return Intersection();
+        }
+    }
+    return Intersection(true, t0, t1);
+}
+
+fn intersect_sphere(ray: Ray, sphere: Sphere) -> Intersection {
+    let origin = ray.origin - sphere.center;
+    let a = dot(ray.direction, ray.direction);
+    let b = 2. * dot(ray.direction, origin);
+    let c = dot(origin, origin) - (radius * radius);
+    let discriminant = b * b - 4. * a * c;
+    if discriminant < 0. { return Intersection(); }
+    var root_discriminant = sqrt(discriminant);
+    if b < 0. {
+        root_discriminant *= -1.;
+    }
+    let q = -0.5 * (b + root_discriminant);
+    var t0 = q / a;
+    var t1 = c / q;
+    if t0 > t1 {
+        let helper = t0;
+        t0 = t1;
+        t1 = helper;
+    }
+    if t0 > ray.tmax || t1 <= 0. { return Intersection(); }
+    if t0 < 0. && t1 > ray.tmax { return Intersection(); }
+    return Intersection(true, t0, t1);
+}
+
+// camera debugging
+
+fn add_sphere(ray: Ray, pixel: int2, center: float3, radius: f32, color: float3) {
+    let hit = intersect_sphere(ray, center, 0.5);
+    if hit.hit {
+        let normal = normalize(ray_at(ray, hit.t_min) - center);
+        let light_dir = normalize(float3(1.));
+        let lighting = dot(normal, light_dir) * color;
+        textureStore(result, pixel, float4(lighting, 1.));
+    }
+}
+
+fn add_camera_debug_spheres(ray: Ray, pixel: int2) {
+    let radius = 0.1;
+    add_sphere(ray, pixel, Sphere(float3(), radius), float3(1.));
+    add_sphere(ray, pixel, Sphere(float3(-1., -1., 0.), radius), float3(1., 0., 0.));
+    add_sphere(ray, pixel, Sphere(float3(1., 1., 0.), radius), float3(0., 1., 0.));
+    add_sphere(ray, pixel, Sphere(float3(-1., 1., 0.), radius), float3(0., 0., 1.));
+    add_sphere(ray, pixel, Sphere(float3(1., -1., 0.), radius), float3(0.5, 0.5, 0.));
 }

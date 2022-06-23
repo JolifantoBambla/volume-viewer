@@ -144,6 +144,7 @@ pub mod dvr_playground {
                 0., 1000000.,
             );
 
+
             log::info!("ortho:\n0,0: {}\n0,1: {}\n1.0: {}\n1,1: {}\n0.5,0.5: {},\n-0.5,-0.5: {}\n\nraster to camera:\n0,0: {}\n0,1: {}\n1.0: {}\n1,1: {}\n0.5,0.5: {},\n-0.5,-0.5: {}\n\nvolume transform:\n0,0,0: {}\n0,0,1: {}\n0,1.0: {}\n1,0,0: {}\n1,1,1: {},\n0.5,0.5,0.5: {}\n\n",
                 raster_to_camera.mul_vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0)).truncate(),
                 raster_to_camera.mul_vec4(glam::Vec4::new(0.0, resolution.y, 0.0, 1.0)).truncate(),
@@ -151,12 +152,12 @@ pub mod dvr_playground {
                 raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x, resolution.y, 0.0, 1.0)).truncate(),
                 raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x / 2.0, resolution.y / 2.0, 0.0, 1.0)).truncate(),
                 raster_to_camera.mul_vec4(glam::Vec4::new(-resolution.x / 2.0, -resolution.y / 2.0, 0.0, 1.0)).truncate(),
-                raster_to_camera2.mul_vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0)).truncate(),
-                raster_to_camera2.mul_vec4(glam::Vec4::new(0.0, resolution.y, 0.0, 1.0)).truncate(),
-                raster_to_camera2.mul_vec4(glam::Vec4::new(resolution.x, 0.0, 0.0, 1.0)).truncate(),
-                raster_to_camera2.mul_vec4(glam::Vec4::new(resolution.x, resolution.y, 0.0, 1.0)).truncate(),
-                raster_to_camera2.mul_vec4(glam::Vec4::new(resolution.x / 2.0, resolution.y / 2.0, 0.0, 1.0)).truncate(),
-                raster_to_camera2.mul_vec4(glam::Vec4::new(-resolution.x / 2.0, -resolution.y / 2.0, 0.0, 1.0)).truncate(),
+                raster_to_screen.mul_vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0)).truncate(),
+                raster_to_screen.mul_vec4(glam::Vec4::new(0.0, resolution.y, 0.0, 1.0)).truncate(),
+                raster_to_screen.mul_vec4(glam::Vec4::new(resolution.x, 0.0, 0.0, 1.0)).truncate(),
+                raster_to_screen.mul_vec4(glam::Vec4::new(resolution.x, resolution.y, 0.0, 1.0)).truncate(),
+                raster_to_screen.mul_vec4(glam::Vec4::new(resolution.x / 2.0, resolution.y / 2.0, 0.0, 1.0)).truncate(),
+                raster_to_screen.mul_vec4(glam::Vec4::new(-resolution.x / 2.0, -resolution.y / 2.0, 0.0, 1.0)).truncate(),
                 self.volume_transform.mul_vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0)).truncate(),
                 self.volume_transform.mul_vec4(glam::Vec4::new(0.0, 0.0, 1.0, 1.0)).truncate(),
                 self.volume_transform.mul_vec4(glam::Vec4::new(0.0, 1.0, 0.0, 1.0)).truncate(),
@@ -166,16 +167,17 @@ pub mod dvr_playground {
             );
 
 
+
             //let raster_to_camera = view_matrix.inverse().mul_mat4(&raster_to_screen);
             let uniforms = dvr::Uniforms::new(
-                self.volume_transform,
-                *view_matrix,//.inverse(),
-                raster_to_camera,
+                self.volume_transform.transpose(),
+                view_matrix.transpose(),//.inverse(),
+                raster_to_screen.transpose(),
                 glam::Mat4::orthographic_rh(
                     -resolution.x / 2., resolution.x / 2.,
                     -resolution.y / 2., resolution.y / 2.,
                     0., 1000000.,
-                )
+                ).transpose()
             );
             self.ctx.queue.write_buffer(
                 &self.uniform_buffer,
@@ -199,6 +201,9 @@ pub mod dvr_playground {
                 ..Default::default()
             };
             camera_controller.update();
+
+            let mut translation = glam::Vec3::new(0., 0., 0.);
+            const TRANSLATION_SPEED: f32 = 0.1;
 
             event_loop.run(move |event, _, control_flow| {
                 // force ownership by the closure
@@ -233,6 +238,7 @@ pub mod dvr_playground {
                         },
                         ..
                     } => {
+                        log::info!("{:?}", virtual_keycode);
                         match virtual_keycode {
                             VirtualKeyCode::LShift | VirtualKeyCode::RShift => {
                                 if state == ElementState::Pressed {
@@ -253,6 +259,36 @@ pub mod dvr_playground {
                                     modifiers.insert(Modifier::Ctrl);
                                 } else if state == ElementState::Released {
                                     modifiers.remove(&Modifier::Ctrl);
+                                }
+                            }
+                            VirtualKeyCode::A | VirtualKeyCode::Left => {
+                                if state == ElementState::Pressed {
+                                    translation.x -= TRANSLATION_SPEED;
+                                }
+                            }
+                            VirtualKeyCode::D | VirtualKeyCode::Right => {
+                                if state == ElementState::Pressed {
+                                    translation.x += TRANSLATION_SPEED;
+                                }
+                            }
+                            VirtualKeyCode::W => {
+                                if state == ElementState::Pressed {
+                                    translation.y += TRANSLATION_SPEED;
+                                }
+                            }
+                            VirtualKeyCode::S => {
+                                if state == ElementState::Pressed {
+                                    translation.y -= TRANSLATION_SPEED;
+                                }
+                            }
+                            VirtualKeyCode::Up => {
+                                if state == ElementState::Pressed {
+                                    translation.z += TRANSLATION_SPEED;
+                                }
+                            }
+                            VirtualKeyCode::Down => {
+                                if state == ElementState::Pressed {
+                                    translation.z -= TRANSLATION_SPEED;
                                 }
                             }
                             _ => {}
@@ -288,7 +324,10 @@ pub mod dvr_playground {
                     }
                     Event::RedrawRequested(_) => {
                         //log::info!("{:?}", camera_controller.matrix);
-                        dvr.update(&camera_controller.matrix);
+
+                        log::info!("{}", translation);
+                        dvr.update(&glam::Mat4::from_translation(translation));
+                        //dvr.update(&camera_controller.matrix);
 
                         let frame = match dvr.ctx.surface.as_ref().unwrap().get_current_texture() {
                             Ok(frame) => frame,
