@@ -25,6 +25,32 @@ let relative_step_size: f32 = 1.;
 // todo: should be a uniform
 let background_color = float3(0.2);
 
+// Colors for debugging
+let RED = float4(1., 0., 0., 1.);
+let GREEN = float4(1., 0., 0., 1.);
+let BLUE = float4(1., 0., 0., 1.);
+let WHITE = float4(1.);
+let BLACK = float4(0., 0., 0., 1.);
+
+fn debug(pixel: int2, color: float4) {
+    textureStore(result, pixel, color);
+}
+fn red(pixel: int2) {
+    textureStore(result, pixel, RED);
+}
+fn green(pixel: int2) {
+    textureStore(result, pixel, GREEN);
+}
+fn blue(pixel: int2) {
+    textureStore(result, pixel, BLUE);
+}
+fn white(pixel: int2) {
+    textureStore(result, pixel, WHITE);
+}
+fn black(pixel: int2) {
+    textureStore(result, pixel, BLACK);
+}
+
 // todo: come up with a better name...
 // todo: clean up those uniforms - find out what i really need and throw away the rest
 struct Uniforms {
@@ -91,6 +117,8 @@ fn transform_ray(ray: Ray, transform: float4x4) -> Ray {
         ray.tmax
     );
 }
+
+// todo: move this to a separate file that is included via a custom include mechanism
 
 // todo: add camera models
 /// Generates a ray in the volume's space (i.e. where it is a unit cube = [0,1]^3)
@@ -166,6 +194,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if !intersection_record.hit {
         return;
     }
+    /*
+    else {
+        add_camera_debug_spheres(ray, pixel, 5.);
+        textureStore(result, pixel, RED);
+        return;
+    }
+    */
 
     let start = ray_at(ray, intersection_record.t_min);
     let end   = ray_at(ray, intersection_record.t_max);
@@ -175,7 +210,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     // early out if there is not a single sample within the volume
     if num_steps < 1 {
-        textureStore(result, pixel, float4(1., 0., 0., 1.0));
         return;
     }
 
@@ -184,6 +218,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let color = dvr(start, step, num_steps, ray);
     if color.a > 0.1 {
         textureStore(result, pixel, color);
+    } else {
+        red(pixel);
     }
 }
 
@@ -335,11 +371,11 @@ fn add_sphere(ray: Ray, pixel: int2, sphere: Sphere, color: float3) {
     }
 }
 
-fn add_camera_debug_spheres(ray: Ray, pixel: int2) {
-    let radius = 0.1;
+fn add_camera_debug_spheres(ray: Ray, pixel: int2, radius: f32) {
+    let distance = radius * 4.;
     add_sphere(ray, pixel, Sphere(float3(), radius), float3(1.));
-    add_sphere(ray, pixel, Sphere(float3(-1., -1., 0.), radius), float3(1., 0., 0.));
-    add_sphere(ray, pixel, Sphere(float3(1., 1., 0.), radius), float3(0., 1., 0.));
-    add_sphere(ray, pixel, Sphere(float3(-1., 1., 0.), radius), float3(0., 0., 1.));
-    add_sphere(ray, pixel, Sphere(float3(1., -1., 0.), radius), float3(0.5, 0.5, 0.));
+    add_sphere(ray, pixel, Sphere(float3(-1., -1., 0.) * distance, radius), float3(1., 0., 0.));
+    add_sphere(ray, pixel, Sphere(float3(1., 1., 0.) * distance, radius), float3(0., 1., 0.));
+    add_sphere(ray, pixel, Sphere(float3(-1., 1., 0.) * distance, radius), float3(0., 0., 1.));
+    add_sphere(ray, pixel, Sphere(float3(1., -1., 0.) * distance, radius), float3(0.5, 0.5, 0.));
 }

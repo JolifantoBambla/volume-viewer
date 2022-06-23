@@ -1,6 +1,33 @@
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use glam::{Mat3, Mat4, Vec2, Vec3};
+use crate::renderer::geometry::Bounds2D;
+
+pub fn create_raster_to_screen_transform(raster_resolution: Vec2, screen_size: Option<Bounds2D>) -> Mat4 {
+    let screen = if let Some(screen_size) = screen_size {
+        screen_size
+    } else {
+        let aspect_ratio = raster_resolution.x / raster_resolution.y;
+        if aspect_ratio > 1. {
+            Bounds2D::new(Vec2::new(-aspect_ratio, -1.0),Vec2::new(aspect_ratio, 1.0))
+        } else {
+            Bounds2D::new(Vec2::new(-1.0, -1.0 / aspect_ratio), Vec2::new(1.0, 1.0 / aspect_ratio))
+        }
+    };
+    glam::Mat4::from_scale(raster_resolution.extend(1.0))
+        .mul_mat4(&glam::Mat4::from_scale(
+            glam::Vec3::new(
+                1.0 / (screen.max.x - screen.min.x),
+                1.0 / (screen.min.y - screen.max.y),
+                1.0
+            )))
+        .mul_mat4(&glam::Mat4::from_translation(
+            glam::Vec3::new(
+                -screen.min.x,
+                -screen.max.y,
+                0.
+            )))
+}
 
 pub trait Camera {}
 

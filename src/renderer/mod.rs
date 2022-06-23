@@ -1,6 +1,7 @@
 pub mod camera;
 pub mod context;
 pub mod full_screen_pass;
+pub mod geometry;
 pub mod pass;
 pub mod passes;
 pub mod resources;
@@ -32,6 +33,7 @@ pub mod dvr_playground {
     use crate::renderer::pass::GPUPass;
     use crate::renderer::passes::{dvr, present_to_screen};
     use crate::renderer::{camera, resources};
+    use crate::renderer::geometry::Bounds2D;
     use crate::renderer::volume::RawVolumeBlock;
 
     pub struct DVR {
@@ -65,9 +67,8 @@ pub mod dvr_playground {
 
             // the volume is a unit cube ([0,1]^3)
             // we translate it s.t. its center is the origin and scale it to its original dimensions
-            let volume_transform = glam::Mat4::from_scale(
-                glam::Vec3::new(1.,1.,1.))
-                //volume.create_vec3())
+            // todo: scale should come from volume meta data (-> todo: add meta data to volume)
+            let volume_transform = glam::Mat4::from_scale(volume.create_vec3())
                 .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(-0.5, -0.5, -0.5)));
 
             let uniforms = dvr::Uniforms {
@@ -121,17 +122,13 @@ pub mod dvr_playground {
                 self.window.inner_size().width as f32,
                 self.window.inner_size().height as f32,
             );
-            let frame = resolution.x / resolution.y;
-            let (screen_min, screen_max) = if frame > 1.0 {
-                (Vec2::new(-frame, -1.0), Vec2::new(frame, 1.0))
-            } else {
-                (Vec2::new(-1.0, -1.0 / frame), Vec2::new(1.0, 1.0 / frame))
-            };
 
-            let screen_to_raster = glam::Mat4::from_scale(resolution.extend(1.0))
-                .mul_mat4(&glam::Mat4::from_scale(glam::Vec3::new(1.0 / (screen_max.x - screen_min.x), 1.0 / (screen_min.y - screen_max.y), 1.0)))
-                .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(-screen_min.x, -screen_max.y, 0.)));
-            let raster_to_screen = screen_to_raster.inverse();
+            let raster_to_screen = crate::renderer::camera::create_raster_to_screen_transform(
+                resolution,
+                //None
+                Some(crate::renderer::geometry::Bounds2D::new(resolution * -0.5, resolution * 0.5))
+            ).inverse();
+
             let camera_to_screen = glam::Mat4::IDENTITY;
             let raster_to_camera2 = camera_to_screen.inverse().mul_mat4(&raster_to_screen);
             let raster_to_camera = glam::Mat4::orthographic_rh(
@@ -211,7 +208,7 @@ pub mod dvr_playground {
                         },
                         ..
                     } => {
-                        log::info!("{:?}", virtual_keycode);
+                        //log::info!("{:?}", virtual_keycode);
                         match virtual_keycode {
                             VirtualKeyCode::LShift | VirtualKeyCode::RShift => {
                                 if state == ElementState::Pressed {
@@ -234,34 +231,34 @@ pub mod dvr_playground {
                                     modifiers.remove(&Modifier::Ctrl);
                                 }
                             }
-                            VirtualKeyCode::A | VirtualKeyCode::Left => {
+                            VirtualKeyCode::D | VirtualKeyCode::Right => {
                                 if state == ElementState::Pressed {
                                     translation.x -= TRANSLATION_SPEED;
                                 }
                             }
-                            VirtualKeyCode::D | VirtualKeyCode::Right => {
+                            VirtualKeyCode::A | VirtualKeyCode::Left => {
                                 if state == ElementState::Pressed {
                                     translation.x += TRANSLATION_SPEED;
                                 }
                             }
                             VirtualKeyCode::W => {
                                 if state == ElementState::Pressed {
-                                    translation.y += TRANSLATION_SPEED;
+                                    translation.y -= TRANSLATION_SPEED;
                                 }
                             }
                             VirtualKeyCode::S => {
                                 if state == ElementState::Pressed {
-                                    translation.y -= TRANSLATION_SPEED;
+                                    translation.y += TRANSLATION_SPEED;
                                 }
                             }
                             VirtualKeyCode::Up => {
                                 if state == ElementState::Pressed {
-                                    translation.z += TRANSLATION_SPEED;
+                                    translation.z -= TRANSLATION_SPEED;
                                 }
                             }
                             VirtualKeyCode::Down => {
                                 if state == ElementState::Pressed {
-                                    translation.z -= TRANSLATION_SPEED;
+                                    translation.z += TRANSLATION_SPEED;
                                 }
                             }
                             _ => {}
@@ -303,8 +300,8 @@ pub mod dvr_playground {
                             glam::Mat4::from_translation(translation),
                             glam::Mat4::from_translation(translation).inverse(),
                         );
-                        dvr.update(&glam::Mat4::from_translation(translation));
-                        //dvr.update(&camera_controller.matrix.inverse());
+                        //dvr.update(&glam::Mat4::from_translation(translation));
+                        dvr.update(&camera_controller.matrix.inverse());
 
                         let frame = match dvr.ctx.surface.as_ref().unwrap().get_current_texture() {
                             Ok(frame) => frame,
