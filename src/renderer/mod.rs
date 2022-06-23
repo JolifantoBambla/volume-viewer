@@ -6,7 +6,7 @@ pub mod passes;
 pub mod resources;
 pub mod volume;
 
-// todo: remove
+// todo: refactor this into a proper module
 // this is just a small module where I test stuff
 pub mod dvr_playground {
     use std::{sync::Arc};
@@ -65,7 +65,9 @@ pub mod dvr_playground {
 
             // the volume is a unit cube ([0,1]^3)
             // we translate it s.t. its center is the origin and scale it to its original dimensions
-            let volume_transform = glam::Mat4::from_scale(volume.create_vec3())
+            let volume_transform = glam::Mat4::from_scale(
+                glam::Vec3::new(1.,1.,1.))
+                //volume.create_vec3())
                 .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(-0.5, -0.5, -0.5)));
 
             let uniforms = dvr::Uniforms {
@@ -121,15 +123,9 @@ pub mod dvr_playground {
             );
             let frame = resolution.x / resolution.y;
             let (screen_min, screen_max) = if frame > 1.0 {
-                (
-                    Vec2::new(-frame, -1.0),
-                    Vec2::new(frame, 1.0)
-                )
+                (Vec2::new(-frame, -1.0), Vec2::new(frame, 1.0))
             } else {
-                (
-                    Vec2::new(-1.0, -1.0 / frame),
-                    Vec2::new(1.0, 1.0 / frame)
-                )
+                (Vec2::new(-1.0, -1.0 / frame), Vec2::new(1.0, 1.0 / frame))
             };
 
             let screen_to_raster = glam::Mat4::from_scale(resolution.extend(1.0))
@@ -144,34 +140,11 @@ pub mod dvr_playground {
                 0., 1000000.,
             );
 
-
-            log::info!("ortho:\n0,0: {}\n0,1: {}\n1.0: {}\n1,1: {}\n0.5,0.5: {},\n-0.5,-0.5: {}\n\nraster to camera:\n0,0: {}\n0,1: {}\n1.0: {}\n1,1: {}\n0.5,0.5: {},\n-0.5,-0.5: {}\n\nvolume transform:\n0,0,0: {}\n0,0,1: {}\n0,1.0: {}\n1,0,0: {}\n1,1,1: {},\n0.5,0.5,0.5: {}\n\n",
-                raster_to_camera.mul_vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0)).truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(0.0, resolution.y, 0.0, 1.0)).truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x, 0.0, 0.0, 1.0)).truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x, resolution.y, 0.0, 1.0)).truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x / 2.0, resolution.y / 2.0, 0.0, 1.0)).truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(-resolution.x / 2.0, -resolution.y / 2.0, 0.0, 1.0)).truncate(),
-                raster_to_screen.mul_vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0)).truncate(),
-                raster_to_screen.mul_vec4(glam::Vec4::new(0.0, resolution.y, 0.0, 1.0)).truncate(),
-                raster_to_screen.mul_vec4(glam::Vec4::new(resolution.x, 0.0, 0.0, 1.0)).truncate(),
-                raster_to_screen.mul_vec4(glam::Vec4::new(resolution.x, resolution.y, 0.0, 1.0)).truncate(),
-                raster_to_screen.mul_vec4(glam::Vec4::new(resolution.x / 2.0, resolution.y / 2.0, 0.0, 1.0)).truncate(),
-                raster_to_screen.mul_vec4(glam::Vec4::new(-resolution.x / 2.0, -resolution.y / 2.0, 0.0, 1.0)).truncate(),
-                self.volume_transform.mul_vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0)).truncate(),
-                self.volume_transform.mul_vec4(glam::Vec4::new(0.0, 0.0, 1.0, 1.0)).truncate(),
-                self.volume_transform.mul_vec4(glam::Vec4::new(0.0, 1.0, 0.0, 1.0)).truncate(),
-                self.volume_transform.mul_vec4(glam::Vec4::new(1.0, 0.0, 0.0, 1.0)).truncate(),
-                self.volume_transform.mul_vec4(glam::Vec4::new(1.0, 1.0, 1.0, 1.0)).truncate(),
-                self.volume_transform.mul_vec4(glam::Vec4::new(0.5, 0.5, 0.5, 1.0)).truncate(),
-            );
-
-
-
             //let raster_to_camera = view_matrix.inverse().mul_mat4(&raster_to_screen);
             let uniforms = dvr::Uniforms::new(
-                self.volume_transform.transpose(),
-                view_matrix.transpose(),//.inverse(),
+                self.volume_transform,
+                *view_matrix,
+                // am I stupid? why do i have to transpose this?
                 raster_to_screen.transpose(),
                 glam::Mat4::orthographic_rh(
                     -resolution.x / 2., resolution.x / 2.,
@@ -325,9 +298,13 @@ pub mod dvr_playground {
                     Event::RedrawRequested(_) => {
                         //log::info!("{:?}", camera_controller.matrix);
 
-                        log::info!("{}", translation);
+                        log::info!("{} {} {}",
+                            translation,
+                            glam::Mat4::from_translation(translation),
+                            glam::Mat4::from_translation(translation).inverse(),
+                        );
                         dvr.update(&glam::Mat4::from_translation(translation));
-                        //dvr.update(&camera_controller.matrix);
+                        //dvr.update(&camera_controller.matrix.inverse());
 
                         let frame = match dvr.ctx.surface.as_ref().unwrap().get_current_texture() {
                             Ok(frame) => frame,

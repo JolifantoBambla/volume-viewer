@@ -14,7 +14,19 @@ type float4 = vec4<f32>;
 type float3x3 = mat3x3<f32>;
 type float4x4 = mat4x4<f32>;
 
+// constant values
+// todo: replace let with const
+// no idea how infinity is written out in WGSL, so here are some constants
+// note: no compile-time expressions without const -> needs to be a function...
+fn positive_infinity() -> f32 { return  1. / 0.; }
+fn negative_infinity() -> f32 { return -1. / 0.; }
+// todo: maybe just remove this
+let relative_step_size: f32 = 1.;
+// todo: should be a uniform
+let background_color = float3(0.2);
+
 // todo: come up with a better name...
+// todo: clean up those uniforms - find out what i really need and throw away the rest
 struct Uniforms {
     world_to_object: float4x4,
     object_to_world: float4x4,
@@ -25,6 +37,8 @@ struct Uniforms {
     inverse_projection: float4x4,
     volume_color: float4,
 }
+
+// Bindings
 
 @group(0)
 @binding(0)
@@ -42,20 +56,11 @@ var result: texture_storage_2d<rgba8unorm, write>;
 @binding(3)
 var<uniform> uniforms: Uniforms;
 
-
-// no idea how infinity is written out in WGSL
-//const positive_infinity: f32 =  1. / 0.;
-//const negative_infinity: f32 = -1. / 0.;
-
-// todo: use const stuff as soon as chromium supports it
-fn positive_infinity() -> f32 {
-    return 1. / 0.;
-}
+// Helper stuff
 
 fn sample(x: float3) -> f32 {
     return f32(textureSampleLevel(volume_data, volume_sampler, x, 0.).x);
 }
-
 
 /// An Axis Aligned Bounding Box (AABB)
 struct AABB {
@@ -70,7 +75,6 @@ struct Sphere {
 
 struct Volume {
     bounds: AABB,
-    max_value: f32,
 }
 
 struct Ray {
@@ -79,6 +83,7 @@ struct Ray {
     tmax: f32,
 }
 
+// todo: construction cost is probably not super high and the compiler will optimize this, but maybe use refs instead
 fn transform_ray(ray: Ray, transform: float4x4) -> Ray {
     return Ray(
         (transform * float4(ray.origin, 1.)).xyz,
@@ -88,6 +93,7 @@ fn transform_ray(ray: Ray, transform: float4x4) -> Ray {
 }
 
 // todo: add camera models
+/// Generates a ray in the volume's space (i.e. where it is a unit cube = [0,1]^3)
 fn generate_ray(pixel_position: float2, screen_resolution: float2, to_camera: float4x4, to_world: float4x4, to_object: float4x4) -> Ray {
     let camera_point = (float4(pixel_position + 0.5, 0., 1.) * to_camera).xyz;
 
@@ -112,12 +118,7 @@ fn generate_ray(pixel_position: float2, screen_resolution: float2, to_camera: fl
     );
 }
 
-// todo: const (not supported yet)
-let relative_step_size: f32 = 1.;
-
-// todo: customizable background
-let background_color = float3(0.2);
-
+// Main stage
 
 // supported builtins:
 // - local_invocation_id    : vec3<u32>
@@ -128,13 +129,6 @@ let background_color = float3(0.2);
 @stage(compute)
 @workgroup_size(16, 16, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    // todo:
-    //  - generate ray
-    //  - transform ray to camera's view space
-    //  - set up volume bounds
-    //  - step through volume until boundary is hit
-    // -> required uniforms: camera.view, volume (3d texture + bounds)
-
     let window_size = uint2(textureDimensions(result));
 
     // terminate thread if it's outside the window bounds
@@ -142,115 +136,58 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
-    // todo: maybe just construct camera frame in shader
-    let pixel = vec2<i32>(
-        i32(global_id.x),
-        // invert y
-        //i32(window_size.y - global_id.y));
-        i32(global_id.y));
+    let pixel = int2(global_id.xy);
+    let resolution = float2(window_size);
 
     // initialize background
     textureStore(result, pixel, float4(background_color, 1.));
 
-    // todo: remove this (should come from CPU
+    // todo: remove this (should come from CPU because it depends on metadata not on texture resolution)
     let volume_scale = float3(textureDimensions(volume_data));
 
-    let resolution = float2(window_size);
-    let frame = resolution.x / resolution.y;
-    var screen = AABB(
-        float3(-frame, -1., 0.),
-        float3(frame, 1., 0.)
-    );
-    if frame < 1. {
-        screen = AABB(
-            float3(-1., -1. / frame, 0.),
-            float3(1., 1. / frame, 0.)
-        );
-    }
-    let raster_to_screen = tanspose(float4x4(
-        1., 0., 0., screen.max.x,
-        0., 1., 0., screen.max.y,
-        0., 0., 1., 0.,
-        0., 0., 0., 1.
-    ) * float4x4(
-        (screen.max.x - screen.min.x), 0., 0., 0.,
-        0., (screen.min.y - screen.max.y), 0., 0.,
-        0., 0., 1., 0.,
-        0., 0., 0., 1.
-    ) * float4x4(
-        1. / resolution.x, 0., 0., 0.,
-        0., 1. / resolution.y, 0., 0.,
-        0., 0., 1., 0.,
-        0., 0., 0., 1.
-    ));
-
-    let world_to_object = transpose(float4x4(
-    /*
-      1. / volume_scale.x, 0., 0., 0.,
-      0., 1. / volume_scale.y, 0., 0.,
-      0., 0., 1. / volume_scale.z, 0.,
-      0., 0., 0., 1.
-    ) * float4x4(
-    */
-      1., 0., 0., 0.5,
-      0., 1., 0., 0.5,
-      0., 0., 1., 0.5,
-      0., 0., 0., 1.
-    ));
-
+    // todo: maybe just construct camera frame in shader
     // todo: clean up ray generation and transform to volume's space s.t. volume shape is preserved and sampling still works
     var ray = generate_ray(
-        // todo: figure out why I have to translate the pixel position
-        float2(pixel),// - float2(window_size) / 2.,
-        float2(window_size),
+        float2(pixel),
+        resolution,
         uniforms.screen_to_camera,
-        uniforms.world_to_camera, //uniforms.camera_to_world,
+        uniforms.camera_to_world,
         uniforms.world_to_object
     );
 
+    // volume is [0,1]^3 -> all samples can be used directly as texture coordinates
     let volume = Volume (
         AABB (float3(0.), float3(1.)),
-        1.
     );
 
-    let intersection_record = intersect(ray, volume.bounds);
-
-    add_camera_debug_spheres(ray, pixel);
+    let intersection_record = intersect_aabb(ray, volume.bounds);
 
     // early out if we missed the volume
     if !intersection_record.hit {
         return;
     }
-    /*
-    else {
-        textureStore(result, pixel, float4(1.));
-        return;
-    }
-    */
 
     let start = ray_at(ray, intersection_record.t_min);
-    let end = ray_at(ray, intersection_record.t_max);
+    let end   = ray_at(ray, intersection_record.t_max);
 
     let distance = distance(start * volume_scale, end * volume_scale);
     let num_steps = i32(distance / relative_step_size + 0.5);
 
-    // early out if we there is not a single sample within the volume
+    // early out if there is not a single sample within the volume
     if num_steps < 1 {
+        textureStore(result, pixel, float4(1., 0., 0., 1.0));
         return;
     }
 
     let step = (end - start) / f32(num_steps);
 
-    //let value = float3(sample(start));
-    //textureStore(result, pixel, float4(value, 1.));
-
     let color = dvr(start, step, num_steps, ray);
     if color.a > 0.1 {
         textureStore(result, pixel, color);
     }
-
-
 }
+
+// volume rendering stuff
 
 fn max_steps_for_size(size: vec3<f32>) -> i32 {
     return i32(ceil((size.x * size.y * size.z) * sqrt(3.)));
@@ -303,38 +240,21 @@ fn compute_volume_normal(x: float3, step: float3, view: float3) -> float3 {
 }
 
 fn compute_lighting(value: f32, x: float3, step: float3, view_direction: float3) -> float4 {
-    // Calculate color by incorporating lighting
-
-    // View direction
     let view = normalize(view_direction);
-    // calculate normal vector from gradient
     let normal = compute_volume_normal(x, step, view);
 
-    // Init colors
-    var ambient_color  = float3(0.1, 0.1, 0.1);
-    var diffuse_color  = float3(0.0, 0.0, 0.0);
-    var specular_color = float3(0.0, 0.0, 0.0);
+    let ambient = 0.2;
+
+    var light_direction = float3(1.);
+    let diffuse = clamp(dot(normal, light_direction), 0., 1.);
+
+    let halfway = normalize(light_direction + view);
     let shininess = 40.;
-
-    // note: could allow multiple lights
-    for (var i = 0; i < 1; i += 1) {
-        // Get light direction (make sure to prevent zero devision)
-        var light_direction = view;	//lightDirs[i];
-
-        // Calculate lighting properties
-        let diffuse = clamp(dot(normal, light_direction), 0., 1.);
-        let halfway = normalize(light_direction + view);
-        let specular = pow(max(dot(halfway, normal), 0.), shininess);
-
-        // Calculate colors
-        ambient_color  += ambient_color;
-        diffuse_color  += diffuse;
-        specular_color += specular * specular_color;
-    }
+    let specular = pow(max(dot(halfway, normal), 0.), shininess);
 
     // Calculate final color by componing different components
     return float4(
-        apply_colormap(value) * (ambient_color + diffuse_color) + specular_color,
+        apply_colormap(value) * (ambient + diffuse) + specular,
         value
     );
 }
@@ -383,7 +303,7 @@ fn intersect_sphere(ray: Ray, sphere: Sphere) -> Intersection {
     let origin = ray.origin - sphere.center;
     let a = dot(ray.direction, ray.direction);
     let b = 2. * dot(ray.direction, origin);
-    let c = dot(origin, origin) - (radius * radius);
+    let c = dot(origin, origin) - (sphere.radius * sphere.radius);
     let discriminant = b * b - 4. * a * c;
     if discriminant < 0. { return Intersection(); }
     var root_discriminant = sqrt(discriminant);
@@ -405,10 +325,10 @@ fn intersect_sphere(ray: Ray, sphere: Sphere) -> Intersection {
 
 // camera debugging
 
-fn add_sphere(ray: Ray, pixel: int2, center: float3, radius: f32, color: float3) {
-    let hit = intersect_sphere(ray, center, 0.5);
+fn add_sphere(ray: Ray, pixel: int2, sphere: Sphere, color: float3) {
+    let hit = intersect_sphere(ray, sphere);
     if hit.hit {
-        let normal = normalize(ray_at(ray, hit.t_min) - center);
+        let normal = normalize(ray_at(ray, hit.t_min) - sphere.center);
         let light_dir = normalize(float3(1.));
         let lighting = dot(normal, light_dir) * color;
         textureStore(result, pixel, float4(lighting, 1.));
