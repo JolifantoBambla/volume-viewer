@@ -123,31 +123,21 @@ pub mod dvr_playground {
                 self.window.inner_size().height as f32,
             );
 
-            let screen_to_raster = crate::renderer::camera::compute_screen_to_raster(
+            let raster_to_screen = crate::renderer::camera::compute_raster_to_screen(
                 resolution,
-                //None
                 Some(crate::renderer::geometry::Bounds2D::new(resolution * -0.5, resolution * 0.5))
             );
-            let raster_to_screen = screen_to_raster.inverse();
 
-            let camera_to_screen = glam::Mat4::IDENTITY;
-            let raster_to_camera2 = camera_to_screen.inverse().mul_mat4(&raster_to_screen);
-            let raster_to_camera = glam::Mat4::orthographic_rh(
-                -resolution.x / 2., resolution.x / 2.,
-                -resolution.y / 2., resolution.y / 2.,
-                0., 1000000.,
+            let camera = crate::renderer::camera::CameraUniform::new(
+                view_matrix.clone(),
+                glam::Mat4::IDENTITY,
+                raster_to_screen,
+                1
             );
 
-            //let raster_to_camera = view_matrix.inverse().mul_mat4(&raster_to_screen);
             let uniforms = dvr::Uniforms::new(
+                camera,
                 self.volume_transform,
-                *view_matrix,
-                raster_to_screen,
-                glam::Mat4::orthographic_rh(
-                    -resolution.x / 2., resolution.x / 2.,
-                    -resolution.y / 2., resolution.y / 2.,
-                    0., 1000000.,
-                ).transpose()
             );
             self.ctx.queue.write_buffer(
                 &self.uniform_buffer,
@@ -167,6 +157,7 @@ pub mod dvr_playground {
             let mut left_mouse_pressed = false;
             let mut modifiers: HashSet<Modifier> = HashSet::new();
             let mut camera_controller = CameraController {
+                camera_position: glam::Vec3::new(1., 1., 1.) * 50.,
                 window_size: glam::Vec2::new(dvr.window.inner_size().width as f32, dvr.window.inner_size().height as f32),
                 ..Default::default()
             };

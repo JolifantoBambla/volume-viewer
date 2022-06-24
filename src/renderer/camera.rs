@@ -1,7 +1,42 @@
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
-use glam::{Mat3, Mat4, Vec2, Vec3};
+use glam::{Mat3, Mat4, UVec3, Vec2, Vec3};
 use crate::renderer::geometry::{Bounds2D, Bounds3D};
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CameraUniform {
+    pub camera_to_world: Mat4,
+    pub world_to_camera: Mat4,
+    pub projection: Mat4,
+    pub raster_to_camera: Mat4,
+    pub camera_type: u32,
+    padding: UVec3,
+}
+
+impl CameraUniform {
+    pub fn new(view: Mat4, projection: Mat4, raster_to_camera: Mat4, camera_type: u32) -> Self {
+        Self {
+            camera_to_world: view,
+            world_to_camera: view.inverse(),
+            projection,
+            raster_to_camera,
+            camera_type,
+            padding: UVec3::new(0, 0, 0),
+        }
+    }
+}
+
+impl Default for CameraUniform {
+    fn default() -> Self {
+        CameraUniform::new(
+            Mat4::IDENTITY,
+            Mat4::IDENTITY,
+            Mat4::IDENTITY,
+            0
+        )
+    }
+}
 
 pub fn compute_screen_to_raster(raster_resolution: Vec2, screen_size: Option<Bounds2D>) -> Mat4 {
     let screen = if let Some(screen_size) = screen_size {

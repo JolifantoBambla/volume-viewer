@@ -4,6 +4,7 @@ use std::{
 };
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use crate::renderer::{
+    camera::CameraUniform,
     context::GPUContext,
     pass::{GPUPass, AsBindGroupEntries},
 };
@@ -11,26 +12,18 @@ use crate::renderer::{
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniforms {
+    pub camera: CameraUniform,
     pub world_to_object: glam::Mat4,
     pub object_to_world: glam::Mat4,
-    pub screen_to_camera: glam::Mat4,
-    pub camera_to_world: glam::Mat4,
-    pub world_to_camera: glam::Mat4,
-    pub projection: glam::Mat4,
-    pub inverse_projection: glam::Mat4,
     pub volume_color: glam::Vec4,
 }
 
 impl Uniforms {
-    pub(crate) fn new(object_to_world: glam::Mat4, camera_to_world: glam::Mat4, screen_to_camera: glam::Mat4, projection: glam::Mat4) -> Self {
+    pub fn new(camera: CameraUniform, object_to_world: glam::Mat4) -> Self {
         Self {
+            camera,
             world_to_object: object_to_world.inverse(),
             object_to_world,
-            screen_to_camera,
-            camera_to_world,
-            world_to_camera: camera_to_world.inverse(),
-            projection,
-            inverse_projection: projection.inverse(),
             volume_color: glam::Vec4::new(0., 0., 1., 1.),
         }
     }
@@ -39,13 +32,9 @@ impl Uniforms {
 impl Default for Uniforms {
     fn default() -> Self {
         Self {
+            camera: CameraUniform::default(),
             world_to_object: glam::Mat4::IDENTITY,
             object_to_world: glam::Mat4::IDENTITY,
-            screen_to_camera: glam::Mat4::IDENTITY,
-            camera_to_world: glam::Mat4::IDENTITY,
-            world_to_camera: glam::Mat4::IDENTITY,
-            projection: glam::Mat4::IDENTITY,
-            inverse_projection: glam::Mat4::IDENTITY,
             volume_color: glam::Vec4::new(0., 0., 1., 1.),
         }
     }

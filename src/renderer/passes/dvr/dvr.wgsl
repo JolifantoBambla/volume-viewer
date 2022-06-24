@@ -51,16 +51,37 @@ fn black(pixel: int2) {
     textureStore(result, pixel, BLACK);
 }
 
+
+struct Camera {
+    // Maps a point in a common "world" space to the camera's object space.
+    camera_to_world: float4x4,
+
+    // The inverse of `camera_to_world` (WGSL doesn't have a built-in function to compute the inverse of a matrix).
+    // This is often called `view` matrix in real-time graphics contexts.
+    // This field is only needed for surface rendering.
+    world_to_camera: float4x4,
+
+    // Projects a point in the camera's object space to the camera's image plane.
+    // This field is only needed for surface rendering.
+    projection: float4x4,
+
+    // Maps a point on the output image to a point on the camera's image plane.
+    // This field is only needed for ray-casting.
+    raster_to_camera: float4x4,
+
+    // The type of this camera:
+    //  1:  Orthographic
+    //  else: Perspective
+    // Note that this field has a size of 16 bytes to avoid alignment issues.
+    @size(16) camera_type: u32,
+}
+
 // todo: come up with a better name...
 // todo: clean up those uniforms - find out what i really need and throw away the rest
 struct Uniforms {
+    camera: Camera,
     world_to_object: float4x4,
     object_to_world: float4x4,
-    screen_to_camera: float4x4,
-    camera_to_world: float4x4,
-    world_to_camera: float4x4,
-    projection: float4x4,
-    inverse_projection: float4x4,
     volume_color: float4,
 }
 
@@ -120,29 +141,23 @@ fn transform_ray(ray: Ray, transform: float4x4) -> Ray {
 
 // todo: move this to a separate file that is included via a custom include mechanism
 
-// todo: add camera models
-/// Generates a ray in the volume's space (i.e. where it is a unit cube = [0,1]^3)
-fn generate_ray(pixel_position: float2, screen_resolution: float2, to_camera: float4x4, to_world: float4x4, to_object: float4x4) -> Ray {
-    let camera_point = (to_camera * float4(pixel_position + 0.5, 0., 1.)).xyz;
+// Generates a ray in a common "world" space from a `Camera` instance.
+fn generate_camera_ray(camera: Camera, pixel: float2) -> Ray {
+    let camera_point = (camera.raster_to_camera * float4(pixel + 0.5, 0., 1.)).xyz;
 
-    // persp
-    //let origin = float3(0.);
-    //let direction = normalize(camera_point);
+    var origin = float3();
+    var direction = float3();
 
-    // ortho
-    let origin = camera_point;
-    let direction = float3(0., 0., 1.);
+    if camera.camera_type == 1u {
+        origin = camera_point;
+        direction = float3(0., 0., -1.);
+    } else {
+        direction = normalize(-camera_point);
+    }
 
     return transform_ray(
-        transform_ray(
-            Ray(
-                origin,
-                direction,
-                positive_infinity()
-            ),
-            to_world
-        ),
-        to_object
+        Ray (origin, direction, positive_infinity()),
+        camera.camera_to_world
     );
 }
 
@@ -173,34 +188,17 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // todo: remove this (should come from CPU because it depends on metadata not on texture resolution)
     let volume_scale = float3(textureDimensions(volume_data));
 
-    // todo: maybe just construct camera frame in shader
-    // todo: clean up ray generation and transform to volume's space s.t. volume shape is preserved and sampling still works
-    var ray = generate_ray(
-        float2(pixel),
-        resolution,
-        uniforms.screen_to_camera,
-        uniforms.camera_to_world,
-        uniforms.world_to_object
-    );
+    // generate a ray and transform it to the volume's space (i.e. where the volume is a unit cube with x in [0,1]^3)
+    var ray = generate_camera_ray(uniforms.camera, float2(pixel));
+    ray = transform_ray(ray, uniforms.world_to_object);
 
     // volume is [0,1]^3 -> all samples can be used directly as texture coordinates
-    let volume = Volume (
-        AABB (float3(0.), float3(1.)),
-    );
-
-    let intersection_record = intersect_aabb(ray, volume.bounds);
+    let intersection_record = intersect_aabb(ray, AABB (float3(0.), float3(1.)));
 
     // early out if we missed the volume
     if !intersection_record.hit {
         return;
     }
-    /*
-    else {
-        add_camera_debug_spheres(ray, pixel, 5.);
-        textureStore(result, pixel, RED);
-        return;
-    }
-    */
 
     let start = ray_at(ray, intersection_record.t_min);
     let end   = ray_at(ray, intersection_record.t_max);
@@ -281,7 +279,7 @@ fn compute_lighting(value: f32, x: float3, step: float3, view_direction: float3)
 
     let ambient = 0.2;
 
-    var light_direction = float3(1.);
+    var light_direction = view; //float3(1.);
     let diffuse = clamp(dot(normal, light_direction), 0., 1.);
 
     let halfway = normalize(light_direction + view);
