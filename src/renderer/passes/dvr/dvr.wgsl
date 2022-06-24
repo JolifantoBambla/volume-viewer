@@ -51,15 +51,18 @@ fn black(pixel: int2) {
     textureStore(result, pixel, BLACK);
 }
 
+struct Transform {
+    // Maps a point in the object's space to a common world space.
+    object_to_world: float4x4,
+
+    // Maps a point in a common world space to the object's space.
+    // It is the inverse of `object_to_world` (WGSL doesn't have a built-in function to compute the inverse of a matrix).
+    world_to_object: float4x4,
+}
 
 struct Camera {
-    // Maps a point in a common "world" space to the camera's object space.
-    camera_to_world: float4x4,
-
-    // The inverse of `camera_to_world` (WGSL doesn't have a built-in function to compute the inverse of a matrix).
-    // This is often called `view` matrix in real-time graphics contexts.
-    // This field is only needed for surface rendering.
-    world_to_camera: float4x4,
+    // Maps points from/to the camera's space to/from a common world space.
+    transform: Transform,
 
     // Projects a point in the camera's object space to the camera's image plane.
     // This field is only needed for surface rendering.
@@ -74,6 +77,14 @@ struct Camera {
     //  else: Perspective
     // Note that this field has a size of 16 bytes to avoid alignment issues.
     @size(16) camera_type: u32,
+}
+
+struct Volume {
+    transform: Transform,
+
+    // The size of the volume.
+    // Note that this field has a size of 16 bytes to avoid alignment issues.
+    @size(16) dimensions: float3,
 }
 
 // todo: come up with a better name...
@@ -120,10 +131,6 @@ struct Sphere {
     radius: f32,
 }
 
-struct Volume {
-    bounds: AABB,
-}
-
 struct Ray {
     origin: float3,
     direction: float3,
@@ -157,7 +164,7 @@ fn generate_camera_ray(camera: Camera, pixel: float2) -> Ray {
 
     return transform_ray(
         Ray (origin, direction, positive_infinity()),
-        camera.camera_to_world
+        camera.transform.object_to_world
     );
 }
 

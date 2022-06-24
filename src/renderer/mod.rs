@@ -157,7 +157,7 @@ pub mod dvr_playground {
             let mut left_mouse_pressed = false;
             let mut modifiers: HashSet<Modifier> = HashSet::new();
             let mut camera_controller = CameraController {
-                camera_position: glam::Vec3::new(1., 1., 1.) * 50.,
+                camera_position: glam::Vec3::new(1., 1., 1.) * -50.,
                 window_size: glam::Vec2::new(dvr.window.inner_size().width as f32, dvr.window.inner_size().height as f32),
                 ..Default::default()
             };
