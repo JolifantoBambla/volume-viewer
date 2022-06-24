@@ -33,7 +33,6 @@ pub mod dvr_playground {
     use crate::renderer::pass::GPUPass;
     use crate::renderer::passes::{dvr, present_to_screen};
     use crate::renderer::{camera, resources};
-    use crate::renderer::geometry::Bounds2D;
     use crate::renderer::volume::RawVolumeBlock;
 
     pub struct DVR {
@@ -129,7 +128,7 @@ pub mod dvr_playground {
             );
 
             let camera = crate::renderer::camera::CameraUniform::new(
-                view_matrix.clone(),
+                *view_matrix,
                 glam::Mat4::IDENTITY,
                 raster_to_screen,
                 1

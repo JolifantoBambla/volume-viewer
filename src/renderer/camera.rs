@@ -119,7 +119,7 @@ impl PerspectiveCamera {
     pub fn new(screen_size: Bounds2D, fov_y_radians: f32, aspect_ratio: f32, z_near: f32, z_far: f32) -> Self {
         Self {
             screen_size,
-            projection: Mat4::perspective_rh(fov_y_radians, aspect_ratio, z_far, z_far)
+            projection: Mat4::perspective_rh(fov_y_radians, aspect_ratio, z_near, z_far)
         }
     }
 }
