@@ -4,6 +4,7 @@ use std::{
 };
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use crate::renderer::{
+    camera::CameraUniform,
     context::GPUContext,
     pass::{GPUPass, AsBindGroupEntries},
 };
@@ -11,19 +12,30 @@ use crate::renderer::{
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniforms {
+    pub camera: CameraUniform,
     pub world_to_object: glam::Mat4,
-    pub screen_to_camera: glam::Mat4,
-    pub camera_to_world: glam::Mat4,
+    pub object_to_world: glam::Mat4,
     pub volume_color: glam::Vec4,
+}
+
+impl Uniforms {
+    pub fn new(camera: CameraUniform, object_to_world: glam::Mat4) -> Self {
+        Self {
+            camera,
+            world_to_object: object_to_world.inverse(),
+            object_to_world,
+            volume_color: glam::Vec4::new(0., 0., 1., 1.),
+        }
+    }
 }
 
 impl Default for Uniforms {
     fn default() -> Self {
         Self {
+            camera: CameraUniform::default(),
             world_to_object: glam::Mat4::IDENTITY,
-            screen_to_camera: glam::Mat4::IDENTITY,
-            camera_to_world: glam::Mat4::IDENTITY,
-            volume_color: glam::Vec4::new(0.,0.,1., 1.),
+            object_to_world: glam::Mat4::IDENTITY,
+            volume_color: glam::Vec4::new(0., 0., 1., 1.),
         }
     }
 }

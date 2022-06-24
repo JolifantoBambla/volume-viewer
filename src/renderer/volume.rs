@@ -1,7 +1,8 @@
-use glam::Vec3A;
 use wgpu::Extent3d;
+use crate::renderer::geometry::Bounds3D;
 use crate::renderer::resources::Texture;
 
+pub type AABB = Bounds3D;
 
 #[readonly::make]
 pub struct RawVolumeBlock {
@@ -34,12 +35,6 @@ impl RawVolumeBlock {
     pub fn create_vec3(&self) -> glam::Vec3 {
         glam::Vec3::new(self.width as f32, self.height as f32, self.depth as f32)
     }
-}
-
-#[readonly::make]
-pub struct AABB {
-    pub min: Vec3A,
-    pub max: Vec3A,
 }
 
 // todo: this trait should abstract the volume's representation on the GPU

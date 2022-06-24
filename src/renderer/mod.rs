@@ -1,12 +1,13 @@
 pub mod camera;
 pub mod context;
 pub mod full_screen_pass;
+pub mod geometry;
 pub mod pass;
 pub mod passes;
 pub mod resources;
 pub mod volume;
 
-// todo: remove
+// todo: refactor this into a proper module
 // this is just a small module where I test stuff
 pub mod dvr_playground {
     use std::{sync::Arc};
@@ -46,7 +47,7 @@ pub mod dvr_playground {
 
         dvr_result_extent: wgpu::Extent3d,
 
-        volume_scale: glam::Mat4,
+        volume_transform: glam::Mat4,
         uniform_buffer: wgpu::Buffer,
     }
 
@@ -63,9 +64,14 @@ pub mod dvr_playground {
                 ..Default::default()
             });
 
-            let volume_tansform = glam::Mat4::from_scale(volume.create_vec3()).inverse();
+            // the volume is a unit cube ([0,1]^3)
+            // we translate it s.t. its center is the origin and scale it to its original dimensions
+            // todo: scale should come from volume meta data (-> todo: add meta data to volume)
+            let volume_transform = glam::Mat4::from_scale(volume.create_vec3())
+                .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(-0.5, -0.5, -0.5)));
+
             let uniforms = dvr::Uniforms {
-                world_to_object: volume_tansform,
+                world_to_object: volume_transform,
                 ..Default::default()
             };
             let uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -105,7 +111,7 @@ pub mod dvr_playground {
                 present_to_screen: full_screen_pass,
                 present_to_screen_bind_group: full_screen_bind_group,
                 dvr_result_extent,
-                volume_scale: volume_tansform,
+                volume_transform,
                 uniform_buffer,
             }
         }
@@ -115,44 +121,23 @@ pub mod dvr_playground {
                 self.window.inner_size().width as f32,
                 self.window.inner_size().height as f32,
             );
-            let frame = resolution.x / resolution.y;
-            let (screen_min, screen_max) = if frame > 1.0 {
-                (
-                    Vec2::new(-frame, -1.0),
-                    Vec2::new(frame, 1.0)
-                )
-            } else {
-                (
-                    Vec2::new(-1.0, -1.0 / frame),
-                    Vec2::new(1.0, 1.0 / frame)
-                )
-            };
 
-            let screen_to_raster = glam::Mat4::from_scale(resolution.extend(1.0))
-                .mul_mat4(&glam::Mat4::from_scale(glam::Vec3::new(1.0 / (screen_max.x - screen_min.x), 1.0 / (screen_min.y - screen_max.y), 1.0)))
-                .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(-screen_min.x, -screen_max.y, 0.)));
-            let raster_to_screen = screen_to_raster.inverse();
-            let camera_to_screen = glam::Mat4::IDENTITY;
-            let raster_to_camera = camera_to_screen.inverse().mul_mat4(&raster_to_screen);
-
-            /*
-            log::info!("0,0: {}\n0,1: {}\n1.0: {}\n1,1: {}\n0.5,0.5: {},-0.5,-0.5: {}",
-                raster_to_camera.mul_vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0)).truncate().truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(0.0, resolution.y, 0.0, 1.0)).truncate().truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x, 0.0, 0.0, 1.0)).truncate().truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x, resolution.y, 0.0, 1.0)).truncate().truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(resolution.x / 2.0, resolution.y / 2.0, 0.0, 1.0)).truncate().truncate(),
-                raster_to_camera.mul_vec4(glam::Vec4::new(-resolution.x / 2.0, -resolution.y / 2.0, 0.0, 1.0)).truncate().truncate(),
+            let raster_to_screen = crate::renderer::camera::compute_raster_to_screen(
+                resolution,
+                Some(crate::renderer::geometry::Bounds2D::new(resolution * -0.5, resolution * 0.5))
             );
-             */
 
-            //let raster_to_camera = view_matrix.inverse().mul_mat4(&raster_to_screen);
-            let uniforms = dvr::Uniforms {
-                world_to_object: self.volume_scale,
-                screen_to_camera: raster_to_camera,
-                camera_to_world: *view_matrix,//.inverse(),
-                ..Default::default()
-            };
+            let camera = crate::renderer::camera::CameraUniform::new(
+                *view_matrix,
+                glam::Mat4::IDENTITY,
+                raster_to_screen,
+                1
+            );
+
+            let uniforms = dvr::Uniforms::new(
+                camera,
+                self.volume_transform,
+            );
             self.ctx.queue.write_buffer(
                 &self.uniform_buffer,
                 0,
@@ -171,10 +156,14 @@ pub mod dvr_playground {
             let mut left_mouse_pressed = false;
             let mut modifiers: HashSet<Modifier> = HashSet::new();
             let mut camera_controller = CameraController {
+                camera_position: glam::Vec3::new(1., 1., 1.) * -50.,
                 window_size: glam::Vec2::new(dvr.window.inner_size().width as f32, dvr.window.inner_size().height as f32),
                 ..Default::default()
             };
             camera_controller.update();
+
+            let mut translation = glam::Vec3::new(0., 0., 0.);
+            const TRANSLATION_SPEED: f32 = 0.1;
 
             event_loop.run(move |event, _, control_flow| {
                 // force ownership by the closure
@@ -209,6 +198,7 @@ pub mod dvr_playground {
                         },
                         ..
                     } => {
+                        //log::info!("{:?}", virtual_keycode);
                         match virtual_keycode {
                             VirtualKeyCode::LShift | VirtualKeyCode::RShift => {
                                 if state == ElementState::Pressed {
@@ -229,6 +219,36 @@ pub mod dvr_playground {
                                     modifiers.insert(Modifier::Ctrl);
                                 } else if state == ElementState::Released {
                                     modifiers.remove(&Modifier::Ctrl);
+                                }
+                            }
+                            VirtualKeyCode::D | VirtualKeyCode::Right => {
+                                if state == ElementState::Pressed {
+                                    translation.x -= TRANSLATION_SPEED;
+                                }
+                            }
+                            VirtualKeyCode::A | VirtualKeyCode::Left => {
+                                if state == ElementState::Pressed {
+                                    translation.x += TRANSLATION_SPEED;
+                                }
+                            }
+                            VirtualKeyCode::W => {
+                                if state == ElementState::Pressed {
+                                    translation.y -= TRANSLATION_SPEED;
+                                }
+                            }
+                            VirtualKeyCode::S => {
+                                if state == ElementState::Pressed {
+                                    translation.y += TRANSLATION_SPEED;
+                                }
+                            }
+                            VirtualKeyCode::Up => {
+                                if state == ElementState::Pressed {
+                                    translation.z -= TRANSLATION_SPEED;
+                                }
+                            }
+                            VirtualKeyCode::Down => {
+                                if state == ElementState::Pressed {
+                                    translation.z += TRANSLATION_SPEED;
                                 }
                             }
                             _ => {}
@@ -264,7 +284,14 @@ pub mod dvr_playground {
                     }
                     Event::RedrawRequested(_) => {
                         //log::info!("{:?}", camera_controller.matrix);
-                        dvr.update(&camera_controller.matrix);
+
+                        log::info!("{} {} {}",
+                            translation,
+                            glam::Mat4::from_translation(translation),
+                            glam::Mat4::from_translation(translation).inverse(),
+                        );
+                        //dvr.update(&glam::Mat4::from_translation(translation));
+                        dvr.update(&camera_controller.matrix.inverse());
 
                         let frame = match dvr.ctx.surface.as_ref().unwrap().get_current_texture() {
                             Ok(frame) => frame,

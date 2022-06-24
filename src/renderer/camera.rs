@@ -1,16 +1,145 @@
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
-use glam::{Mat3, Mat4, Vec2, Vec3};
+use glam::{Mat3, Mat4, UVec3, Vec2, Vec3};
+use crate::renderer::geometry::{Bounds2D, Bounds3D};
 
-pub trait Camera {}
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CameraUniform {
+    pub camera_to_world: Mat4,
+    pub world_to_camera: Mat4,
+    pub projection: Mat4,
+    pub raster_to_camera: Mat4,
+    pub camera_type: u32,
+    padding: UVec3,
+}
 
-pub struct OrthographicCamera {}
+impl CameraUniform {
+    pub fn new(view: Mat4, projection: Mat4, raster_to_camera: Mat4, camera_type: u32) -> Self {
+        Self {
+            camera_to_world: view,
+            world_to_camera: view.inverse(),
+            projection,
+            raster_to_camera,
+            camera_type,
+            padding: UVec3::new(0, 0, 0),
+        }
+    }
+}
 
-impl Camera for OrthographicCamera {}
+impl Default for CameraUniform {
+    fn default() -> Self {
+        CameraUniform::new(
+            Mat4::IDENTITY,
+            Mat4::IDENTITY,
+            Mat4::IDENTITY,
+            0
+        )
+    }
+}
 
-pub struct PerspectiveCamera {}
+pub fn compute_screen_to_raster(raster_resolution: Vec2, screen_size: Option<Bounds2D>) -> Mat4 {
+    let screen = if let Some(screen_size) = screen_size {
+        screen_size
+    } else {
+        let aspect_ratio = raster_resolution.x / raster_resolution.y;
+        if aspect_ratio > 1. {
+            Bounds2D::new(Vec2::new(-aspect_ratio, -1.0),Vec2::new(aspect_ratio, 1.0))
+        } else {
+            Bounds2D::new(Vec2::new(-1.0, -1.0 / aspect_ratio), Vec2::new(1.0, 1.0 / aspect_ratio))
+        }
+    };
+    glam::Mat4::from_scale(raster_resolution.extend(1.0))
+        .mul_mat4(&glam::Mat4::from_scale(
+            glam::Vec3::new(
+                1.0 / (screen.max.x - screen.min.x),
+                1.0 / (screen.min.y - screen.max.y),
+                1.0
+            )))
+        .mul_mat4(&glam::Mat4::from_translation(
+            glam::Vec3::new(
+                -screen.min.x,
+                -screen.max.y,
+                0.
+            )))
+}
 
-impl Camera for PerspectiveCamera {}
+pub fn compute_raster_to_screen(raster_resolution: Vec2, screen_size: Option<Bounds2D>) -> Mat4 {
+    compute_screen_to_raster(raster_resolution, screen_size).inverse()
+}
+
+pub trait Camera {
+    fn compute_raster_to_camera(&self, raster_resolution: Vec2) -> Mat4;
+    fn projection(&self) -> &Mat4;
+    fn screen_size(&self) -> Bounds2D;
+}
+
+pub struct OrthographicCamera {
+    projection: Mat4,
+    frustum: Bounds3D,
+}
+
+impl OrthographicCamera {
+    pub fn new(frustum: Bounds3D) -> Self {
+        let projection = Mat4::orthographic_rh(
+            frustum.min.x, frustum.max.x,
+            frustum.min.y, frustum.max.y,
+            frustum.min.z, frustum.max.z
+        );
+        Self {
+            frustum,
+            projection,
+        }
+    }
+}
+
+impl Camera for OrthographicCamera {
+    fn compute_raster_to_camera(&self, raster_resolution: Vec2) -> Mat4 {
+        compute_raster_to_screen(raster_resolution, Some(self.screen_size()))
+    }
+
+    fn projection(&self) -> &Mat4 {
+        &self.projection
+    }
+
+    fn screen_size(&self) -> Bounds2D {
+        Bounds2D::new(
+            self.frustum.min.truncate(),
+            self.frustum.max.truncate(),
+        )
+    }
+}
+
+pub struct PerspectiveCamera {
+    screen_size: Bounds2D,
+    projection: Mat4,
+}
+
+impl PerspectiveCamera {
+    pub fn new(screen_size: Bounds2D, fov_y_radians: f32, aspect_ratio: f32, z_near: f32, z_far: f32) -> Self {
+        Self {
+            screen_size,
+            projection: Mat4::perspective_rh(fov_y_radians, aspect_ratio, z_near, z_far)
+        }
+    }
+}
+
+impl Camera for PerspectiveCamera {
+    fn compute_raster_to_camera(&self, raster_resolution: Vec2) -> Mat4 {
+        self.projection.inverse().mul_mat4(&compute_raster_to_screen(raster_resolution, Some(self.screen_size())))
+    }
+
+    fn projection(&self) -> &Mat4 {
+        &self.projection
+    }
+
+    fn screen_size(&self) -> Bounds2D {
+        self.screen_size.clone()
+    }
+}
+
+
+
 
 pub trait Motion {
 }
