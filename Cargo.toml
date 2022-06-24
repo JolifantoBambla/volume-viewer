@@ -2,7 +2,7 @@
 name = "volume-viewer"
 version = "0.1.0"
 authors = ["Lukas Herzberger <herzberger.lukas@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
