@@ -27,8 +27,8 @@ let background_color = float3(0.2);
 
 // Colors for debugging
 let RED = float4(1., 0., 0., 1.);
-let GREEN = float4(1., 0., 0., 1.);
-let BLUE = float4(1., 0., 0., 1.);
+let GREEN = float4(0., 1., 0., 1.);
+let BLUE = float4(0., 0., 1., 1.);
 let WHITE = float4(1.);
 let BLACK = float4(0., 0., 0., 1.);
 
@@ -60,6 +60,10 @@ struct Transform {
     world_to_object: float4x4,
 }
 
+type CameraType = u32;
+let PERSPECTIVE = 0u;
+let ORTHOGRAPHIC = 1u;
+
 struct Camera {
     // Maps points from/to the camera's space to/from a common world space.
     transform: Transform,
@@ -76,7 +80,7 @@ struct Camera {
     //  1:  Orthographic
     //  else: Perspective
     // Note that this field has a size of 16 bytes to avoid alignment issues.
-    @size(16) camera_type: u32,
+    @size(16) camera_type: CameraType,
 }
 
 struct Volume {
@@ -150,16 +154,17 @@ fn transform_ray(ray: Ray, transform: float4x4) -> Ray {
 
 // Generates a ray in a common "world" space from a `Camera` instance.
 fn generate_camera_ray(camera: Camera, pixel: float2) -> Ray {
-    let camera_point = (camera.raster_to_camera * float4(pixel + 0.5, 0., 1.)).xyz;
+    let offset = 0.5;
+    let camera_point = (camera.raster_to_camera * float4(pixel + offset, 0., 1.)).xyz;
 
     var origin = float3();
     var direction = float3();
 
-    if camera.camera_type == 1u {
+    if camera.camera_type == ORTHOGRAPHIC {
         origin = camera_point;
         direction = float3(0., 0., -1.);
     } else {
-        direction = normalize(-camera_point);
+        direction = normalize(camera_point);
     }
 
     return transform_ray(
@@ -223,8 +228,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let color = dvr(start, step, num_steps, ray);
     if color.a > 0.1 {
         textureStore(result, pixel, color);
-    } else {
-        red(pixel);
     }
 }
 
@@ -282,11 +285,13 @@ fn compute_volume_normal(x: float3, step: float3, view: float3) -> float3 {
 
 fn compute_lighting(value: f32, x: float3, step: float3, view_direction: float3) -> float4 {
     let view = normalize(view_direction);
+
+    var light_direction = view;//float3(1.);
+
     let normal = compute_volume_normal(x, step, view);
 
     let ambient = 0.2;
 
-    var light_direction = view; //float3(1.);
     let diffuse = clamp(dot(normal, light_direction), 0., 1.);
 
     let halfway = normalize(light_direction + view);
@@ -322,14 +327,12 @@ struct Intersection {
 fn intersect_aabb(ray: Ray, bounds: AABB) -> Intersection {
     var t0 = 0.;
     var t1 = ray.tmax;
-    for (var i: i32 = 0; i < 3; i += 1) {
+    for (var i = 0; i < 3; i += 1) {
         let inv_ray_dir = 1. / ray.direction[i];
         var t_near = (bounds.min[i] - ray.origin[i]) * inv_ray_dir;
         var t_far = (bounds.max[i] - ray.origin[i]) * inv_ray_dir;
         if t_near > t_far {
-            let helper = t_near;
-            t_near = t_far;
-            t_far = helper;
+            swap(&t_near, &t_far);
         }
         t0 = max(t_near, t0);
         t1 = min(t_far, t1);
@@ -355,9 +358,7 @@ fn intersect_sphere(ray: Ray, sphere: Sphere) -> Intersection {
     var t0 = q / a;
     var t1 = c / q;
     if t0 > t1 {
-        let helper = t0;
-        t0 = t1;
-        t1 = helper;
+        swap(&t0, &t1);
     }
     if t0 > ray.tmax || t1 <= 0. { return Intersection(); }
     if t0 < 0. && t1 > ray.tmax { return Intersection(); }
@@ -383,4 +384,11 @@ fn add_camera_debug_spheres(ray: Ray, pixel: int2, radius: f32) {
     add_sphere(ray, pixel, Sphere(float3(1., 1., 0.) * distance, radius), float3(0., 1., 0.));
     add_sphere(ray, pixel, Sphere(float3(-1., 1., 0.) * distance, radius), float3(0., 0., 1.));
     add_sphere(ray, pixel, Sphere(float3(1., -1., 0.) * distance, radius), float3(0.5, 0.5, 0.));
+}
+
+// utils
+fn swap(a: ptr<function, f32, read_write>, b: ptr<function, f32, read_write>) {
+    let helper = *a;
+    *a = *b;
+    *b = helper;
 }

@@ -12,8 +12,9 @@ pub mod volume;
 pub mod dvr_playground {
     use std::{sync::Arc};
     use std::collections::HashSet;
+    use std::panic::resume_unwind;
     use bytemuck;
-    use glam::Vec2;
+    use glam::{Mat4, Vec2};
     use winit::{
         event::{
             ElementState,
@@ -28,6 +29,7 @@ pub mod dvr_playground {
         window::Window
     };
     use wgpu::util::DeviceExt;
+    use winit::event::Event::DeviceEvent;
     use crate::renderer::camera::{CameraController, Modifier};
     use crate::renderer::context::{GPUContext, ContextDescriptor};
     use crate::renderer::pass::GPUPass;
@@ -116,7 +118,7 @@ pub mod dvr_playground {
             }
         }
 
-        pub fn update(&self, view_matrix: &glam::Mat4) {
+        pub fn update(&self, view_matrix: &glam::Mat4, cam_mode: i32) {
             let resolution = Vec2::new(
                 self.window.inner_size().width as f32,
                 self.window.inner_size().height as f32,
@@ -124,14 +126,87 @@ pub mod dvr_playground {
 
             let raster_to_screen = crate::renderer::camera::compute_raster_to_screen(
                 resolution,
-                Some(crate::renderer::geometry::Bounds2D::new(resolution * -0.5, resolution * 0.5))
+                None,
+                // todo: so I want this for ortho but not for perspective
+                //Some(crate::renderer::geometry::Bounds2D::new(resolution * -0.5, resolution * 0.5))
+            );
+
+            let near = 0.0001 as f32;
+            let far = 1000.0 as f32;
+            let fov = f32::to_radians(45.);
+            let aspect_ratio = resolution.x / resolution.y;
+            let projection = match cam_mode {
+                1 => glam::Mat4::orthographic_rh(
+                    resolution.x * - 0.5, resolution.x * 0.5,
+                    resolution.y * -0.5, resolution.y * 0.5,
+                    near, far
+                ),
+                _ => glam::Mat4::perspective_rh(fov, aspect_ratio, near, far),
+            };
+            let projection_lh = glam::Mat4::perspective_lh(fov, aspect_ratio, near, far);
+
+            let f = far;
+            let n = near;
+            let inv_tan_ang = 1. / f32::tan(fov / 2.);
+            let pbrt_projection = glam::Mat4::from_scale(glam::Vec3::new(inv_tan_ang * (1. / aspect_ratio), inv_tan_ang, 1.))
+                .mul_mat4(&glam::Mat4::from_cols_array(&[
+                1. as f32, 0. as f32, 0. as f32, 0. as f32,
+                0. as f32, 1. as f32, 0. as f32, 0. as f32,
+                0. as f32, 0. as f32, f / (f - n) as f32, -f*n / (f - n) as f32,
+                0. as f32, 0. as f32, 1. as f32, 0. as f32
+            ]).transpose());
+            //log::info!("projection: \n{}\npbrt projection: \n{}\nprojection_lh::\n{}\ninv:\n{}\ninvpbrt:\n{}\n",projection, pbrt_projection, projection_lh,projection.inverse(), pbrt_projection.inverse());
+
+            let raster_to_camera = projection.inverse().mul_mat4(&raster_to_screen);
+
+            let upper_left = glam::Vec3::new(0., 0., 0.0);
+            let lower_left = glam::Vec3::new(0., resolution.y, 0.);
+            let center = glam::Vec3::new(resolution.x / 2., resolution.y / 2., 0.0);
+            let upper_right = glam::Vec3::new(resolution.x, 0., 0.0);
+            let lower_right = glam::Vec3::new(resolution.x, resolution.y, 0.0);
+
+            let transformed_center = raster_to_camera.transform_point3(center);
+            let a = transformed_center.length();
+            let g = (transformed_center - raster_to_camera.transform_point3(glam::Vec3::new(resolution.x / 2., resolution.y, 0.))).length();
+            let g2 = (transformed_center - raster_to_camera.transform_point3(glam::Vec3::new(resolution.x, resolution.y / 2., 0.))).length();
+            let fov2 = f32::atan((g/a));
+            let fov3 = f32::atan((g2/a));
+
+
+
+
+            log::info!("\
+            upper_left: {}\nupper_right: {}\ncenter: {}\nlower_left: {}\nlower_right: {}\
+            \n
+            in world:\n
+            upper_left: {}\nupper_right: {}\ncenter: {}\nlower_left: {}\nlower_right: {}\n\
+            \n\
+            camera origin (perspective): {}\n\
+            fov: {}\nfov2: {}\nfov3: {}\ng: {}\ng2: {}\nz: {}\n
+            ",
+                raster_to_camera.transform_point3(upper_left),
+                raster_to_camera.transform_point3(upper_right),
+                raster_to_camera.transform_point3(center),
+                raster_to_camera.transform_point3(lower_left),
+                raster_to_camera.transform_point3(lower_right),
+                view_matrix.transform_vector3(raster_to_camera.transform_point3(upper_left).normalize()),
+                view_matrix.transform_vector3(raster_to_camera.transform_point3(upper_right).normalize()),
+                view_matrix.transform_vector3(raster_to_camera.transform_point3(center).normalize()),
+                view_matrix.transform_vector3(raster_to_camera.transform_point3(lower_left).normalize()),
+                view_matrix.transform_vector3(raster_to_camera.transform_point3(lower_right).normalize()),
+                view_matrix.transform_point3(glam::Vec3::new(0., 0., 0.)),
+                fov.to_degrees(),
+                fov2.to_degrees(),
+                fov3.to_degrees(),
+                g,g2,1. / (f32::tan(f32::to_radians(45.)) / g)
             );
 
             let camera = crate::renderer::camera::CameraUniform::new(
                 *view_matrix,
-                glam::Mat4::IDENTITY,
-                raster_to_screen,
-                1
+                projection,
+                //raster_to_screen.mul_mat4(&projection.inverse()),
+                raster_to_camera, //raster_to_screen,
+                cam_mode as u32,
             );
 
             let uniforms = dvr::Uniforms::new(
@@ -153,10 +228,14 @@ pub mod dvr_playground {
         }
 
         pub fn run(dvr: Self, event_loop: EventLoop<()>) {
+            let distance_from_center = 50.;
             let mut left_mouse_pressed = false;
+            let mut view_matrix = 0;
+            let mut cam_mode = 0;
             let mut modifiers: HashSet<Modifier> = HashSet::new();
             let mut camera_controller = CameraController {
-                camera_position: glam::Vec3::new(1., 1., 1.) * -50.,
+                camera_position: glam::Vec3::new(1., 1., 1.) * distance_from_center,
+                center_position: glam::Vec3::new(0., 0., 0.,),
                 window_size: glam::Vec2::new(dvr.window.inner_size().width as f32, dvr.window.inner_size().height as f32),
                 ..Default::default()
             };
@@ -164,6 +243,7 @@ pub mod dvr_playground {
 
             let mut translation = glam::Vec3::new(0., 0., 0.);
             const TRANSLATION_SPEED: f32 = 0.1;
+            let mut y_angle = 0.;
 
             event_loop.run(move |event, _, control_flow| {
                 // force ownership by the closure
@@ -174,6 +254,19 @@ pub mod dvr_playground {
                 match event {
                     Event::RedrawEventsCleared => {
                         dvr.window.request_redraw();
+                    }
+                    Event::WindowEvent {
+                        event: WindowEvent::MouseWheel {
+                            device_id,
+                            delta: MouseScrollDelta::PixelDelta(delta),//: MouseScrollDelta::LineDelta(x_delta, ..),
+                            phase,
+                            ..
+                        },
+                        ..
+                    } => {
+                        // todo: wheel not recognized?
+                        log::info!("wheel {:?}", delta);
+                        camera_controller.wheel(delta.y as f32 / 2.);
                     }
                     Event::WindowEvent {
                         event: WindowEvent::MouseInput { state, button, .. },
@@ -221,12 +314,12 @@ pub mod dvr_playground {
                                     modifiers.remove(&Modifier::Ctrl);
                                 }
                             }
-                            VirtualKeyCode::D | VirtualKeyCode::Right => {
+                            VirtualKeyCode::D => {
                                 if state == ElementState::Pressed {
                                     translation.x -= TRANSLATION_SPEED;
                                 }
                             }
-                            VirtualKeyCode::A | VirtualKeyCode::Left => {
+                            VirtualKeyCode::A => {
                                 if state == ElementState::Pressed {
                                     translation.x += TRANSLATION_SPEED;
                                 }
@@ -251,6 +344,26 @@ pub mod dvr_playground {
                                     translation.z += TRANSLATION_SPEED;
                                 }
                             }
+                            VirtualKeyCode::Left => {
+                                if state == ElementState::Pressed {
+                                    y_angle -= TRANSLATION_SPEED;
+                                }
+                            }
+                            VirtualKeyCode::Right => {
+                                if state == ElementState::Pressed {
+                                    y_angle += TRANSLATION_SPEED;
+                                }
+                            }
+                            VirtualKeyCode::C => {
+                                if state == ElementState::Pressed {
+                                    view_matrix = (view_matrix + 1) % 3;
+                                }
+                            }
+                            VirtualKeyCode::X => {
+                                if state == ElementState::Pressed {
+                                    cam_mode = (cam_mode + 1) % 2;
+                                }
+                            }
                             _ => {}
                         }
                     }
@@ -261,37 +374,44 @@ pub mod dvr_playground {
                         },
                         ..
                     } => {
-                        camera_controller.mouse_move(
-                            glam::Vec2::new(position.x as f32, position.y as f32),
-                            if left_mouse_pressed {
-                                camera::MouseButton::Left
-                            } else {
-                                camera::MouseButton::Right
-                            },
-                            &modifiers
-                        );
-                    }
-                    Event::WindowEvent {
-                        event: WindowEvent::MouseWheel {
-                            delta: MouseScrollDelta::LineDelta(x_delta, ..),
-                            ..
-                        },
-                        ..
-                    } => {
-                        // todo: wheel not recognized?
-                        log::info!("wheel {}", x_delta);
-                        camera_controller.wheel(x_delta);
+                        let mouse_position = glam::Vec2::new(position.x as f32, position.y as f32);
+                        if left_mouse_pressed {
+                            camera_controller.mouse_move(
+                                mouse_position,
+                                camera::MouseButton::Left,
+                                &modifiers
+                            );
+                        } else {
+                            camera_controller.mouse_position = mouse_position;
+                        }
                     }
                     Event::RedrawRequested(_) => {
                         //log::info!("{:?}", camera_controller.matrix);
 
-                        log::info!("{} {} {}",
+                        log::info!("camera cam: {}, viewmode: {}, translation: {}, y_angle: {}",
+                            cam_mode,
+                            view_matrix,
                             translation,
-                            glam::Mat4::from_translation(translation),
-                            glam::Mat4::from_translation(translation).inverse(),
+                            y_angle
                         );
+                        let r = glam::Mat4::from_rotation_y(y_angle);
+                        let t = r.mul_mat4(&glam::Mat4::from_translation(translation));
+                        let view = match view_matrix {
+                            1 => camera_controller.matrix.inverse(),
+                            2 => glam::Mat4::from_translation(translation).inverse(),
+                            _ => {
+                                let center = glam::Vec3::new(0., 0., 0.);
+                                let eye = glam::Vec3::new(0., 0., 1.) * distance_from_center;
+                                glam::Mat4::look_at_rh(
+                                    t.project_point3(eye),
+                                    t.transform_point3(center),
+                                    glam::Vec3::new(0., 1., 0.)).inverse()
+                            }
+                        };
+                        dvr.update(&view, cam_mode);
+
                         //dvr.update(&glam::Mat4::from_translation(translation));
-                        dvr.update(&camera_controller.matrix.inverse());
+                        //dvr.update(&camera_controller.matrix.inverse());
 
                         let frame = match dvr.ctx.surface.as_ref().unwrap().get_current_texture() {
                             Ok(frame) => frame,
