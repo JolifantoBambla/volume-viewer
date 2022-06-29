@@ -72,9 +72,9 @@ struct Camera {
     // This field is only needed for surface rendering.
     projection: float4x4,
 
-    // Maps a point on the output image to a point on the camera's image plane.
-    // This field is only needed for ray-casting.
-    raster_to_camera: float4x4,
+    // The inverse of the `projection` matrix.
+    // (WGSL doesn't have a built-in function to compute the inverse of a matrix).
+    inverse_projection: float4x4,
 
     // The type of this camera:
     //  1:  Orthographic
@@ -89,6 +89,11 @@ struct Volume {
     // The size of the volume.
     // Note that this field has a size of 16 bytes to avoid alignment issues.
     @size(16) dimensions: float3,
+}
+
+struct VolumeBlock {
+    bounds: AABB,
+    // todo: some meta information about the volume block
 }
 
 // todo: come up with a better name...
@@ -152,10 +157,24 @@ fn transform_ray(ray: Ray, transform: float4x4) -> Ray {
 
 // todo: move this to a separate file that is included via a custom include mechanism
 
+fn raster_to_screen(pixel: float2, resolution: float2) -> float2 {
+    let aspect_ratio = resolution.x / resolution.y;
+    var screen_min = float2(-aspect_ratio, -1.);
+    var screen_max = float2( aspect_ratio,  1.);
+    if aspect_ratio < 1. {
+        var screen_min = float2(-1., -1. / aspect_ratio);
+        var screen_max = float2( 1.,  1. / aspect_ratio);
+    }
+    return float2(
+        pixel.x * ((screen_max.x - screen_min.x) / resolution.x) - screen_max.x,
+        pixel.y * ((screen_min.y - screen_max.y) / resolution.y) + screen_max.y
+    );
+}
+
 // Generates a ray in a common "world" space from a `Camera` instance.
-fn generate_camera_ray(camera: Camera, pixel: float2) -> Ray {
+fn generate_camera_ray(camera: Camera, pixel: float2, resolution: float2) -> Ray {
     let offset = 0.5;
-    let camera_point = (camera.raster_to_camera * float4(pixel + offset, 0., 1.)).xyz;
+    let camera_point = (camera.inverse_projection * float4(raster_to_screen(pixel + offset, resolution), 0., 1.)).xyz;
 
     var origin = float3();
     var direction = float3();
@@ -201,7 +220,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let volume_scale = float3(textureDimensions(volume_data));
 
     // generate a ray and transform it to the volume's space (i.e. where the volume is a unit cube with x in [0,1]^3)
-    var ray = generate_camera_ray(uniforms.camera, float2(pixel));
+    var ray = generate_camera_ray(uniforms.camera, float2(pixel), resolution);
     ray = transform_ray(ray, uniforms.world_to_object);
 
     // volume is [0,1]^3 -> all samples can be used directly as texture coordinates
@@ -212,11 +231,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
-    let start = ray_at(ray, intersection_record.t_min);
+    let start = ray_at(ray, max(0., intersection_record.t_min));
     let end   = ray_at(ray, intersection_record.t_max);
 
     let distance = distance(start * volume_scale, end * volume_scale);
     let num_steps = i32(distance / relative_step_size + 0.5);
+
+    let max_distance = length(max(float3(1.) * volume_scale, float3(0.)));
 
     // early out if there is not a single sample within the volume
     if num_steps < 1 {
@@ -264,20 +285,31 @@ fn dvr(start: float3, step: float3, num_steps: i32, ray: Ray) -> float4 {
     return color;
 }
 
-fn central_difference(x: float3, step: float3) -> float3 {
-    var central_difference = float3();
+fn central_differences(x: float3, step: float3) -> float3 {
+    var central_differences = float3();
     for (var i = 0; i < 3; i += 1) {
         let h = step[i];
         var offset = float3();
         offset[i] = h;
-        central_difference[i] = sample(x - offset) - sample(x + offset) / (2. * h);
+        central_differences[i] = sample(x - offset) - sample(x + offset) / (2. * h);
     }
-    return central_difference;
+    return central_differences;
+}
+
+fn max_in_neighborhood(x: float3, step: float3) -> f32 {
+    var max_value = 0.;
+    for (var i = 0; i < 3; i += 1) {
+        let h = step[i];
+        var offset = float3();
+        offset[i] = h;
+        max_value = max(max_value, max(sample(x - offset), sample(x + offset)));
+    }
+    return max_value;
 }
 
 /// Computes the normal at point x from the central difference.
 fn compute_volume_normal(x: float3, step: float3, view: float3) -> float3 {
-    let normal = normalize(central_difference(x, step));
+    let normal = normalize(central_differences(x, step));
     // flip normal towards viewer if necessary
     let front_or_back = 2. * f32(dot(normal, view) > 0.) - 1.;
     return front_or_back * normal;
