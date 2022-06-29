@@ -35,6 +35,7 @@ pub mod dvr_playground {
     use crate::renderer::pass::GPUPass;
     use crate::renderer::passes::{dvr, present_to_screen};
     use crate::renderer::{camera, resources};
+    use crate::renderer::geometry::Bounds3D;
     use crate::renderer::volume::RawVolumeBlock;
 
     pub struct DVR {
@@ -147,18 +148,26 @@ pub mod dvr_playground {
 
             const TRANSLATION_SPEED: f32 = 5.0;
 
+            const NEAR: f32 = 0.0001;
+            const FAR: f32 = 1000.0;
+            let perspective = camera::Projection::new_perspective(
+                f32::to_radians(45.),
+                dvr.window.inner_size().width as f32 / dvr.window.inner_size().height as f32,
+                NEAR,
+                FAR,
+            );
+            let orthographic = camera::Projection::new_orthographic(Bounds3D::new(
+                (resolution * -0.5).extend(NEAR),
+                (resolution * -0.5).extend(FAR),
+            ));
+
             let mut camera = camera::Camera::new(
                 camera::CameraView::new(
                     Vec3::new(1., 1., 1.) * distance_from_center,
                     Vec3::new(0., 0., 0.),
                     Vec3::new(0., 1., 0.),
                 ),
-                camera::Projection::new_perspective(
-                    f32::to_radians(45.),
-                    dvr.window.inner_size().width as f32 / dvr.window.inner_size().height as f32,
-                    0.0001,
-                    1000.,
-                ),
+                perspective.clone(),
             );
             let mut last_mouse_position = Vec2::new(0., 0.);
             let mut left_mouse_pressed = false;
@@ -214,6 +223,13 @@ pub mod dvr_playground {
                             VirtualKeyCode::A => camera.view.move_left(TRANSLATION_SPEED),
                             VirtualKeyCode::W | VirtualKeyCode::Up => camera.view.move_forward(TRANSLATION_SPEED),
                             VirtualKeyCode::S | VirtualKeyCode::Down => camera.view.move_backward(TRANSLATION_SPEED),
+                            VirtualKeyCode::C => {
+                                if camera.projection().is_orthographic() {
+                                    camera.set_projection(perspective.clone());
+                                } else {
+                                    camera.set_projection(orthographic.clone());
+                                }
+                            }
                             _ => {}
                         }
                     }

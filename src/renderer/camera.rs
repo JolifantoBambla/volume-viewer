@@ -217,6 +217,7 @@ impl ToTransformUniform for CameraView {
     }
 }
 
+#[derive(Clone)]
 #[readonly::make]
 pub struct Projection {
     projection: Mat4,
@@ -224,7 +225,7 @@ pub struct Projection {
 }
 
 impl Projection {
-    pub fn new_orthographic(view: CameraView, frustum: Bounds3D) -> Self {
+    pub fn new_orthographic(frustum: Bounds3D) -> Self {
         let projection = Mat4::orthographic_rh(
             frustum.min.x, frustum.max.x,
             frustum.min.y, frustum.max.y,
@@ -254,7 +255,7 @@ impl Projection {
 }
 
 pub struct Camera {
-    pub(crate) view: CameraView,
+    pub view: CameraView,
     projection: Projection,
 }
 
