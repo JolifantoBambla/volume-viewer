@@ -109,6 +109,8 @@ async fn make_dvr_example(
     window: winit::window::Window,
     event_loop: winit::event_loop::EventLoop<()>,
 ) -> JsValue {
+    shared_worker().await;
+
     // preprocess volume
     let volume_max = *data.iter().max().unwrap() as f32;
     let volume = RawVolumeBlock::new(
@@ -152,6 +154,12 @@ async fn volume_example(data: Vec<u16>, shape: Vec<u32>, example: Examples) {
         #[wasm_bindgen(catch, js_namespace = Function, js_name = "prototype.call.call")]
         fn call_catch(this: &JsValue) -> Result<(), JsValue>;
     }
+}
+
+#[wasm_bindgen(module = "/loader-interface.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = "sharedWorker")]
+    async fn shared_worker() -> JsValue;
 }
 
 // Test device sharing between WASM and JS context, could be useful at some point
