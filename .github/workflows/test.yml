@@ -29,7 +29,7 @@ jobs:
         crate: wasm-pack
         version: 0.9.1
         use-tool-cache: true
-    - uses: action-rs/clippy-check@v1
+    - uses: actions-rs/clippy-check@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         args: --all-features -p volume-viewer -- --no-deps
