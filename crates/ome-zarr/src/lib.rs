@@ -1,7 +1,7 @@
 pub mod zarr_v2 {
-    use std::collections::HashMap;
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
     use serde_json::Value;
+    use std::collections::HashMap;
 
     #[derive(Serialize, Deserialize)]
     pub struct Compressor {
@@ -91,7 +91,6 @@ pub mod zarr_v2 {
         /// SHOULD where possible produce a directory-like structure.
         #[serde(default)]
         pub dimension_separator: DimensionSeparator,
-
         // Other keys SHOULD NOT be present within the metadata object and SHOULD be ignored by
         // implementations.
     }

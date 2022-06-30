@@ -1,6 +1,6 @@
-use wgpu::{Device, Extent3d, TextureView, Queue};
-use wgpu::util::DeviceExt;
 use crate::renderer::volume::RawVolumeBlock;
+use wgpu::util::DeviceExt;
+use wgpu::{Device, Extent3d, Queue, TextureView};
 
 #[readonly::make]
 pub struct Texture {
@@ -35,7 +35,12 @@ impl Texture {
         }
     }
 
-    pub fn create_texture_3d(device: &Device, queue: &Queue, data: &[u8], extent: Extent3d) -> Self {
+    pub fn create_texture_3d(
+        device: &Device,
+        queue: &Queue,
+        data: &[u8],
+        extent: Extent3d,
+    ) -> Self {
         let texture = device.create_texture_with_data(
             queue,
             &wgpu::TextureDescriptor {
@@ -58,6 +63,11 @@ impl Texture {
     }
 
     pub fn from_raw_volume_block(device: &Device, queue: &Queue, volume: &RawVolumeBlock) -> Self {
-        Texture::create_texture_3d(device, queue, volume.data.as_slice(), volume.create_extent())
+        Texture::create_texture_3d(
+            device,
+            queue,
+            volume.data.as_slice(),
+            volume.create_extent(),
+        )
     }
 }

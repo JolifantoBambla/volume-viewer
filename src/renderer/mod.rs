@@ -10,30 +10,25 @@ pub mod volume;
 // todo: refactor this into a proper module
 // this is just a small module where I test stuff
 pub mod dvr_playground {
-    use std::{sync::Arc};
-    use std::collections::HashSet;
+    use crate::renderer::camera::{Camera, CameraView, Projection};
+    use crate::renderer::context::{ContextDescriptor, GPUContext};
+    use crate::renderer::geometry::Bounds3D;
+    use crate::renderer::pass::GPUPass;
+    use crate::renderer::passes::{dvr, present_to_screen};
+    use crate::renderer::resources;
+    use crate::renderer::volume::RawVolumeBlock;
     use bytemuck;
-    use glam::Vec2;
+    use glam::{Vec2, Vec3};
+    use std::sync::Arc;
+    use wgpu::util::DeviceExt;
     use winit::{
         event::{
-            ElementState,
-            Event,
-            KeyboardInput,
-            MouseButton,
-            MouseScrollDelta,
-            VirtualKeyCode,
+            ElementState, Event, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode,
             WindowEvent,
         },
         event_loop::EventLoop,
-        window::Window
+        window::Window,
     };
-    use wgpu::util::DeviceExt;
-    use crate::renderer::camera::{CameraController, Modifier};
-    use crate::renderer::context::{GPUContext, ContextDescriptor};
-    use crate::renderer::pass::GPUPass;
-    use crate::renderer::passes::{dvr, present_to_screen};
-    use crate::renderer::{camera, resources};
-    use crate::renderer::volume::RawVolumeBlock;
 
     pub struct DVR {
         window: winit::window::Window,
@@ -55,8 +50,13 @@ pub mod dvr_playground {
         pub async fn new(window: Window, volume: RawVolumeBlock) -> Self {
             let ctx = Arc::new(GPUContext::new(&ContextDescriptor::default(), Some(&window)).await);
 
-            let volume_texture = resources::Texture::from_raw_volume_block(&ctx.device, &ctx.queue, &volume);
-            let storage_texture = resources::Texture::create_storage_texture(&ctx.device, window.inner_size().width, window.inner_size().height);
+            let volume_texture =
+                resources::Texture::from_raw_volume_block(&ctx.device, &ctx.queue, &volume);
+            let storage_texture = resources::Texture::create_storage_texture(
+                &ctx.device,
+                window.inner_size().width,
+                window.inner_size().height,
+            );
 
             let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
                 mag_filter: wgpu::FilterMode::Linear,
@@ -67,35 +67,35 @@ pub mod dvr_playground {
             // the volume is a unit cube ([0,1]^3)
             // we translate it s.t. its center is the origin and scale it to its original dimensions
             // todo: scale should come from volume meta data (-> todo: add meta data to volume)
-            let volume_transform = glam::Mat4::from_scale(volume.create_vec3())
-                .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(-0.5, -0.5, -0.5)));
+            let volume_transform = glam::Mat4::from_scale(volume.create_vec3()).mul_mat4(
+                &glam::Mat4::from_translation(glam::Vec3::new(-0.5, -0.5, -0.5)),
+            );
 
             let uniforms = dvr::Uniforms {
                 world_to_object: volume_transform,
                 ..Default::default()
             };
-            let uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::bytes_of(&uniforms),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+            let uniform_buffer = ctx
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::bytes_of(&uniforms),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
 
             let z_slice_pass = dvr::DVR::new(&ctx);
             let full_screen_pass = present_to_screen::PresentToScreen::new(&ctx);
-            let z_slice_bind_group = z_slice_pass.create_bind_group(
-                dvr::Resources {
-                    volume: &volume_texture.view,
-                    volume_sampler: &sampler,
-                    output: &storage_texture.view,
-                    uniforms: &uniform_buffer,
-                }
-            );
-            let full_screen_bind_group = full_screen_pass.create_bind_group(
-                present_to_screen::Resources {
+            let z_slice_bind_group = z_slice_pass.create_bind_group(dvr::Resources {
+                volume: &volume_texture.view,
+                volume_sampler: &sampler,
+                output: &storage_texture.view,
+                uniforms: &uniform_buffer,
+            });
+            let full_screen_bind_group =
+                full_screen_pass.create_bind_group(present_to_screen::Resources {
                     sampler: &sampler,
                     source_texture: &storage_texture.view,
-                }
-            );
+                });
 
             let dvr_result_extent = wgpu::Extent3d {
                 width: window.inner_size().width,
@@ -116,54 +116,62 @@ pub mod dvr_playground {
             }
         }
 
-        pub fn update(&self, view_matrix: &glam::Mat4) {
-            let resolution = Vec2::new(
-                self.window.inner_size().width as f32,
-                self.window.inner_size().height as f32,
-            );
-
-            let raster_to_screen = crate::renderer::camera::compute_raster_to_screen(
-                resolution,
-                Some(crate::renderer::geometry::Bounds2D::new(resolution * -0.5, resolution * 0.5))
-            );
-
-            let camera = crate::renderer::camera::CameraUniform::new(
-                *view_matrix,
-                glam::Mat4::IDENTITY,
-                raster_to_screen,
-                1
-            );
-
-            let uniforms = dvr::Uniforms::new(
-                camera,
-                self.volume_transform,
-            );
-            self.ctx.queue.write_buffer(
-                &self.uniform_buffer,
-                0,
-                bytemuck::bytes_of(&uniforms),
-            );
+        pub fn update(&self, camera: &Camera) {
+            let uniforms = dvr::Uniforms::new(camera.create_uniform(), self.volume_transform);
+            self.ctx
+                .queue
+                .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
         }
 
         pub fn render(&self, canvas_view: &wgpu::TextureView) {
-            let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            self.dvr_pass.encode(&mut encoder, &self.dvr_bind_group, &self.dvr_result_extent);
-            self.present_to_screen.encode(&mut encoder, &self.present_to_screen_bind_group, canvas_view);
+            let mut encoder = self
+                .ctx
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            self.dvr_pass
+                .encode(&mut encoder, &self.dvr_bind_group, &self.dvr_result_extent);
+            self.present_to_screen.encode(
+                &mut encoder,
+                &self.present_to_screen_bind_group,
+                canvas_view,
+            );
             self.ctx.queue.submit(Some(encoder.finish()));
         }
 
         pub fn run(dvr: Self, event_loop: EventLoop<()>) {
-            let mut left_mouse_pressed = false;
-            let mut modifiers: HashSet<Modifier> = HashSet::new();
-            let mut camera_controller = CameraController {
-                camera_position: glam::Vec3::new(1., 1., 1.) * -50.,
-                window_size: glam::Vec2::new(dvr.window.inner_size().width as f32, dvr.window.inner_size().height as f32),
-                ..Default::default()
-            };
-            camera_controller.update();
+            let distance_from_center = 50.;
 
-            let mut translation = glam::Vec3::new(0., 0., 0.);
-            const TRANSLATION_SPEED: f32 = 0.1;
+            let resolution = Vec2::new(
+                dvr.window.inner_size().width as f32,
+                dvr.window.inner_size().height as f32,
+            );
+
+            const TRANSLATION_SPEED: f32 = 5.0;
+
+            const NEAR: f32 = 0.0001;
+            const FAR: f32 = 1000.0;
+            let perspective = Projection::new_perspective(
+                f32::to_radians(45.),
+                dvr.window.inner_size().width as f32 / dvr.window.inner_size().height as f32,
+                NEAR,
+                FAR,
+            );
+            let orthographic = Projection::new_orthographic(Bounds3D::new(
+                (resolution * -0.5).extend(NEAR),
+                (resolution * 0.5).extend(FAR),
+            ));
+
+            let mut camera = Camera::new(
+                CameraView::new(
+                    Vec3::new(1., 1., 1.) * distance_from_center,
+                    Vec3::new(0., 0., 0.),
+                    Vec3::new(0., 1., 0.),
+                ),
+                perspective.clone(),
+            );
+            let mut last_mouse_position = Vec2::new(0., 0.);
+            let mut left_mouse_pressed = false;
+            let mut right_mouse_pressed = false;
 
             event_loop.run(move |event, _, control_flow| {
                 // force ownership by the closure
@@ -171,133 +179,94 @@ pub mod dvr_playground {
 
                 *control_flow = winit::event_loop::ControlFlow::Poll;
 
+                // todo: refactor input handling
                 match event {
                     Event::RedrawEventsCleared => {
                         dvr.window.request_redraw();
                     }
                     Event::WindowEvent {
-                        event: WindowEvent::MouseInput { state, button, .. },
-                        ..
-                    } => {
-                        if button == MouseButton::Left {
-                            if state == ElementState::Pressed {
-                                left_mouse_pressed = true;
-                            } else if state == ElementState::Released {
-                                left_mouse_pressed = false;
-                            }
-                        }
-                    }
-                    Event::WindowEvent {
-                        event: WindowEvent::KeyboardInput {
-                            input: KeyboardInput {
-                                virtual_keycode: Some(virtual_keycode),
-                                state,
+                        event:
+                            WindowEvent::MouseWheel {
+                                delta: MouseScrollDelta::PixelDelta(delta),
                                 ..
                             },
-                            ..
-                        },
                         ..
                     } => {
-                        //log::info!("{:?}", virtual_keycode);
-                        match virtual_keycode {
-                            VirtualKeyCode::LShift | VirtualKeyCode::RShift => {
-                                if state == ElementState::Pressed {
-                                    modifiers.insert(Modifier::Shift);
-                                } else if state == ElementState::Released {
-                                    modifiers.remove(&Modifier::Shift);
-                                }
+                        camera.view.move_forward(
+                            (f64::min(delta.y.abs(), 1.) * delta.y.signum()) as f32
+                                * TRANSLATION_SPEED,
+                        );
+                    }
+                    Event::WindowEvent {
+                        event: WindowEvent::MouseInput { state, button, .. },
+                        ..
+                    } => match button {
+                        MouseButton::Left => {
+                            left_mouse_pressed = state == ElementState::Pressed;
+                        }
+                        MouseButton::Right => {
+                            right_mouse_pressed = state == ElementState::Pressed;
+                        }
+                        _ => {}
+                    },
+                    Event::WindowEvent {
+                        event:
+                            WindowEvent::KeyboardInput {
+                                input:
+                                    KeyboardInput {
+                                        virtual_keycode: Some(virtual_keycode),
+                                        state: ElementState::Pressed,
+                                        ..
+                                    },
+                                ..
+                            },
+                        ..
+                    } => match virtual_keycode {
+                        VirtualKeyCode::D => camera.view.move_right(TRANSLATION_SPEED),
+                        VirtualKeyCode::A => camera.view.move_left(TRANSLATION_SPEED),
+                        VirtualKeyCode::W | VirtualKeyCode::Up => {
+                            camera.view.move_forward(TRANSLATION_SPEED)
+                        }
+                        VirtualKeyCode::S | VirtualKeyCode::Down => {
+                            camera.view.move_backward(TRANSLATION_SPEED)
+                        }
+                        VirtualKeyCode::C => {
+                            if camera.projection().is_orthographic() {
+                                camera.set_projection(perspective.clone());
+                            } else {
+                                camera.set_projection(orthographic.clone());
                             }
-                            VirtualKeyCode::LAlt | VirtualKeyCode::RAlt => {
-                                if state == ElementState::Pressed {
-                                    modifiers.insert(Modifier::Alt);
-                                } else if state == ElementState::Released {
-                                    modifiers.remove(&Modifier::Alt);
-                                }
-                            }
-                            VirtualKeyCode::LControl | VirtualKeyCode::RControl => {
-                                if state == ElementState::Pressed {
-                                    modifiers.insert(Modifier::Ctrl);
-                                } else if state == ElementState::Released {
-                                    modifiers.remove(&Modifier::Ctrl);
-                                }
-                            }
-                            VirtualKeyCode::D | VirtualKeyCode::Right => {
-                                if state == ElementState::Pressed {
-                                    translation.x -= TRANSLATION_SPEED;
-                                }
-                            }
-                            VirtualKeyCode::A | VirtualKeyCode::Left => {
-                                if state == ElementState::Pressed {
-                                    translation.x += TRANSLATION_SPEED;
-                                }
-                            }
-                            VirtualKeyCode::W => {
-                                if state == ElementState::Pressed {
-                                    translation.y -= TRANSLATION_SPEED;
-                                }
-                            }
-                            VirtualKeyCode::S => {
-                                if state == ElementState::Pressed {
-                                    translation.y += TRANSLATION_SPEED;
-                                }
-                            }
-                            VirtualKeyCode::Up => {
-                                if state == ElementState::Pressed {
-                                    translation.z -= TRANSLATION_SPEED;
-                                }
-                            }
-                            VirtualKeyCode::Down => {
-                                if state == ElementState::Pressed {
-                                    translation.z += TRANSLATION_SPEED;
-                                }
-                            }
-                            _ => {}
+                        }
+                        _ => {}
+                    },
+                    Event::WindowEvent {
+                        event: WindowEvent::CursorMoved { position, .. },
+                        ..
+                    } => {
+                        let mouse_position = glam::Vec2::new(position.x as f32, position.y as f32);
+                        let delta = (mouse_position - last_mouse_position) / resolution;
+                        last_mouse_position = mouse_position;
+
+                        if left_mouse_pressed {
+                            camera.view.orbit(delta, false);
+                        } else if right_mouse_pressed {
+                            let translation = delta * TRANSLATION_SPEED * 20.;
+                            camera.view.move_right(translation.x);
+                            camera.view.move_down(translation.y);
                         }
                     }
-                    Event::WindowEvent {
-                        event: WindowEvent::CursorMoved {
-                            position,
-                            ..
-                        },
-                        ..
-                    } => {
-                        camera_controller.mouse_move(
-                            glam::Vec2::new(position.x as f32, position.y as f32),
-                            if left_mouse_pressed {
-                                camera::MouseButton::Left
-                            } else {
-                                camera::MouseButton::Right
-                            },
-                            &modifiers
-                        );
-                    }
-                    Event::WindowEvent {
-                        event: WindowEvent::MouseWheel {
-                            delta: MouseScrollDelta::LineDelta(x_delta, ..),
-                            ..
-                        },
-                        ..
-                    } => {
-                        // todo: wheel not recognized?
-                        log::info!("wheel {}", x_delta);
-                        camera_controller.wheel(x_delta);
-                    }
                     Event::RedrawRequested(_) => {
-                        //log::info!("{:?}", camera_controller.matrix);
-
-                        log::info!("{} {} {}",
-                            translation,
-                            glam::Mat4::from_translation(translation),
-                            glam::Mat4::from_translation(translation).inverse(),
-                        );
-                        //dvr.update(&glam::Mat4::from_translation(translation));
-                        dvr.update(&camera_controller.matrix.inverse());
+                        dvr.update(&camera);
 
                         let frame = match dvr.ctx.surface.as_ref().unwrap().get_current_texture() {
                             Ok(frame) => frame,
                             Err(_) => {
-                                dvr.ctx.surface.as_ref().unwrap().configure(&dvr.ctx.device, dvr.ctx.surface_configuration.as_ref().unwrap());
-                                dvr.ctx.surface
+                                dvr.ctx.surface.as_ref().unwrap().configure(
+                                    &dvr.ctx.device,
+                                    dvr.ctx.surface_configuration.as_ref().unwrap(),
+                                );
+                                dvr.ctx
+                                    .surface
                                     .as_ref()
                                     .unwrap()
                                     .get_current_texture()
@@ -322,17 +291,17 @@ pub mod dvr_playground {
 // todo: remove
 // this is just a small module where I test stuff
 pub mod playground {
-    use std::{borrow::Cow, sync::Arc};
+    use crate::renderer::context::{ContextDescriptor, GPUContext};
+    use crate::renderer::pass::GPUPass;
+    use crate::renderer::passes::{normalize_z_slice, present_to_screen};
     use bytemuck;
+    use std::{borrow::Cow, sync::Arc};
+    use wgpu::util::DeviceExt;
     use winit::{
         event::{self},
         event_loop::EventLoop,
-        window::Window
+        window::Window,
     };
-    use wgpu::util::DeviceExt;
-    use crate::renderer::context::{GPUContext, ContextDescriptor};
-    use crate::renderer::pass::GPUPass;
-    use crate::renderer::passes::{normalize_z_slice, present_to_screen};
 
     pub struct FullScreenPass {
         bind_group_layout: wgpu::BindGroupLayout,
@@ -341,32 +310,42 @@ pub mod playground {
     }
 
     impl FullScreenPass {
-        pub fn new(texture_view: &wgpu::TextureView, sampler: &wgpu::Sampler, ctx: &GPUContext) -> Self {
-            let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("full_screen_quad.wgsl"))),
-            });
-            let pipeline = ctx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: None, //Some(&full_screen_pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader_module,
-                    entry_point: "vert_main",
-                    buffers: &[]
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader_module,
-                    entry_point: "frag_main",
-                    targets: &[ctx.surface_configuration.as_ref().unwrap().format.into()],
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    ..Default::default()
-                },
-                depth_stencil: None,
-                multisample: Default::default(),
-                multiview: None
-            });
+        pub fn new(
+            texture_view: &wgpu::TextureView,
+            sampler: &wgpu::Sampler,
+            ctx: &GPUContext,
+        ) -> Self {
+            let shader_module = ctx
+                .device
+                .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                    label: None,
+                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
+                        "full_screen_quad.wgsl"
+                    ))),
+                });
+            let pipeline = ctx
+                .device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: None,
+                    layout: None, //Some(&full_screen_pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &shader_module,
+                        entry_point: "vert_main",
+                        buffers: &[],
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader_module,
+                        entry_point: "frag_main",
+                        targets: &[ctx.surface_configuration.as_ref().unwrap().format.into()],
+                    }),
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList,
+                        ..Default::default()
+                    },
+                    depth_stencil: None,
+                    multisample: Default::default(),
+                    multiview: None,
+                });
             let bind_group_layout = pipeline.get_bind_group_layout(0);
             let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
@@ -379,8 +358,8 @@ pub mod playground {
                     wgpu::BindGroupEntry {
                         binding: 1,
                         resource: wgpu::BindingResource::TextureView(texture_view),
-                    }
-                ]
+                    },
+                ],
             });
             Self {
                 bind_group_layout,
@@ -389,7 +368,12 @@ pub mod playground {
             }
         }
 
-        pub fn update_bind_group(&mut self, texture_view: &wgpu::TextureView, sampler: &wgpu::Sampler, ctx: &GPUContext) {
+        pub fn update_bind_group(
+            &mut self,
+            texture_view: &wgpu::TextureView,
+            sampler: &wgpu::Sampler,
+            ctx: &GPUContext,
+        ) {
             self.bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
                 layout: &self.bind_group_layout,
@@ -401,12 +385,16 @@ pub mod playground {
                     wgpu::BindGroupEntry {
                         binding: 1,
                         resource: wgpu::BindingResource::TextureView(texture_view),
-                    }
-                ]
+                    },
+                ],
             });
         }
 
-        pub fn add_to_command(&self, command_encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView) {
+        pub fn add_to_command(
+            &self,
+            command_encoder: &mut wgpu::CommandEncoder,
+            view: &wgpu::TextureView,
+        ) {
             let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
                 color_attachments: &[wgpu::RenderPassColorAttachment {
@@ -417,12 +405,12 @@ pub mod playground {
                             r: 0.0,
                             g: 0.0,
                             b: 0.0,
-                            a: 1.0
+                            a: 1.0,
                         }),
-                        store: true
-                    }
+                        store: true,
+                    },
                 }],
-                depth_stencil_attachment: None
+                depth_stencil_attachment: None,
             });
             rpass.set_pipeline(&self.pipeline);
             rpass.set_bind_group(0, &self.bind_group, &[]);
@@ -439,17 +427,29 @@ pub mod playground {
     }
 
     impl EdgeDetectPass {
-        pub fn new(input_texture_view: &wgpu::TextureView, output_texture_view: &wgpu::TextureView, input_texture_width: u32, input_texture_height: u32, ctx: &GPUContext) -> Self {
-            let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("edgedetect.wgsl"))),
-            });
-            let pipeline = ctx.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: None,
-                layout: None,
-                module: &shader_module,
-                entry_point: "main",
-            });
+        pub fn new(
+            input_texture_view: &wgpu::TextureView,
+            output_texture_view: &wgpu::TextureView,
+            input_texture_width: u32,
+            input_texture_height: u32,
+            ctx: &GPUContext,
+        ) -> Self {
+            let shader_module = ctx
+                .device
+                .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                    label: None,
+                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
+                        "edgedetect.wgsl"
+                    ))),
+                });
+            let pipeline = ctx
+                .device
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: None,
+                    layout: None,
+                    module: &shader_module,
+                    entry_point: "main",
+                });
             let bind_group_layout = pipeline.get_bind_group_layout(0);
             let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
@@ -462,7 +462,7 @@ pub mod playground {
                     wgpu::BindGroupEntry {
                         binding: 1,
                         resource: wgpu::BindingResource::TextureView(output_texture_view),
-                    }
+                    },
                 ],
             });
             Self {
@@ -470,11 +470,18 @@ pub mod playground {
                 bind_group,
                 pipeline,
                 input_texture_width,
-                input_texture_height
+                input_texture_height,
             }
         }
 
-        pub fn update_bind_group(&mut self, input_texture_view: &wgpu::TextureView, output_texture_view: &wgpu::TextureView, input_texture_width: u32, input_texture_height: u32, ctx: &GPUContext) {
+        pub fn update_bind_group(
+            &mut self,
+            input_texture_view: &wgpu::TextureView,
+            output_texture_view: &wgpu::TextureView,
+            input_texture_width: u32,
+            input_texture_height: u32,
+            ctx: &GPUContext,
+        ) {
             self.bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
                 layout: &self.bind_group_layout,
@@ -486,7 +493,7 @@ pub mod playground {
                     wgpu::BindGroupEntry {
                         binding: 1,
                         resource: wgpu::BindingResource::TextureView(output_texture_view),
-                    }
+                    },
                 ],
             });
             self.input_texture_width = input_texture_width;
@@ -494,15 +501,24 @@ pub mod playground {
         }
 
         pub fn add_to_command(&self, command_encoder: &mut wgpu::CommandEncoder) {
-            let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            let mut cpass =
+                command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
             cpass.set_pipeline(&self.pipeline);
             cpass.set_bind_group(0, &self.bind_group, &[]);
             cpass.insert_debug_marker("compute collatz iterations");
-            cpass.dispatch(self.input_texture_width / 16, self.input_texture_height / 16, 1);
+            cpass.dispatch(
+                self.input_texture_width / 16,
+                self.input_texture_height / 16,
+                1,
+            );
         }
     }
 
-    fn create_storage_texture(device: &wgpu::Device, width: u32, height: u32) -> (wgpu::Texture, wgpu::TextureView) {
+    fn create_storage_texture(
+        device: &wgpu::Device,
+        width: u32,
+        height: u32,
+    ) -> (wgpu::Texture, wgpu::TextureView) {
         let texture_extent = wgpu::Extent3d {
             width,
             height,
@@ -522,7 +538,11 @@ pub mod playground {
     }
 
     // let's see if this works - data is u16, but we'll get the u8 array buffer instead
-    pub fn create_volume_texture(texels: &[u32], extent: wgpu::Extent3d, ctx: &GPUContext) -> Texture {
+    pub fn create_volume_texture(
+        texels: &[u32],
+        extent: wgpu::Extent3d,
+        ctx: &GPUContext,
+    ) -> Texture {
         let texture = ctx.device.create_texture_with_data(
             &ctx.queue,
             &wgpu::TextureDescriptor {
@@ -534,13 +554,13 @@ pub mod playground {
                 format: wgpu::TextureFormat::R32Uint,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             },
-            bytemuck::cast_slice(texels),//bytemuck::cast_slice::<u32,u8>(bytemuck::cast_slice::<u16, u32>(texels))
+            bytemuck::cast_slice(texels), //bytemuck::cast_slice::<u32,u8>(bytemuck::cast_slice::<u16, u32>(texels))
         );
         let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         Texture {
             texture,
-            view: texture_view
+            view: texture_view,
         }
     }
 
@@ -554,7 +574,12 @@ pub mod playground {
             let stride = (self.shape[1] * self.shape[2]) as usize;
             let mut result: Vec<u32> = Vec::with_capacity(self.shape[0] as _);
             for i in 0..result.capacity() {
-                result.push(*self.data[i*stride..(i+1)*stride].iter().max().unwrap());
+                result.push(
+                    *self.data[i * stride..(i + 1) * stride]
+                        .iter()
+                        .max()
+                        .unwrap(),
+                );
             }
             result
         }
@@ -597,11 +622,13 @@ pub mod playground {
                 slice: z_slice,
                 max: z_max as f32,
             };
-            let z_slice_uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::bytes_of(&z_slice_uniforms),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+            let z_slice_uniform_buffer =
+                ctx.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: None,
+                        contents: bytemuck::bytes_of(&z_slice_uniforms),
+                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    });
 
             let tex_width = volume.shape[2];
             let tex_height = volume.shape[1];
@@ -611,12 +638,13 @@ pub mod playground {
                 wgpu::Extent3d {
                     width: tex_width,
                     height: tex_height,
-                    depth_or_array_layers: volume.shape[0]
+                    depth_or_array_layers: volume.shape[0],
                 },
-                &ctx
+                &ctx,
             );
 
-            let (_, storage_texture_view) = create_storage_texture(&ctx.device, tex_width, tex_height);
+            let (_, storage_texture_view) =
+                create_storage_texture(&ctx.device, tex_width, tex_height);
 
             let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
                 mag_filter: wgpu::FilterMode::Linear,
@@ -626,19 +654,16 @@ pub mod playground {
 
             let z_slice_pass = normalize_z_slice::NormalizeZSlice::new(&ctx);
             let full_screen_pass = present_to_screen::PresentToScreen::new(&ctx);
-            let z_slice_bind_group = z_slice_pass.create_bind_group(
-                normalize_z_slice::Resources {
-                    volume: &volume_texture.view,
-                    output: &storage_texture_view,
-                    uniforms: &z_slice_uniform_buffer,
-                }
-            );
-            let full_screen_bind_group = full_screen_pass.create_bind_group(
-                present_to_screen::Resources {
+            let z_slice_bind_group = z_slice_pass.create_bind_group(normalize_z_slice::Resources {
+                volume: &volume_texture.view,
+                output: &storage_texture_view,
+                uniforms: &z_slice_uniform_buffer,
+            });
+            let full_screen_bind_group =
+                full_screen_pass.create_bind_group(present_to_screen::Resources {
                     sampler: &sampler,
                     source_texture: &storage_texture_view,
-                }
-            );
+                });
 
             Self {
                 window,
@@ -653,8 +678,8 @@ pub mod playground {
                 volume_extent: wgpu::Extent3d {
                     width: tex_width,
                     height: tex_height,
-                    depth_or_array_layers: volume.shape[0]
-                }
+                    depth_or_array_layers: volume.shape[0],
+                },
             }
         }
 
@@ -672,9 +697,14 @@ pub mod playground {
         }
 
         pub fn render(&self, canvas_view: &wgpu::TextureView) {
-            let mut encoder = self.ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            self.z_slice_pass.encode(&mut encoder, &self.z_slice_bind_group, &self.volume_extent);
-            self.full_screen_pass.encode(&mut encoder, &self.full_screen_bind_group, canvas_view);
+            let mut encoder = self
+                .ctx
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            self.z_slice_pass
+                .encode(&mut encoder, &self.z_slice_bind_group, &self.volume_extent);
+            self.full_screen_pass
+                .encode(&mut encoder, &self.full_screen_bind_group, canvas_view);
             self.ctx.queue.submit(Some(encoder.finish()));
         }
 
@@ -692,17 +722,23 @@ pub mod playground {
                     event::Event::RedrawRequested(_) => {
                         z_slicer.update();
 
-                        let frame = match z_slicer.ctx.surface.as_ref().unwrap().get_current_texture() {
-                            Ok(frame) => frame,
-                            Err(_) => {
-                                z_slicer.ctx.surface.as_ref().unwrap().configure(&z_slicer.ctx.device, z_slicer.ctx.surface_configuration.as_ref().unwrap());
-                                z_slicer.ctx.surface
-                                    .as_ref()
-                                    .unwrap()
-                                    .get_current_texture()
-                                    .expect("Failed to acquire next surface texture!")
-                            }
-                        };
+                        let frame =
+                            match z_slicer.ctx.surface.as_ref().unwrap().get_current_texture() {
+                                Ok(frame) => frame,
+                                Err(_) => {
+                                    z_slicer.ctx.surface.as_ref().unwrap().configure(
+                                        &z_slicer.ctx.device,
+                                        z_slicer.ctx.surface_configuration.as_ref().unwrap(),
+                                    );
+                                    z_slicer
+                                        .ctx
+                                        .surface
+                                        .as_ref()
+                                        .unwrap()
+                                        .get_current_texture()
+                                        .expect("Failed to acquire next surface texture!")
+                                }
+                            };
                         let view = frame
                             .texture
                             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -735,7 +771,11 @@ pub mod playground {
                 })
                 .collect()
         }
-        fn create_input_texture(device: &wgpu::Device, queue: &wgpu::Queue, size: u32) -> (wgpu::Texture, wgpu::TextureView) {
+        fn create_input_texture(
+            device: &wgpu::Device,
+            queue: &wgpu::Queue,
+            size: u32,
+        ) -> (wgpu::Texture, wgpu::TextureView) {
             let texels = create_mandelbrot_texels(size as usize);
             let texture_extent = wgpu::Extent3d {
                 width: size,
@@ -776,7 +816,13 @@ pub mod playground {
             ..Default::default()
         });
 
-        let edge_detect_pass = EdgeDetectPass::new(&input_texture_view, &storage_texture_view, tex_size, tex_size, &ctx);
+        let edge_detect_pass = EdgeDetectPass::new(
+            &input_texture_view,
+            &storage_texture_view,
+            tex_size,
+            tex_size,
+            &ctx,
+        );
         let full_screen_pass = FullScreenPass::new(&storage_texture_view, &sampler, &ctx);
 
         let frame = ctx.surface.as_ref().unwrap().get_current_texture().unwrap();
@@ -786,7 +832,9 @@ pub mod playground {
 
         // A command encoder executes one or many pipelines.
         // It is to WebGPU what a command buffer is to Vulkan.
-        let mut encoder = ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        let mut encoder = ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         edge_detect_pass.add_to_command(&mut encoder);
         full_screen_pass.add_to_command(&mut encoder, &view);
 

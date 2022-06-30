@@ -18,11 +18,22 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Install Clippy
-      run: rustup component add clippy
-    - name: Lint
-      run: cargo clippy --all-targets --all-features -p volume-viewer -- --no-deps -D warnings
-    #- name: Build
-    #  run: cargo build --verbose
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: 1.57.0
+        target: wasm32-unknown-unknown
+        override: true
+        components: clippy
+    - uses: actions-rs/install@v0.1
+      with:
+        crate: wasm-pack
+        version: 0.9.1
+        use-tool-cache: true
+    - uses: action-rs/clippy-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        args: --all-features -p volume-viewer -- --no-deps
+    - name: Build
+      run: wasm-pack build --target web
     #- name: Run tests
     #  run: cargo test --verbose

@@ -1,17 +1,9 @@
-use std::{
-    borrow::Cow,
-    sync::Arc,
-};
-use wgpu::{
-    BindGroup,
-    BindGroupEntry,
-    BindGroupLayout,
-    TextureView,
-};
 use crate::renderer::{
     context::GPUContext,
-    pass::{GPUPass, AsBindGroupEntries},
+    pass::{AsBindGroupEntries, GPUPass},
 };
+use std::{borrow::Cow, sync::Arc};
+use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, TextureView};
 
 pub struct Resources<'a> {
     pub sampler: &'a wgpu::Sampler,
@@ -28,7 +20,7 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
             wgpu::BindGroupEntry {
                 binding: 1,
                 resource: wgpu::BindingResource::TextureView(self.source_texture),
-            }
+            },
         ]
     }
 }
@@ -41,31 +33,37 @@ pub struct PresentToScreen {
 
 impl PresentToScreen {
     pub fn new(ctx: &Arc<GPUContext>) -> Self {
-        let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("present_to_screen.wgsl"))),
-        });
-        let pipeline = ctx.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: None,
-            layout: None,
-            vertex: wgpu::VertexState {
-                module: &shader_module,
-                entry_point: "vert_main",
-                buffers: &[]
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader_module,
-                entry_point: "frag_main",
-                targets: &[ctx.surface_configuration.as_ref().unwrap().format.into()],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: Default::default(),
-            multiview: None
-        });
+        let shader_module = ctx
+            .device
+            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
+                    "present_to_screen.wgsl"
+                ))),
+            });
+        let pipeline = ctx
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: None,
+                layout: None,
+                vertex: wgpu::VertexState {
+                    module: &shader_module,
+                    entry_point: "vert_main",
+                    buffers: &[],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader_module,
+                    entry_point: "frag_main",
+                    targets: &[ctx.surface_configuration.as_ref().unwrap().format.into()],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: Default::default(),
+                multiview: None,
+            });
         let bind_group_layout = pipeline.get_bind_group_layout(0);
         Self {
             ctx: ctx.clone(),
@@ -74,7 +72,12 @@ impl PresentToScreen {
         }
     }
 
-    pub fn encode(&self, command_encoder: &mut wgpu::CommandEncoder, bind_group: &BindGroup, view: &TextureView) {
+    pub fn encode(
+        &self,
+        command_encoder: &mut wgpu::CommandEncoder,
+        bind_group: &BindGroup,
+        view: &TextureView,
+    ) {
         let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[wgpu::RenderPassColorAttachment {
@@ -85,12 +88,12 @@ impl PresentToScreen {
                         r: 0.0,
                         g: 0.0,
                         b: 0.0,
-                        a: 1.0
+                        a: 1.0,
                     }),
-                    store: true
-                }
+                    store: true,
+                },
             }],
-            depth_stencil_attachment: None
+            depth_stencil_attachment: None,
         });
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(0, bind_group, &[]);
@@ -112,4 +115,3 @@ impl<'a> GPUPass<Resources<'a>> for PresentToScreen {
         &self.bind_group_layout
     }
 }
-

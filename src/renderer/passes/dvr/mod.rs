@@ -1,13 +1,10 @@
-use std::{
-    borrow::Cow,
-    sync::Arc,
-};
-use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use crate::renderer::{
     camera::CameraUniform,
     context::GPUContext,
-    pass::{GPUPass, AsBindGroupEntries},
+    pass::{AsBindGroupEntries, GPUPass},
 };
+use std::{borrow::Cow, sync::Arc};
+use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -62,7 +59,7 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
                 binding: 2,
                 resource: wgpu::BindingResource::TextureView(self.output),
             },
-            wgpu::BindGroupEntry{
+            wgpu::BindGroupEntry {
                 binding: 3,
                 resource: self.uniforms.as_entire_binding(),
             },
@@ -78,16 +75,20 @@ pub struct DVR {
 
 impl DVR {
     pub fn new(ctx: &Arc<GPUContext>) -> Self {
-        let shader_module = ctx.device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("dvr.wgsl"))),
-        });
-        let pipeline = ctx.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: None,
-            layout: None,
-            module: &shader_module,
-            entry_point: "main",
-        });
+        let shader_module = ctx
+            .device
+            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("dvr.wgsl"))),
+            });
+        let pipeline = ctx
+            .device
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: None,
+                layout: None,
+                module: &shader_module,
+                entry_point: "main",
+            });
         let bind_group_layout = pipeline.get_bind_group_layout(0);
 
         Self {
@@ -97,12 +98,22 @@ impl DVR {
         }
     }
 
-    pub fn encode(&self, command_encoder: &mut wgpu::CommandEncoder, bind_group: &BindGroup, output_extent: &wgpu::Extent3d) {
-        let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+    pub fn encode(
+        &self,
+        command_encoder: &mut wgpu::CommandEncoder,
+        bind_group: &BindGroup,
+        output_extent: &wgpu::Extent3d,
+    ) {
+        let mut cpass =
+            command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, bind_group, &[]);
         cpass.insert_debug_marker(self.label());
-        cpass.dispatch((output_extent.width as f32/ 16.).ceil() as u32, (output_extent.height as f32 / 16.).ceil() as u32, 1);
+        cpass.dispatch(
+            (output_extent.width as f32 / 16.).ceil() as u32,
+            (output_extent.height as f32 / 16.).ceil() as u32,
+            1,
+        );
     }
 }
 

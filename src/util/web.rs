@@ -1,11 +1,12 @@
 use std::path::PathBuf;
 use wasm_bindgen::JsCast;
-use web_sys::{Document, Element, HtmlCanvasElement, HtmlElement, HtmlInputElement, Performance, Window};
+use web_sys::{
+    Document, Element, HtmlCanvasElement, HtmlElement, HtmlInputElement, Performance, Window,
+};
 
 #[inline]
 pub fn window() -> Window {
-    web_sys::window()
-        .unwrap_or_else(|| panic!("window does not exist"))
+    web_sys::window().unwrap_or_else(|| panic!("window does not exist"))
 }
 
 #[inline]
@@ -40,8 +41,7 @@ pub fn performance() -> Performance {
 /// Internally it calls `performance.now()`.
 /// See the [JavaScript documentation](https://developer.mozilla.org/en-US/docs/Web/API/Performance/now) for more information.
 pub fn now() -> f64 {
-    performance()
-        .now()
+    performance().now()
 }
 
 #[inline]
@@ -78,12 +78,10 @@ pub fn attach_canvas(canvas: HtmlCanvasElement, parent_id: Option<String>) {
             .map_err(|_| ())
             .unwrap()
     } else {
-        body()
-            .dyn_into::<HtmlElement>()
-            .map_err(|_| ())
-            .unwrap()
+        body().dyn_into::<HtmlElement>().map_err(|_| ()).unwrap()
     };
-    parent.append_child(&web_sys::Element::from(canvas))
+    parent
+        .append_child(&web_sys::Element::from(canvas))
         .unwrap_or_else(|_| panic!("could not append element to document"));
 }
 
