@@ -23,7 +23,7 @@ fn negative_infinity() -> f32 { return -1. / 0.; }
 // todo: maybe just remove this
 let relative_step_size: f32 = 1.;
 // todo: should be a uniform
-let background_color = float3(0.2);
+let background_color = float4(float3(0.2), 1.);
 
 // Colors for debugging
 let RED = float4(1., 0., 0., 1.);
@@ -214,7 +214,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let resolution = float2(window_size);
 
     // initialize background
-    textureStore(result, pixel, float4(background_color, 1.));
+    textureStore(result, pixel, background_color);
 
     // todo: remove this (should come from CPU because it depends on metadata not on texture resolution)
     let volume_scale = float3(textureDimensions(volume_data));
@@ -248,8 +248,17 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let color = dvr(start, step, num_steps, ray);
     if color.a > 0.1 {
-        textureStore(result, pixel, color);
+        let blended = blend(color, background_color);
+        // todo: this shader should actually just render a volume block, not compose an image, so this should be done in a post-processing stage
+        textureStore(result, pixel, float4(blended.rgb, 1.));
     }
+}
+
+fn blend(a: float4, b: float4) -> float4 {
+    return float4(
+        a.rgb * a.a + b.rgb * b.a * (1. - a.a),
+        a.a + b.a * (1. - a.a)
+    );
 }
 
 // volume rendering stuff
