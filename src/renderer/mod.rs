@@ -11,10 +11,8 @@ pub mod volume;
 // this is just a small module where I test stuff
 pub mod dvr_playground {
     use std::{sync::Arc};
-    use std::collections::HashSet;
-    use std::panic::resume_unwind;
     use bytemuck;
-    use glam::{Mat4, Vec2, Vec3};
+    use glam::{Vec2, Vec3};
     use winit::{
         event::{
             ElementState,
@@ -29,12 +27,11 @@ pub mod dvr_playground {
         window::Window
     };
     use wgpu::util::DeviceExt;
-    use winit::event::Event::DeviceEvent;
-    use crate::renderer::camera::{Camera, CameraController, Modifier};
+    use crate::renderer::camera::{Camera, CameraView, Projection};
     use crate::renderer::context::{GPUContext, ContextDescriptor};
     use crate::renderer::pass::GPUPass;
     use crate::renderer::passes::{dvr, present_to_screen};
-    use crate::renderer::{camera, resources};
+    use crate::renderer::resources;
     use crate::renderer::geometry::Bounds3D;
     use crate::renderer::volume::RawVolumeBlock;
 
@@ -150,19 +147,19 @@ pub mod dvr_playground {
 
             const NEAR: f32 = 0.0001;
             const FAR: f32 = 1000.0;
-            let perspective = camera::Projection::new_perspective(
+            let perspective = Projection::new_perspective(
                 f32::to_radians(45.),
                 dvr.window.inner_size().width as f32 / dvr.window.inner_size().height as f32,
                 NEAR,
                 FAR,
             );
-            let orthographic = camera::Projection::new_orthographic(Bounds3D::new(
+            let orthographic = Projection::new_orthographic(Bounds3D::new(
                 (resolution * -0.5).extend(NEAR),
                 (resolution *  0.5).extend(FAR),
             ));
 
-            let mut camera = camera::Camera::new(
-                camera::CameraView::new(
+            let mut camera = Camera::new(
+                CameraView::new(
                     Vec3::new(1., 1., 1.) * distance_from_center,
                     Vec3::new(0., 0., 0.),
                     Vec3::new(0., 1., 0.),
