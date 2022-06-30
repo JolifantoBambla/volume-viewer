@@ -158,7 +158,7 @@ pub mod dvr_playground {
             );
             let orthographic = camera::Projection::new_orthographic(Bounds3D::new(
                 (resolution * -0.5).extend(NEAR),
-                (resolution * -0.5).extend(FAR),
+                (resolution *  0.5).extend(FAR),
             ));
 
             let mut camera = camera::Camera::new(
