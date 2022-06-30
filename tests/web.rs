@@ -7,7 +7,9 @@ use wasm_bindgen_test::*;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
-fn compute_2() -> i32 {1+1}
+fn compute_2() -> i32 {
+    1 + 1
+}
 
 #[wasm_bindgen_test]
 fn pass() {

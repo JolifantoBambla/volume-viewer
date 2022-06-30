@@ -1,6 +1,6 @@
-use wgpu::Extent3d;
 use crate::renderer::geometry::Bounds3D;
 use crate::renderer::resources::Texture;
+use wgpu::Extent3d;
 
 pub type AABB = Bounds3D;
 
@@ -56,7 +56,6 @@ impl AccelerationStructure for TrivialVolume {
 
 pub struct Volume {
     acceleration_structure: Box<dyn AccelerationStructure>,
-
     // todo: move to struct containing numerical meta stuff?
     //maximum_value: f32,
 }
@@ -66,7 +65,6 @@ impl Volume {
         self.acceleration_structure.bounds()
     }
 }
-
 
 // stub for later
 pub struct MultiVolume {}

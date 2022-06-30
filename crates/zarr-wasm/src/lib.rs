@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(module = "https://cdn.skypack.dev/zarr")]
-extern {
+extern "C" {
     pub type NestedArray;
 
     //#[wasm_bindgen(js_namespace = Blosc, js_name = "fromConfig")]

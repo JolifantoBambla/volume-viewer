@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(module = "https://cdn.skypack.dev/numcodecs")]
-extern {
+extern "C" {
     pub type Blosc;
 
     #[wasm_bindgen(constructor)]

@@ -24,7 +24,7 @@ pub struct ContextDescriptor<'a> {
 
 impl<'a> Default for ContextDescriptor<'a> {
     fn default() -> Self {
-        Self{
+        Self {
             backends: wgpu::Backends::all(),
             request_adapter_options: wgpu::RequestAdapterOptions::default(),
             required_features: wgpu::Features::empty(),
@@ -46,7 +46,10 @@ pub struct GPUContext {
 }
 
 impl GPUContext {
-    pub async fn new<'a>(context_descriptor: &ContextDescriptor<'a>, window: Option<&winit::window::Window>) -> Self {
+    pub async fn new<'a>(
+        context_descriptor: &ContextDescriptor<'a>,
+        window: Option<&winit::window::Window>,
+    ) -> Self {
         // Instantiates instance of WebGPU
         let instance = wgpu::Instance::new(context_descriptor.backends);
 
@@ -65,9 +68,14 @@ impl GPUContext {
 
         let downlevel_capabilities = adapter.get_downlevel_properties();
         assert!(
-            downlevel_capabilities.shader_model >= context_descriptor.required_downlevel_capabilities.shader_model,
+            downlevel_capabilities.shader_model
+                >= context_descriptor
+                    .required_downlevel_capabilities
+                    .shader_model,
             "Adapter does not support the minimum shader model required: {:?}",
-            context_descriptor.required_downlevel_capabilities.shader_model
+            context_descriptor
+                .required_downlevel_capabilities
+                .shader_model
         );
         assert!(
             downlevel_capabilities
@@ -78,24 +86,26 @@ impl GPUContext {
         );
 
         // Make sure we use the texture resolution limits from the adapter, so we can support images the size of the surface.
-        let needed_limits = context_descriptor.required_limits.clone().using_resolution(adapter.limits());
+        let needed_limits = context_descriptor
+            .required_limits
+            .clone()
+            .using_resolution(adapter.limits());
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    features: (context_descriptor.optional_features & adapter_features) | context_descriptor.required_features,
+                    features: (context_descriptor.optional_features & adapter_features)
+                        | context_descriptor.required_features,
                     limits: needed_limits,
                 },
                 // Tracing isn't supported on the Web target
-                Option::None
+                Option::None,
             )
             .await
             .expect("Unable to find a suitable GPU adapter!");
 
         let surface: Option<wgpu::Surface> = if window.is_some() {
-            unsafe {
-                Some(instance.create_surface(&window.as_ref().unwrap()))
-            }
+            unsafe { Some(instance.create_surface(&window.as_ref().unwrap())) }
         } else {
             None
         };
@@ -103,12 +113,19 @@ impl GPUContext {
         let surface_configuration = if surface.is_some() {
             let surface_configuration = wgpu::SurfaceConfiguration {
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: surface.as_ref().unwrap().get_preferred_format(&adapter).unwrap(),
+                format: surface
+                    .as_ref()
+                    .unwrap()
+                    .get_preferred_format(&adapter)
+                    .unwrap(),
                 width: window.as_ref().unwrap().inner_size().width,
                 height: window.as_ref().unwrap().inner_size().height,
                 present_mode: wgpu::PresentMode::Mailbox,
             };
-            surface.as_ref().unwrap().configure(&device, &surface_configuration);
+            surface
+                .as_ref()
+                .unwrap()
+                .configure(&device, &surface_configuration);
             Some(surface_configuration)
         } else {
             None

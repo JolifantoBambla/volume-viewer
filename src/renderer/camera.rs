@@ -1,5 +1,5 @@
-use glam::{Mat3, Mat4, UVec3, Vec2, Vec3};
 use crate::renderer::geometry::{Bounds2D, Bounds3D};
+use glam::{Mat3, Mat4, UVec3, Vec2, Vec3};
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -62,11 +62,7 @@ impl CameraUniform {
 
 impl Default for CameraUniform {
     fn default() -> Self {
-        CameraUniform::new(
-            Mat4::IDENTITY,
-            Mat4::IDENTITY,
-            0
-        )
+        CameraUniform::new(Mat4::IDENTITY, Mat4::IDENTITY, 0)
     }
 }
 
@@ -182,13 +178,12 @@ impl CameraView {
             let rotated_y = y_rotation.mul_vec3(z);
             let rotated_x = x_rotation.mul_vec3(rotated_y);
 
-            let new_position = origin + (
-                if rotated_x.x.signum() == rotated_y.x.signum() {
+            let new_position = origin
+                + (if rotated_x.x.signum() == rotated_y.x.signum() {
                     rotated_x
                 } else {
                     rotated_y
-                } * radius
-            );
+                } * radius);
             if invert {
                 self.center_of_projection = new_position;
             } else {
@@ -225,11 +220,14 @@ pub struct Projection {
 impl Projection {
     pub fn new_orthographic(frustum: Bounds3D) -> Self {
         let projection = Mat4::orthographic_rh(
-            frustum.min.x, frustum.max.x,
-            frustum.min.y, frustum.max.y,
-            frustum.min.z, frustum.max.z
+            frustum.min.x,
+            frustum.max.x,
+            frustum.min.y,
+            frustum.max.y,
+            frustum.min.z,
+            frustum.max.z,
         );
-        Self{
+        Self {
             projection,
             is_orthographic: true,
         }
@@ -259,10 +257,7 @@ pub struct Camera {
 
 impl Camera {
     pub fn new(view: CameraView, projection: Projection) -> Self {
-        Self {
-            view,
-            projection,
-        }
+        Self { view, projection }
     }
 
     pub fn view(&self) -> &CameraView {
@@ -285,7 +280,7 @@ impl Camera {
         CameraUniform::new(
             self.view.look_at().inverse(),
             self.projection.projection(),
-            self.projection.is_orthographic() as u32
+            self.projection.is_orthographic() as u32,
         )
     }
 }
@@ -296,24 +291,25 @@ pub fn compute_screen_to_raster(raster_resolution: Vec2, screen_size: Option<Bou
     } else {
         let aspect_ratio = raster_resolution.x / raster_resolution.y;
         if aspect_ratio > 1. {
-            Bounds2D::new(Vec2::new(-aspect_ratio, -1.0),Vec2::new(aspect_ratio, 1.0))
+            Bounds2D::new(Vec2::new(-aspect_ratio, -1.0), Vec2::new(aspect_ratio, 1.0))
         } else {
-            Bounds2D::new(Vec2::new(-1.0, -1.0 / aspect_ratio), Vec2::new(1.0, 1.0 / aspect_ratio))
+            Bounds2D::new(
+                Vec2::new(-1.0, -1.0 / aspect_ratio),
+                Vec2::new(1.0, 1.0 / aspect_ratio),
+            )
         }
     };
     glam::Mat4::from_scale(raster_resolution.extend(1.0))
-        .mul_mat4(&glam::Mat4::from_scale(
-            glam::Vec3::new(
-                1.0 / (screen.max.x - screen.min.x),
-                1.0 / (screen.min.y - screen.max.y),
-                1.0
-            )))
-        .mul_mat4(&glam::Mat4::from_translation(
-            glam::Vec3::new(
-                -screen.min.x,
-                -screen.max.y,
-                0.
-            )))
+        .mul_mat4(&glam::Mat4::from_scale(glam::Vec3::new(
+            1.0 / (screen.max.x - screen.min.x),
+            1.0 / (screen.min.y - screen.max.y),
+            1.0,
+        )))
+        .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(
+            -screen.min.x,
+            -screen.max.y,
+            0.,
+        )))
 }
 
 pub fn compute_raster_to_screen(raster_resolution: Vec2, screen_size: Option<Bounds2D>) -> Mat4 {

@@ -8,11 +8,10 @@ macro_rules! transmute_copy {
             $src = std::mem::transmute(transmuted.clone());
             transmuted
         }
-    }
+    };
 }
 
 pub(crate) use transmute_copy;
-
 
 // helper structs to extract private fields - sorry :/
 // todo: ignore dead-code

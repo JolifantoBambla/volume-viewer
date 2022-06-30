@@ -1,11 +1,11 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use wasm_bindgen::{prelude::*, JsCast};
 
 pub use numcodecs_wasm::*;
 
-pub mod util;
 pub mod renderer;
+pub mod util;
 
 use util::init;
 use util::window;
@@ -46,7 +46,7 @@ pub fn main(js_config: &JsValue) {
     }
 
     bevy_app::App::new()
-        .insert_resource(bevy_window::WindowDescriptor{
+        .insert_resource(bevy_window::WindowDescriptor {
             title: "I am a window!".to_string(),
             width: 500.,
             height: 300.,
@@ -66,7 +66,8 @@ pub fn run_compute_example() {
 }
 
 async fn compute_example() {
-    let (window, _) = window::create_window("compute example".to_string(), "existing-canvas".to_string());
+    let (window, _) =
+        window::create_window("compute example".to_string(), "existing-canvas".to_string());
 
     log::info!("running compute");
     renderer::playground::compute_to_image_test(&window).await;
@@ -84,46 +85,53 @@ pub fn run_volume_example(data: &[u16], shape: &[u32]) {
     wasm_bindgen_futures::spawn_local(volume_example(data.to_vec(), shape.to_vec(), Examples::Dvr));
 }
 
-async fn make_z_slicer_example(data: Vec<u16>, shape: Vec<u32>, window: winit::window::Window, event_loop: winit::event_loop::EventLoop<()>) -> JsValue {
+async fn make_z_slicer_example(
+    data: Vec<u16>,
+    shape: Vec<u32>,
+    window: winit::window::Window,
+    event_loop: winit::event_loop::EventLoop<()>,
+) -> JsValue {
     let z_slicer = renderer::playground::ZSlicer::new(
         window,
-        RawVolume{
+        RawVolume {
             data: data.iter().map(|x| *x as u32).collect(),
             shape,
         },
         "z-slice".to_string(),
-    ).await;
+    )
+    .await;
     Closure::once_into_js(move || ZSlicer::run(z_slicer, event_loop))
 }
 
-async fn make_dvr_example(data: Vec<u16>, shape: Vec<u32>, window: winit::window::Window, event_loop: winit::event_loop::EventLoop<()>) -> JsValue {
+async fn make_dvr_example(
+    data: Vec<u16>,
+    shape: Vec<u32>,
+    window: winit::window::Window,
+    event_loop: winit::event_loop::EventLoop<()>,
+) -> JsValue {
     // preprocess volume
     let volume_max = *data.iter().max().unwrap() as f32;
     let volume = RawVolumeBlock::new(
-        data.iter().map(|x| ((*x as f32 / volume_max) * 255.) as u8).collect(),
+        data.iter()
+            .map(|x| ((*x as f32 / volume_max) * 255.) as u8)
+            .collect(),
         volume_max as u32,
         shape[2],
         shape[1],
         shape[0],
     );
 
-    let dvr = renderer::dvr_playground::DVR::new(
-        window,
-        volume,
-    ).await;
+    let dvr = renderer::dvr_playground::DVR::new(window, volume).await;
     Closure::once_into_js(move || renderer::dvr_playground::DVR::run(dvr, event_loop))
 }
 
 async fn volume_example(data: Vec<u16>, shape: Vec<u32>, example: Examples) {
-    let (window, event_loop) = window::create_window("compute example".to_string(), "existing-canvas".to_string());
+    let (window, event_loop) =
+        window::create_window("compute example".to_string(), "existing-canvas".to_string());
 
     let start_closure = match example {
-        Examples::ZSlicer => {
-            make_z_slicer_example(data, shape, window, event_loop).await
-        }
-        Examples::Dvr => {
-            make_dvr_example(data, shape, window, event_loop).await
-        }
+        Examples::ZSlicer => make_z_slicer_example(data, shape, window, event_loop).await,
+        Examples::Dvr => make_dvr_example(data, shape, window, event_loop).await,
     };
 
     // make sure to handle JS exceptions thrown inside start.
@@ -149,7 +157,7 @@ async fn volume_example(data: Vec<u16>, shape: Vec<u32>, example: Examples) {
 // Test device sharing between WASM and JS context, could be useful at some point
 
 #[wasm_bindgen(module = "/shared-gpu.js")]
-extern {
+extern "C" {
     #[wasm_bindgen(js_name = "printGpuDeviceLimits")]
     fn print_gpu_device_limits(device: web_sys::GpuDevice);
 }
@@ -165,7 +173,9 @@ async fn get_device() {
 
 async fn expose_device() -> web_sys::GpuDevice {
     // create ctx to capture device from
-    let mut ctx = renderer::context::GPUContext::new(&renderer::context::ContextDescriptor::default(), None).await;
+    let mut ctx =
+        renderer::context::GPUContext::new(&renderer::context::ContextDescriptor::default(), None)
+            .await;
 
     // memcopy device
     //let device = transmute_copy!(ctx.device, Device);
