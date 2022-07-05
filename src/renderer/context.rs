@@ -66,7 +66,7 @@ impl GPUContext {
             context_descriptor.required_features - adapter_features
         );
 
-        let downlevel_capabilities = adapter.get_downlevel_properties();
+        let downlevel_capabilities = adapter.get_downlevel_capabilities();
         assert!(
             downlevel_capabilities.shader_model
                 >= context_descriptor
@@ -116,11 +116,11 @@ impl GPUContext {
                 format: surface
                     .as_ref()
                     .unwrap()
-                    .get_preferred_format(&adapter)
-                    .unwrap(),
+                    .get_supported_formats(&adapter)[0],
                 width: window.as_ref().unwrap().inner_size().width,
                 height: window.as_ref().unwrap().inner_size().height,
-                present_mode: wgpu::PresentMode::Mailbox,
+                // todo: choose present mode
+                present_mode: wgpu::PresentMode::Fifo,
             };
             surface
                 .as_ref()

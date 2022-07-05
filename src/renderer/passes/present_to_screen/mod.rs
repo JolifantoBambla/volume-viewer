@@ -35,7 +35,7 @@ impl PresentToScreen {
     pub fn new(ctx: &Arc<GPUContext>) -> Self {
         let shader_module = ctx
             .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
                     "present_to_screen.wgsl"
@@ -54,7 +54,7 @@ impl PresentToScreen {
                 fragment: Some(wgpu::FragmentState {
                     module: &shader_module,
                     entry_point: "frag_main",
-                    targets: &[ctx.surface_configuration.as_ref().unwrap().format.into()],
+                    targets: &[Some(ctx.surface_configuration.as_ref().unwrap().format.into())],
                 }),
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
@@ -80,7 +80,7 @@ impl PresentToScreen {
     ) {
         let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
-            color_attachments: &[wgpu::RenderPassColorAttachment {
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view,
                 resolve_target: None,
                 ops: wgpu::Operations {
@@ -92,7 +92,7 @@ impl PresentToScreen {
                     }),
                     store: true,
                 },
-            }],
+            })],
             depth_stencil_attachment: None,
         });
         rpass.set_pipeline(&self.pipeline);

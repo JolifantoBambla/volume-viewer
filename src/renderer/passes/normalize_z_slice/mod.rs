@@ -47,7 +47,7 @@ impl NormalizeZSlice {
     pub fn new(ctx: &Arc<GPUContext>) -> Self {
         let shader_module = ctx
             .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
                     "normalize_z_slice.wgsl"
@@ -80,7 +80,7 @@ impl NormalizeZSlice {
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, bind_group, &[]);
         cpass.insert_debug_marker(self.label());
-        cpass.dispatch(volume_extent.width / 16, volume_extent.height / 16, 1);
+        cpass.dispatch_workgroups(volume_extent.width / 16, volume_extent.height / 16, 1);
     }
 }
 

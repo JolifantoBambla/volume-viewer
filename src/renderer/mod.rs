@@ -317,7 +317,7 @@ pub mod playground {
         ) -> Self {
             let shader_module = ctx
                 .device
-                .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: None,
                     source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
                         "full_screen_quad.wgsl"
@@ -336,7 +336,7 @@ pub mod playground {
                     fragment: Some(wgpu::FragmentState {
                         module: &shader_module,
                         entry_point: "frag_main",
-                        targets: &[ctx.surface_configuration.as_ref().unwrap().format.into()],
+                        targets: &[Some(ctx.surface_configuration.as_ref().unwrap().format.into())],
                     }),
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
@@ -397,7 +397,7 @@ pub mod playground {
         ) {
             let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
-                color_attachments: &[wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view,
                     resolve_target: None,
                     ops: wgpu::Operations {
@@ -409,7 +409,7 @@ pub mod playground {
                         }),
                         store: true,
                     },
-                }],
+                })],
                 depth_stencil_attachment: None,
             });
             rpass.set_pipeline(&self.pipeline);
@@ -436,7 +436,7 @@ pub mod playground {
         ) -> Self {
             let shader_module = ctx
                 .device
-                .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: None,
                     source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
                         "edgedetect.wgsl"
@@ -506,7 +506,7 @@ pub mod playground {
             cpass.set_pipeline(&self.pipeline);
             cpass.set_bind_group(0, &self.bind_group, &[]);
             cpass.insert_debug_marker("compute collatz iterations");
-            cpass.dispatch(
+            cpass.dispatch_workgroups(
                 self.input_texture_width / 16,
                 self.input_texture_height / 16,
                 1,

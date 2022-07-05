@@ -77,7 +77,7 @@ impl DVR {
     pub fn new(ctx: &Arc<GPUContext>) -> Self {
         let shader_module = ctx
             .device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("dvr.wgsl"))),
             });
@@ -109,7 +109,7 @@ impl DVR {
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, bind_group, &[]);
         cpass.insert_debug_marker(self.label());
-        cpass.dispatch(
+        cpass.dispatch_workgroups(
             (output_extent.width as f32 / 16.).ceil() as u32,
             (output_extent.height as f32 / 16.).ceil() as u32,
             1,
