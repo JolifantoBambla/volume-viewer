@@ -10,7 +10,6 @@ pub mod util;
 use util::init;
 use util::window;
 
-use crate::renderer::playground::{RawVolume, ZSlicer};
 use crate::renderer::volume::RawVolumeBlock;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -60,47 +59,9 @@ pub fn main(js_config: &JsValue) {
         .run()
 }
 
-#[wasm_bindgen(js_name = "runComputeExample")]
-pub fn run_compute_example() {
-    wasm_bindgen_futures::spawn_local(compute_example());
-}
-
-async fn compute_example() {
-    let (window, _) =
-        window::create_window("compute example".to_string(), "existing-canvas".to_string());
-
-    log::info!("running compute");
-    renderer::playground::compute_to_image_test(&window).await;
-    log::info!("ran compute");
-}
-
-#[allow(dead_code)]
-enum Examples {
-    ZSlicer,
-    Dvr,
-}
-
 #[wasm_bindgen(js_name = "runVolumeExample")]
 pub fn run_volume_example(data: &[u16], shape: &[u32]) {
-    wasm_bindgen_futures::spawn_local(volume_example(data.to_vec(), shape.to_vec(), Examples::Dvr));
-}
-
-async fn make_z_slicer_example(
-    data: Vec<u16>,
-    shape: Vec<u32>,
-    window: winit::window::Window,
-    event_loop: winit::event_loop::EventLoop<()>,
-) -> JsValue {
-    let z_slicer = renderer::playground::ZSlicer::new(
-        window,
-        RawVolume {
-            data: data.iter().map(|x| *x as u32).collect(),
-            shape,
-        },
-        "z-slice".to_string(),
-    )
-    .await;
-    Closure::once_into_js(move || ZSlicer::run(z_slicer, event_loop))
+    wasm_bindgen_futures::spawn_local(volume_example(data.to_vec(), shape.to_vec()));
 }
 
 async fn make_dvr_example(
@@ -127,14 +88,11 @@ async fn make_dvr_example(
     Closure::once_into_js(move || renderer::dvr_playground::DVR::run(dvr, event_loop))
 }
 
-async fn volume_example(data: Vec<u16>, shape: Vec<u32>, example: Examples) {
+async fn volume_example(data: Vec<u16>, shape: Vec<u32>) {
     let (window, event_loop) =
         window::create_window("compute example".to_string(), "existing-canvas".to_string());
 
-    let start_closure = match example {
-        Examples::ZSlicer => make_z_slicer_example(data, shape, window, event_loop).await,
-        Examples::Dvr => make_dvr_example(data, shape, window, event_loop).await,
-    };
+    let start_closure = make_dvr_example(data, shape, window, event_loop).await;
 
     // make sure to handle JS exceptions thrown inside start.
     // Otherwise wasm_bindgen_futures Queue would break and never handle any tasks again.
