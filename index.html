@@ -9,6 +9,7 @@
 
 <body>
 <script type="module">
+    /*
     import { openArray } from 'https://cdn.skypack.dev/zarr';
 
     import init, {testDeviceSharing, runVolumeExample, createCtxFromOffscreenCanvas} from "./pkg/volume_viewer.js";
@@ -46,6 +47,45 @@
     }
 
     run();
+    */
+    import { sharedWorker } from "./loader-interface.js";
+    import { sharedWorker2 } from "./offscreen_renderer.js";
+
+
+    import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
+
+    async function start() {
+        await sharedWorker();
+        //await sharedWorker2();
+
+        const canvas = document.querySelector('canvas');
+
+        const hasOffscreenSupport = !!canvas.transferControlToOffscreen;
+        console.log(`hasOffscreenSupport: ${hasOffscreenSupport}`);
+        const offscreen = canvas.transferControlToOffscreen();
+
+        //const worker = new Worker('myworkerurl.js');
+        //worker.postMessage({canvas: offscreen}, [offscreen]);
+        //const worker = new SharedWorker("worker.js", { type: "module" });
+        //const obj = Comlink.wrap(worker.port);
+
+        const worker = new Worker("worker.js", { type: "module" });
+        // WebWorkers use `postMessage` and therefore work with Comlink.
+        const obj = Comlink.wrap(worker);
+
+        Comlink.transfer(offscreen, [offscreen]);
+        console.log('hello');
+        console.log(await obj.counter);
+        console.log('what');
+        await obj.inc();
+        console.log('what');
+        console.log(await obj.counter);
+        const instance = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
+        console.log(" dsfadsfasdfasdfasdfaav", navigator, instance);
+
+        await obj.run(offscreen, null);
+    }
+    start();
 </script>
 
 <div>
@@ -59,7 +99,7 @@
     </div>
 
     <canvas id="existing-canvas" width="800" height="600" oncontextmenu="return false;" ></canvas>
-    <canvas id="canvas" width="800" height="600" oncontextmenu="return false;" ></canvas>
+    <canvas id="canvas" width="800" height="600"></canvas>
 
     <div hidden>
         <label for="z-slice">Z Slice:</label>

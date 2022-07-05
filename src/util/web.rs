@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use wasm_bindgen::JsCast;
 use web_sys::{
-    Document, Element, HtmlCanvasElement, HtmlElement, HtmlInputElement, Performance, Window,
+    Document, Element, HtmlCanvasElement, HtmlElement, HtmlInputElement, Performance, Window, WorkerGlobalScope, WorkerNavigator,
 };
 
 #[inline]

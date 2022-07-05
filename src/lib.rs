@@ -28,34 +28,7 @@ pub fn initialize() {
 }
 
 #[wasm_bindgen(js_name = "createCtxFromOffscreenCanvas")]
-pub async fn create_ctx_from_offscreen_canvas(maybe_canvas: web_sys::OffscreenCanvas) {
-    log::info!("offscreen canvas {} {}", maybe_canvas.width(), maybe_canvas.height());
-    let instance = wgpu::Instance::new(wgpu::Backends::all());
-    let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions::default())
-        .await
-        .unwrap();
-    let adapter_features = adapter.features();
-    let downlevel_capabilities = adapter.get_downlevel_capabilities();
-    let needed_limits = wgpu::Limits::downlevel_defaults()
-        .using_resolution(adapter.limits());
-    let (device, queue) = adapter
-        .request_device(&wgpu::DeviceDescriptor {
-            label: None,
-            features: (wgpu::Features::empty() & adapter_features)
-                | wgpu::Features::empty(),
-            limits: needed_limits,
-        },
-        // Tracing isn't supported on the Web target
-        None)
-        .await
-        .unwrap();
-    let surface = unsafe {
-        instance.create_surface_from_offscreen_canvas(&maybe_canvas)
-    };
-
-    log::info!("SURFACE: {:?} {:?}", surface, surface.get_supported_formats(&adapter));
-}
+pub async fn create_ctx_from_offscreen_canvas(maybe_canvas: web_sys::OffscreenCanvas) {}
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
@@ -89,9 +62,39 @@ pub fn main(js_config: &JsValue) {
         .run()
 }
 
+
 #[wasm_bindgen(js_name = "runVolumeExample")]
 pub fn run_volume_example(data: &[u16], shape: &[u32]) {
     wasm_bindgen_futures::spawn_local(volume_example(data.to_vec(), shape.to_vec()));
+}
+
+#[wasm_bindgen(js_name = "runOffscreenExample")]
+pub fn run_offscreen_example(data: &[u16], shape: &[u32], canvas: web_sys::OffscreenCanvas) {
+    wasm_bindgen_futures::spawn_local(offscreen_example(data.to_vec(), shape.to_vec(), canvas));
+}
+
+pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock {
+    let volume_max = *data.iter().max().unwrap() as f32;
+    RawVolumeBlock::new(
+        data.iter()
+            .map(|x| ((*x as f32 / volume_max) * 255.) as u8)
+            .collect(),
+        volume_max as u32,
+        shape[2],
+        shape[1],
+        shape[0],
+    )
+}
+
+async fn make_offscreen_dvr(
+    data: Vec<u16>,
+    shape: Vec<u32>,
+    canvas: web_sys::OffscreenCanvas
+) -> JsValue {
+    let volume = make_raw_volume_block(data, shape);
+
+    let dvr = renderer::offscreen_playground::DVR::new(canvas, volume).await;
+    Closure::once_into_js(move || dvr.run())
 }
 
 async fn make_dvr_example(
@@ -102,17 +105,7 @@ async fn make_dvr_example(
 ) -> JsValue {
     shared_worker().await;
 
-    // preprocess volume
-    let volume_max = *data.iter().max().unwrap() as f32;
-    let volume = RawVolumeBlock::new(
-        data.iter()
-            .map(|x| ((*x as f32 / volume_max) * 255.) as u8)
-            .collect(),
-        volume_max as u32,
-        shape[2],
-        shape[1],
-        shape[0],
-    );
+    let volume = make_raw_volume_block(data, shape);
 
     let dvr = renderer::dvr_playground::DVR::new(window, volume).await;
     Closure::once_into_js(move || renderer::dvr_playground::DVR::run(dvr, event_loop))
@@ -123,6 +116,32 @@ async fn volume_example(data: Vec<u16>, shape: Vec<u32>) {
         window::create_window("compute example".to_string(), "existing-canvas".to_string());
 
     let start_closure = make_dvr_example(data, shape, window, event_loop).await;
+
+    // make sure to handle JS exceptions thrown inside start.
+    // Otherwise wasm_bindgen_futures Queue would break and never handle any tasks again.
+    // This is required, because winit uses JS exception for control flow to escape from `run`.
+    if let Err(error) = call_catch(&start_closure) {
+        let is_control_flow_exception = error.dyn_ref::<js_sys::Error>().map_or(false, |e| {
+            e.message().includes("Using exceptions for control flow", 0)
+        });
+
+        if !is_control_flow_exception {
+            web_sys::console::error_1(&error);
+        }
+    }
+
+    #[wasm_bindgen]
+    extern "C" {
+        #[wasm_bindgen(catch, js_namespace = Function, js_name = "prototype.call.call")]
+        fn call_catch(this: &JsValue) -> Result<(), JsValue>;
+    }
+}
+
+async fn offscreen_example(data: Vec<u16>, shape: Vec<u32>, canvas: web_sys::OffscreenCanvas) {
+
+    log::info!("making offscreen dvr");
+    let start_closure = make_offscreen_dvr(data, shape, canvas).await;
+    log::info!("starting offscreen dvr");
 
     // make sure to handle JS exceptions thrown inside start.
     // Otherwise wasm_bindgen_futures Queue would break and never handle any tasks again.
