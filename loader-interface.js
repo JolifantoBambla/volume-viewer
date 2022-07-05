@@ -7,7 +7,7 @@ export async function sharedWorker() {
      * Therefore you must use the SharedWorker's `port` property when calling `Comlink.wrap`.
      */
     const obj = Comlink.wrap(worker.port);
-    alert(`Counter: ${await obj.counter}`);
+    console.log(`Counter: ${await obj.counter}`);
     await obj.inc();
-    alert(`Counter: ${await obj.counter}`);
+    console.log(`Counter: ${await obj.counter}`);
 }

@@ -47,7 +47,11 @@ pub mod dvr_playground {
 
     impl DVR {
         pub async fn new(window: Window, volume: RawVolumeBlock) -> Self {
-            let ctx = Arc::new(GPUContext::new(&ContextDescriptor::default(), Some(&window)).await);
+            let ctx = Arc::new(
+                GPUContext::new(&ContextDescriptor::default())
+                    .await
+                    .with_surface_from_window(&window)
+            );
 
             let volume_texture =
                 resources::Texture::from_raw_volume_block(&ctx.device, &ctx.queue, &volume);

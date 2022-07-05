@@ -27,6 +27,36 @@ pub fn initialize() {
     init::set_logger(None);
 }
 
+#[wasm_bindgen(js_name = "createCtxFromOffscreenCanvas")]
+pub async fn create_ctx_from_offscreen_canvas(maybe_canvas: web_sys::OffscreenCanvas) {
+    log::info!("offscreen canvas {} {}", maybe_canvas.width(), maybe_canvas.height());
+    let instance = wgpu::Instance::new(wgpu::Backends::all());
+    let adapter = instance
+        .request_adapter(&wgpu::RequestAdapterOptions::default())
+        .await
+        .unwrap();
+    let adapter_features = adapter.features();
+    let downlevel_capabilities = adapter.get_downlevel_capabilities();
+    let needed_limits = wgpu::Limits::downlevel_defaults()
+        .using_resolution(adapter.limits());
+    let (device, queue) = adapter
+        .request_device(&wgpu::DeviceDescriptor {
+            label: None,
+            features: (wgpu::Features::empty() & adapter_features)
+                | wgpu::Features::empty(),
+            limits: needed_limits,
+        },
+        // Tracing isn't supported on the Web target
+        None)
+        .await
+        .unwrap();
+    let surface = unsafe {
+        instance.create_surface_from_offscreen_canvas(&maybe_canvas)
+    };
+
+    log::info!("SURFACE: {:?} {:?}", surface, surface.get_supported_formats(&adapter));
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub canvas: Option<String>,
@@ -140,7 +170,7 @@ async fn get_device() {
 async fn expose_device() -> web_sys::GpuDevice {
     // create ctx to capture device from
     let mut ctx =
-        renderer::context::GPUContext::new(&renderer::context::ContextDescriptor::default(), None)
+        renderer::context::GPUContext::new(&renderer::context::ContextDescriptor::default())
             .await;
 
     // memcopy device

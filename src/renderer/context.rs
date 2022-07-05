@@ -46,10 +46,7 @@ pub struct GPUContext {
 }
 
 impl GPUContext {
-    pub async fn new<'a>(
-        context_descriptor: &ContextDescriptor<'a>,
-        window: Option<&winit::window::Window>,
-    ) -> Self {
+    async fn create_wgpu_base<'a>(context_descriptor: &ContextDescriptor<'a>) -> (wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::Queue) {
         // Instantiates instance of WebGPU
         let instance = wgpu::Instance::new(context_descriptor.backends);
 
@@ -70,8 +67,8 @@ impl GPUContext {
         assert!(
             downlevel_capabilities.shader_model
                 >= context_descriptor
-                    .required_downlevel_capabilities
-                    .shader_model,
+                .required_downlevel_capabilities
+                .shader_model,
             "Adapter does not support the minimum shader model required: {:?}",
             context_descriptor
                 .required_downlevel_capabilities
@@ -103,41 +100,110 @@ impl GPUContext {
             )
             .await
             .expect("Unable to find a suitable GPU adapter!");
+        (instance, adapter, device, queue)
+    }
 
-        let surface: Option<wgpu::Surface> = if window.is_some() {
-            unsafe { Some(instance.create_surface(&window.as_ref().unwrap())) }
-        } else {
-            None
-        };
-
-        let surface_configuration = if surface.is_some() {
-            let surface_configuration = wgpu::SurfaceConfiguration {
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: surface
-                    .as_ref()
-                    .unwrap()
-                    .get_supported_formats(&adapter)[0],
-                width: window.as_ref().unwrap().inner_size().width,
-                height: window.as_ref().unwrap().inner_size().height,
-                // todo: choose present mode
-                present_mode: wgpu::PresentMode::Fifo,
-            };
-            surface
-                .as_ref()
-                .unwrap()
-                .configure(&device, &surface_configuration);
-            Some(surface_configuration)
-        } else {
-            None
-        };
-
+    pub async fn new<'a>(
+        context_descriptor: &ContextDescriptor<'a>,
+    ) -> Self {
+        let (instance, adapter, device, queue) = Self::create_wgpu_base(context_descriptor).await;
         Self {
             instance,
             adapter,
             device,
             queue,
-            surface,
-            surface_configuration,
+            surface: None,
+            surface_configuration: None
         }
+    }
+
+    fn choose_surface_format(&self) -> wgpu::TextureFormat {
+        if self.surface.is_none() {
+            panic!("No surface set!");
+        }
+        self.surface
+            .as_ref()
+            .unwrap()
+            .get_supported_formats(&self.adapter)[0]
+    }
+
+    fn choose_present_mode(&self) -> wgpu::PresentMode {
+        if self.surface.is_none() {
+            panic!("No surface set!");
+        }
+        self.surface
+            .as_ref()
+            .unwrap()
+            .get_supported_modes(&self.adapter)[0]
+    }
+
+    fn configure_surface(&self) {
+        if self.surface.is_none() || self.surface_configuration.is_none() {
+            panic!("No surface or surface configuration set!");
+        }
+        self.surface
+            .as_ref()
+            .unwrap()
+            .configure(&self.device, self.surface_configuration.as_ref().unwrap());
+    }
+
+    pub fn with_surface_from_window(mut self, window: &winit::window::Window) -> Self {
+        self.surface = unsafe { Some(self.instance.create_surface(&window)) };
+
+        self.surface_configuration = Some(wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: self.choose_surface_format(),
+            width: window.inner_size().width,
+            height: window.inner_size().height,
+            present_mode: self.choose_present_mode(),
+        });
+
+        self.configure_surface();
+
+        self
+    }
+
+    #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))]
+    pub fn with_surface_from_offscreen_canvas(mut self, canvas: &web_sys::OffscreenCanvas) -> Self {
+        self.surface = Some(self.instance.create_surface_from_offscreen_canvas(canvas));
+
+        self.surface_configuration = Some(wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: self.choose_surface_format(),
+            width: canvas.width(),
+            height: canvas.height(),
+            present_mode: self.choose_present_mode(),
+        });
+
+        self.configure_surface();
+
+        self
+    }
+
+    #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))]
+    pub fn with_surface_from_canvas(mut self, canvas: &web_sys::HtmlCanvasElement) -> Self {
+        self.surface = Some(self.instance.create_surface_from_canvas(canvas));
+
+        self.surface_configuration = Some(wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: self.choose_surface_format(),
+            width: canvas.width(),
+            height: canvas.height(),
+            present_mode: self.choose_present_mode(),
+        });
+
+        self.configure_surface();
+
+        self
+    }
+
+    pub fn resize_surface(&mut self, width: u32, height: u32) {
+        if self.surface.is_none() || self.surface_configuration.is_none() {
+            panic!("No surface or surface configuration set!");
+        }
+        let mut surface_configuration = self.surface_configuration.as_mut().unwrap();
+        surface_configuration.width = width;
+        surface_configuration.height = height;
+        self.configure_surface();
     }
 }

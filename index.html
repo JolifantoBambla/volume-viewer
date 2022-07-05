@@ -11,7 +11,7 @@
 <script type="module">
     import { openArray } from 'https://cdn.skypack.dev/zarr';
 
-    import init, {testDeviceSharing, runVolumeExample} from "./pkg/volume_viewer.js";
+    import init, {testDeviceSharing, runVolumeExample, createCtxFromOffscreenCanvas} from "./pkg/volume_viewer.js";
 
     // returns first channel of lowest resolution from test data set on my local machine
     async function getRawZarrArray() {
@@ -38,6 +38,9 @@
 
         testDeviceSharing();
 
+        const offscreenCanvas = new OffscreenCanvas(256, 256);
+        await createCtxFromOffscreenCanvas(offscreenCanvas);
+
         const {data, shape} = await getRawZarrArray();
         await runVolumeExample(data, shape);
     }
@@ -56,6 +59,7 @@
     </div>
 
     <canvas id="existing-canvas" width="800" height="600" oncontextmenu="return false;" ></canvas>
+    <canvas id="canvas" width="800" height="600" oncontextmenu="return false;" ></canvas>
 
     <div hidden>
         <label for="z-slice">Z Slice:</label>
