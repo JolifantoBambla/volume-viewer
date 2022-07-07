@@ -1,7 +1,7 @@
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 // importScripts("../../../dist/umd/comlink.js");
 
-import init, {testDeviceSharing, runOffscreenExample} from "./pkg/volume_viewer.js";
+import init, {testDeviceSharing, main} from "./pkg/volume_viewer.js";
 
 import { openArray } from 'https://cdn.skypack.dev/zarr';
 
@@ -50,7 +50,7 @@ const obj = {
         testDeviceSharing();
 
         const {data, shape} = await getRawZarrArray();
-        runOffscreenExample(data, shape, this.canvas);
+        main(data, shape, this.canvas);
     },
     dispatchCanvasEvent(eventString) {
         if (this.canvas) {
