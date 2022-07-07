@@ -3,6 +3,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
 use crate::data_type::DataType;
+use crate::raw::RawArray;
 
 // TODO: mapping from zarr-wasm to ome-zarr
 
@@ -215,9 +216,10 @@ impl ZarrArray {
         array.unchecked_into::<ZarrArray>()
     }
 
-    pub async fn get_raw_data(&self, selection: Option<Vec<DimensionArraySelection>>, options: Option<GetOptions>) -> JsValue {
-        // todo: cast this into a proper Rust type
-        self.get_raw(JsValue::from_serde(&selection).unwrap(), JsValue::from_serde(&options).unwrap()).await
+    pub async fn get_raw_data(&self, selection: Option<Vec<DimensionArraySelection>>, options: Option<GetOptions>) -> RawArray {
+        self.get_raw(JsValue::from_serde(&selection).unwrap(), JsValue::from_serde(&options).unwrap())
+            .await
+            .unchecked_into::<RawArray>()
     }
 
     pub fn data_type(&self) -> DataType {

@@ -28,3 +28,5 @@ extern "C" {
 }
 
 // todo: get typed array from raw array
+impl RawArray {}
+

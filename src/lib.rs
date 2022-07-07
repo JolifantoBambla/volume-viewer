@@ -50,6 +50,7 @@ async fn start_event_loop(data: Vec<u16>, shape: Vec<u32>, canvas: JsValue) {
     let zarr_array = ZarrArray::open_zarr_array("http://localhost:8005/".to_string(), "ome-zarr/m.ome.zarr/0/2".to_string()).await;
     log::info!("ZarrArray {:?}", zarr_array.shape());
 
+    //zarr_array.get_raw().await;
 
 
     let volume = make_raw_volume_block(data, shape);
