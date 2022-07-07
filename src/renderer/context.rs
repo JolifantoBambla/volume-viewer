@@ -46,7 +46,9 @@ pub struct GPUContext {
 }
 
 impl GPUContext {
-    async fn create_wgpu_base<'a>(context_descriptor: &ContextDescriptor<'a>) -> (wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::Queue) {
+    async fn create_wgpu_base<'a>(
+        context_descriptor: &ContextDescriptor<'a>,
+    ) -> (wgpu::Instance, wgpu::Adapter, wgpu::Device, wgpu::Queue) {
         // Instantiates instance of WebGPU
         let instance = wgpu::Instance::new(context_descriptor.backends);
 
@@ -67,8 +69,8 @@ impl GPUContext {
         assert!(
             downlevel_capabilities.shader_model
                 >= context_descriptor
-                .required_downlevel_capabilities
-                .shader_model,
+                    .required_downlevel_capabilities
+                    .shader_model,
             "Adapter does not support the minimum shader model required: {:?}",
             context_descriptor
                 .required_downlevel_capabilities
@@ -103,9 +105,7 @@ impl GPUContext {
         (instance, adapter, device, queue)
     }
 
-    pub async fn new<'a>(
-        context_descriptor: &ContextDescriptor<'a>,
-    ) -> Self {
+    pub async fn new<'a>(context_descriptor: &ContextDescriptor<'a>) -> Self {
         let (instance, adapter, device, queue) = Self::create_wgpu_base(context_descriptor).await;
         Self {
             instance,
@@ -113,7 +113,7 @@ impl GPUContext {
             device,
             queue,
             surface: None,
-            surface_configuration: None
+            surface_configuration: None,
         }
     }
 

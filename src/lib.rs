@@ -1,9 +1,6 @@
-use bevy_utils::tracing::instrument::WithSubscriber;
-use serde::{Deserialize, Serialize};
-
 use wasm_bindgen::{prelude::*, JsCast};
-use winit::event::{DeviceId, ElementState, MouseButton};
 use winit::event::WindowEvent;
+use winit::event::{DeviceId, ElementState, MouseButton};
 
 pub use numcodecs_wasm::*;
 
@@ -12,7 +9,6 @@ pub mod util;
 
 use util::init;
 use util::window;
-use crate::renderer::offscreen_playground::custom_event::CustomEvent;
 
 use crate::renderer::volume::RawVolumeBlock;
 use crate::window::window_builder_without_size;
@@ -31,42 +27,6 @@ pub fn initialize() {
     // initialize logger
     init::set_logger(None);
 }
-
-#[wasm_bindgen(js_name = "createCtxFromOffscreenCanvas")]
-pub async fn create_ctx_from_offscreen_canvas(maybe_canvas: web_sys::OffscreenCanvas) {}
-
-#[derive(Serialize, Deserialize)]
-pub struct Config {
-    pub canvas: Option<String>,
-}
-
-// starts an event loop using bevy stuff
-#[wasm_bindgen]
-pub fn main(js_config: &JsValue) {
-    let context_descriptor = renderer::context::ContextDescriptor::default();
-    log::info!("contextdesscritpor {}", context_descriptor.backends.bits());
-
-    let config: Config = js_config.into_serde().unwrap();
-
-    fn really_annoying_back_seat_kid() {
-        log::debug!("Are we there yet? It's already {}", instant::now());
-    }
-
-    bevy_app::App::new()
-        .insert_resource(bevy_window::WindowDescriptor {
-            title: "I am a window!".to_string(),
-            width: 500.,
-            height: 300.,
-            canvas: config.canvas,
-            ..bevy_window::WindowDescriptor::default()
-        })
-        .add_plugin(bevy_window::WindowPlugin::default())
-        .add_plugin(bevy_winit::WinitPlugin::default())
-        .add_plugin(bevy_app::ScheduleRunnerPlugin::default())
-        .add_system_to_stage(bevy_app::CoreStage::Update, really_annoying_back_seat_kid)
-        .run()
-}
-
 
 #[wasm_bindgen(js_name = "runVolumeExample")]
 pub fn run_volume_example(data: &[u16], shape: &[u32]) {
@@ -96,45 +56,46 @@ pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock 
 //  create CustomEvent enum that consists of WindowEvent and can be extended by other events
 //  create thread pool that is supplied with event proxies sending events to event loop
 
-async fn make_offscreen_dvr(
-    data: Vec<u16>,
-    shape: Vec<u32>,
-    canvas: JsValue
-) -> JsValue {
+async fn make_offscreen_dvr(data: Vec<u16>, shape: Vec<u32>, canvas: JsValue) -> JsValue {
     let volume = make_raw_volume_block(data, shape);
 
-    log::info!("scale factor {}", web_sys::window().unwrap().device_pixel_ratio());
+    log::info!(
+        "scale factor {}",
+        web_sys::window().unwrap().device_pixel_ratio()
+    );
 
-    let html_canvas = canvas.clone().unchecked_into::<web_sys::HtmlCanvasElement>();
-    let html_canvas2  = html_canvas.clone();
-
+    let html_canvas = canvas
+        .clone()
+        .unchecked_into::<web_sys::HtmlCanvasElement>();
+    let html_canvas2 = html_canvas.clone();
 
     let builder = window_builder_without_size("Offscreen DVR".to_string(), html_canvas);
-    let event_loop= winit::event_loop::EventLoop::with_user_event();
+    let event_loop = winit::event_loop::EventLoop::with_user_event();
     let window = builder.build(&event_loop).unwrap();
 
     // todo: map events to windowevents
-    let window_id = window.id();
     let event_loop_proxy = event_loop.create_proxy();
-    let closure = Closure::wrap(Box::new(move |event: JsValue|  {
+    let closure = Closure::wrap(Box::new(move |event: JsValue| {
         let mouse_event = event.unchecked_into::<web_sys::MouseEvent>();
         log::info!("generic event {:?}", mouse_event);
-        event_loop_proxy.send_event(
-            WindowEvent::MouseInput{
-                    device_id: unsafe { DeviceId::dummy() },
-                    state: ElementState::Pressed,
-                    button: MouseButton::Left,
-                    modifiers: Default::default()
-            }
-        );
+        event_loop_proxy
+            .send_event(WindowEvent::MouseInput {
+                device_id: unsafe { DeviceId::dummy() },
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                modifiers: Default::default(),
+            })
+            .ok();
     }) as Box<dyn FnMut(_)>);
-    html_canvas2.add_event_listener_with_callback("mousedown", closure.as_ref().unchecked_ref()).unwrap();
+    html_canvas2
+        .add_event_listener_with_callback("mousedown", closure.as_ref().unchecked_ref())
+        .unwrap();
     closure.forget();
 
     log::info!("window created");
 
     let dvr = renderer::offscreen_playground::DVR::new(canvas, volume).await;
-    Closure::once_into_js(move ||  renderer::offscreen_playground::DVR::run(dvr, window, event_loop))
+    Closure::once_into_js(move || renderer::offscreen_playground::DVR::run(dvr, window, event_loop))
 }
 
 async fn make_dvr_example(
@@ -178,7 +139,6 @@ async fn volume_example(data: Vec<u16>, shape: Vec<u32>) {
 }
 
 async fn offscreen_example(data: Vec<u16>, shape: Vec<u32>, canvas: JsValue) {
-
     log::info!("making offscreen dvr");
     let start_closure = make_offscreen_dvr(data, shape, canvas).await;
     log::info!("starting offscreen dvr");
@@ -229,8 +189,7 @@ async fn get_device() {
 async fn expose_device() -> web_sys::GpuDevice {
     // create ctx to capture device from
     let mut ctx =
-        renderer::context::GPUContext::new(&renderer::context::ContextDescriptor::default())
-            .await;
+        renderer::context::GPUContext::new(&renderer::context::ContextDescriptor::default()).await;
 
     // memcopy device
     //let device = transmute_copy!(ctx.device, Device);

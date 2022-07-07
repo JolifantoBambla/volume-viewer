@@ -54,7 +54,9 @@ impl PresentToScreen {
                 fragment: Some(wgpu::FragmentState {
                     module: &shader_module,
                     entry_point: "frag_main",
-                    targets: &[Some(ctx.surface_configuration.as_ref().unwrap().format.into())],
+                    targets: &[Some(
+                        ctx.surface_configuration.as_ref().unwrap().format.into(),
+                    )],
                 }),
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
