@@ -51,41 +51,59 @@
     import { sharedWorker } from "./loader-interface.js";
     import { sharedWorker2 } from "./offscreen_renderer.js";
 
-
     import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 
-    async function start() {
-        await sharedWorker();
-        //await sharedWorker2();
+    console.log('device pixel ratio', window.devicePixelRatio, typeof window.devicePixelRatio);
 
-        const canvas = document.querySelector('canvas');
+    async function start(canvasId) {
+        const canvas = document.querySelector(canvasId);
 
         const hasOffscreenSupport = !!canvas.transferControlToOffscreen;
-        console.log(`hasOffscreenSupport: ${hasOffscreenSupport}`);
-        const offscreen = canvas.transferControlToOffscreen();
+        if (hasOffscreenSupport) {
+            const worker = new Worker("worker.js", { type: "module" });
+            const obj = Comlink.wrap(worker);
 
-        //const worker = new Worker('myworkerurl.js');
-        //worker.postMessage({canvas: offscreen}, [offscreen]);
-        //const worker = new SharedWorker("worker.js", { type: "module" });
-        //const obj = Comlink.wrap(worker.port);
+            const offscreen = canvas.transferControlToOffscreen();
+            offscreen.onmousedown = (e) => {
+                console.log('onmousedown event listener in main', e);
+            };
+            offscreen.addEventListener('mousedown', (e) => {
+                console.log('custom event listener in main', e);
+            });
+            Comlink.transfer(offscreen, [offscreen]);
+            obj.initialize(offscreen);
 
-        const worker = new Worker("worker.js", { type: "module" });
-        // WebWorkers use `postMessage` and therefore work with Comlink.
-        const obj = Comlink.wrap(worker);
+            obj.run();
 
-        Comlink.transfer(offscreen, [offscreen]);
-        console.log('hello');
-        console.log(await obj.counter);
-        console.log('what');
-        await obj.inc();
-        console.log('what');
-        console.log(await obj.counter);
-        const instance = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
-        console.log(" dsfadsfasdfasdfasdfaav", navigator, instance);
+            canvas.onmousedown = (e) => {
 
-        await obj.run(offscreen, null);
+                const event = {
+                    ...e,
+                    type: "mousedown",
+                    x: e.offsetX,
+                    y: e.offsetY,
+                    button: e.button,
+                    shiftKey: e.shiftKey,
+                    ctrlKey: e.ctrlKey,
+                    altKey: e.altKey,
+                    metaKey: e.metaKey,
+                    bubbles: true,
+                    cancelable: true,
+                    composed: true,
+                    target: offscreen,
+                };
+                const evt = new MouseEvent(e.type, event);
+                offscreen.dispatchEvent(evt);
+
+                console.log(e);
+
+                obj.dispatchCanvasEvent(JSON.stringify(event));
+            }
+        } else {
+            console.warn(`Canvas with id "${canvasId}" does not support offscreen rendering.`);
+        }
     }
-    start();
+    start('canvas');
 </script>
 
 <div>

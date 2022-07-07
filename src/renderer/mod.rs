@@ -7,6 +7,8 @@ pub mod resources;
 pub mod volume;
 
 pub mod offscreen_playground {
+    use wasm_bindgen::prelude::*;
+
     use crate::renderer::camera::{Camera, CameraView, Projection};
     use crate::renderer::context::{ContextDescriptor, GPUContext};
     use crate::renderer::geometry::Bounds3D;
@@ -17,8 +19,19 @@ pub mod offscreen_playground {
     use bytemuck;
     use glam::{Vec2, Vec3};
     use std::sync::Arc;
+    use wasm_bindgen::JsCast;
     use web_sys::OffscreenCanvas;
     use wgpu::util::DeviceExt;
+    use winit::event::{ElementState, Event, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
+
+    pub mod custom_event {
+        use wasm_bindgen::prelude::*;
+
+        #[wasm_bindgen]
+        pub struct CustomEvent {
+            pub number: f32,
+        }
+    }
 
     pub struct DVR {
         canvas: OffscreenCanvas,
@@ -37,7 +50,8 @@ pub mod offscreen_playground {
     }
 
     impl DVR {
-        pub async fn new(canvas: OffscreenCanvas, volume: RawVolumeBlock) -> Self {
+        pub async fn new(canvas: JsValue, volume: RawVolumeBlock) -> Self {
+            let canvas = canvas.unchecked_into::<OffscreenCanvas>();
             let ctx = Arc::new(
                 GPUContext::new(&ContextDescriptor::default())
                     .await
@@ -132,12 +146,12 @@ pub mod offscreen_playground {
             self.ctx.queue.submit(Some(encoder.finish()));
         }
 
-        pub fn run(&self) {
+        pub fn run(dvr: DVR, window: winit::window::Window, event_loop: winit::event_loop::EventLoop<custom_event::CustomEvent>) {
             let distance_from_center = 50.;
 
             let resolution = Vec2::new(
-                self.canvas.width() as f32,
-                self.canvas.height() as f32,
+                dvr.canvas.width() as f32,
+                dvr.canvas.height() as f32,
             );
 
             const TRANSLATION_SPEED: f32 = 5.0;
@@ -146,7 +160,7 @@ pub mod offscreen_playground {
             const FAR: f32 = 1000.0;
             let perspective = Projection::new_perspective(
                 f32::to_radians(45.),
-                self.canvas.width() as f32 / self.canvas.height() as f32,
+                dvr.canvas.width() as f32 / dvr.canvas.height() as f32,
                 NEAR,
                 FAR,
             );
@@ -167,33 +181,122 @@ pub mod offscreen_playground {
             let mut left_mouse_pressed = false;
             let mut right_mouse_pressed = false;
 
-            loop {
-                self.update(&camera);
+            event_loop.run(move |event, _, control_flow| {
+                // force ownership by the closure
+                let _ = (&dvr.ctx.instance, &dvr.ctx.adapter);
 
-                let frame = match self.ctx.surface.as_ref().unwrap().get_current_texture() {
-                    Ok(frame) => frame,
-                    Err(_) => {
-                        self.ctx.surface.as_ref().unwrap().configure(
-                            &self.ctx.device,
-                            self.ctx.surface_configuration.as_ref().unwrap(),
-                        );
-                        self.ctx
-                            .surface
-                            .as_ref()
-                            .unwrap()
-                            .get_current_texture()
-                            .expect("Failed to acquire next surface texture!")
+                *control_flow = winit::event_loop::ControlFlow::Poll;
+
+                // todo: refactor input handling
+                match event {
+                    Event::RedrawEventsCleared => {
+                        window.request_redraw();
                     }
-                };
-                let view = frame
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
+                    Event::UserEvent(custom_event::CustomEvent { number }) => {
+                        log::info!("user event {}", number);
+                    },
+                    Event::WindowEvent {
+                        event:
+                        WindowEvent::MouseWheel {
+                            delta: MouseScrollDelta::PixelDelta(delta),
+                            ..
+                        },
+                        ..
+                    } => {
+                        camera.view.move_forward(
+                            (f64::min(delta.y.abs(), 1.) * delta.y.signum()) as f32
+                                * TRANSLATION_SPEED,
+                        );
+                    }
+                    Event::WindowEvent {
+                        event: WindowEvent::MouseInput { state, button, .. },
+                        ..
+                    } => match button {
+                        MouseButton::Left => {
+                            log::info!("{:?}", state);
+                            left_mouse_pressed = state == ElementState::Pressed;
+                        }
+                        MouseButton::Right => {
+                            right_mouse_pressed = state == ElementState::Pressed;
+                        }
+                        _ => {}
+                    },
+                    Event::WindowEvent {
+                        event:
+                        WindowEvent::KeyboardInput {
+                            input:
+                            KeyboardInput {
+                                virtual_keycode: Some(virtual_keycode),
+                                state: ElementState::Pressed,
+                                ..
+                            },
+                            ..
+                        },
+                        ..
+                    } => match virtual_keycode {
+                        VirtualKeyCode::D => camera.view.move_right(TRANSLATION_SPEED),
+                        VirtualKeyCode::A => camera.view.move_left(TRANSLATION_SPEED),
+                        VirtualKeyCode::W | VirtualKeyCode::Up => {
+                            camera.view.move_forward(TRANSLATION_SPEED)
+                        }
+                        VirtualKeyCode::S | VirtualKeyCode::Down => {
+                            camera.view.move_backward(TRANSLATION_SPEED)
+                        }
+                        VirtualKeyCode::C => {
+                            if camera.projection().is_orthographic() {
+                                camera.set_projection(perspective.clone());
+                            } else {
+                                camera.set_projection(orthographic.clone());
+                            }
+                        }
+                        _ => {}
+                    },
+                    Event::WindowEvent {
+                        event: WindowEvent::CursorMoved { position, .. },
+                        ..
+                    } => {
+                        let mouse_position = glam::Vec2::new(position.x as f32, position.y as f32);
+                        let delta = (mouse_position - last_mouse_position) / resolution;
+                        last_mouse_position = mouse_position;
 
-                self.render(&view);
+                        if left_mouse_pressed {
+                            camera.view.orbit(delta, false);
+                        } else if right_mouse_pressed {
+                            let translation = delta * TRANSLATION_SPEED * 20.;
+                            camera.view.move_right(translation.x);
+                            camera.view.move_down(translation.y);
+                        }
+                    }
+                    Event::RedrawRequested(_) => {
+                        dvr.update(&camera);
 
-                frame.present();
-                log::info!("Frame rendered, {}, {}", self.canvas.width(), self.canvas.height());
-            }
+                        let frame = match dvr.ctx.surface.as_ref().unwrap().get_current_texture() {
+                            Ok(frame) => frame,
+                            Err(_) => {
+                                dvr.ctx.surface.as_ref().unwrap().configure(
+                                    &dvr.ctx.device,
+                                    dvr.ctx.surface_configuration.as_ref().unwrap(),
+                                );
+                                dvr.ctx
+                                    .surface
+                                    .as_ref()
+                                    .unwrap()
+                                    .get_current_texture()
+                                    .expect("Failed to acquire next surface texture!")
+                            }
+                        };
+                        let view = frame
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+
+                        dvr.render(&view);
+
+                        frame.present();
+                        log::info!("Frame rendered, {}, {}", dvr.canvas.width(), dvr.canvas.height());
+                    }
+                    _ => {}
+                }
+            });
         }
     }
 }

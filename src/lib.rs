@@ -1,3 +1,4 @@
+use bevy_utils::tracing::instrument::WithSubscriber;
 use serde::{Deserialize, Serialize};
 
 use wasm_bindgen::{prelude::*, JsCast};
@@ -9,8 +10,10 @@ pub mod util;
 
 use util::init;
 use util::window;
+use crate::renderer::offscreen_playground::custom_event::CustomEvent;
 
 use crate::renderer::volume::RawVolumeBlock;
+use crate::window::window_builder_without_size;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -69,7 +72,7 @@ pub fn run_volume_example(data: &[u16], shape: &[u32]) {
 }
 
 #[wasm_bindgen(js_name = "runOffscreenExample")]
-pub fn run_offscreen_example(data: &[u16], shape: &[u32], canvas: web_sys::OffscreenCanvas) {
+pub fn run_offscreen_example(data: &[u16], shape: &[u32], canvas: JsValue) {
     wasm_bindgen_futures::spawn_local(offscreen_example(data.to_vec(), shape.to_vec(), canvas));
 }
 
@@ -89,12 +92,34 @@ pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock 
 async fn make_offscreen_dvr(
     data: Vec<u16>,
     shape: Vec<u32>,
-    canvas: web_sys::OffscreenCanvas
+    canvas: JsValue
 ) -> JsValue {
     let volume = make_raw_volume_block(data, shape);
 
+    log::info!("scale factor {}", web_sys::window().unwrap().device_pixel_ratio());
+
+    let html_canvas = canvas.clone().unchecked_into::<web_sys::HtmlCanvasElement>();
+    let html_canvas2  = html_canvas.clone();
+
+
+    let builder = window_builder_without_size("Offscreen DVR".to_string(), html_canvas);
+    let event_loop= winit::event_loop::EventLoop::with_user_event();
+    let window = builder.build(&event_loop).unwrap();
+
+    let event_loop_proxy = event_loop.create_proxy();
+    let closure = Closure::wrap(Box::new(move |event: JsValue| {
+        let mouse_event = event.unchecked_into::<web_sys::MouseEvent>();
+        log::info!("generic event {:?}", mouse_event);
+        event_loop_proxy.send_event(CustomEvent { number: 2. });
+    }) as Box<dyn FnMut(_)>);
+    html_canvas2.add_event_listener_with_callback("mousedown", closure.as_ref().unchecked_ref()).unwrap();
+    closure.forget();
+
+
+    log::info!("window created");
+
     let dvr = renderer::offscreen_playground::DVR::new(canvas, volume).await;
-    Closure::once_into_js(move || dvr.run())
+    Closure::once_into_js(move ||  renderer::offscreen_playground::DVR::run(dvr, window, event_loop))
 }
 
 async fn make_dvr_example(
@@ -137,7 +162,7 @@ async fn volume_example(data: Vec<u16>, shape: Vec<u32>) {
     }
 }
 
-async fn offscreen_example(data: Vec<u16>, shape: Vec<u32>, canvas: web_sys::OffscreenCanvas) {
+async fn offscreen_example(data: Vec<u16>, shape: Vec<u32>, canvas: JsValue) {
 
     log::info!("making offscreen dvr");
     let start_closure = make_offscreen_dvr(data, shape, canvas).await;

@@ -38,8 +38,8 @@ serde_json = "1.0.81"
 wasm-bindgen = { version = "0.2.63", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4.30"
 wasm-logger = "0.2.0"
-web-sys = { version = "0.3.58", features = ["Document", "HtmlCanvasElement", "HtmlInputElement", "Gpu", "GpuDevice", "OffscreenCanvas", "Performance", "Window", "WorkerGlobalScope", "WorkerNavigator"] }
-wgpu = { path = "../wgpu/wgpu" }
+web-sys = { version = "0.3.58", features = ["Document", "HtmlCanvasElement", "HtmlInputElement", "Gpu", "GpuDevice", "OffscreenCanvas", "Performance", "Window", "EventTarget"] }
+wgpu = { version = "0.13.1" }
 winit = { version = "0.26.1", features = [] }
 
 # todo: get from cargo.io as soon as it's there
