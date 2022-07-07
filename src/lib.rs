@@ -2,6 +2,8 @@ use bevy_utils::tracing::instrument::WithSubscriber;
 use serde::{Deserialize, Serialize};
 
 use wasm_bindgen::{prelude::*, JsCast};
+use winit::event::{DeviceId, ElementState, MouseButton};
+use winit::event::WindowEvent;
 
 pub use numcodecs_wasm::*;
 
@@ -89,6 +91,11 @@ pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock 
     )
 }
 
+// todo: lib.rs should contain only init and event_loop stuff
+//  communication with JS side should only be done via events
+//  create CustomEvent enum that consists of WindowEvent and can be extended by other events
+//  create thread pool that is supplied with event proxies sending events to event loop
+
 async fn make_offscreen_dvr(
     data: Vec<u16>,
     shape: Vec<u32>,
@@ -106,15 +113,23 @@ async fn make_offscreen_dvr(
     let event_loop= winit::event_loop::EventLoop::with_user_event();
     let window = builder.build(&event_loop).unwrap();
 
+    // todo: map events to windowevents
+    let window_id = window.id();
     let event_loop_proxy = event_loop.create_proxy();
-    let closure = Closure::wrap(Box::new(move |event: JsValue| {
+    let closure = Closure::wrap(Box::new(move |event: JsValue|  {
         let mouse_event = event.unchecked_into::<web_sys::MouseEvent>();
         log::info!("generic event {:?}", mouse_event);
-        event_loop_proxy.send_event(CustomEvent { number: 2. });
+        event_loop_proxy.send_event(
+            WindowEvent::MouseInput{
+                    device_id: unsafe { DeviceId::dummy() },
+                    state: ElementState::Pressed,
+                    button: MouseButton::Left,
+                    modifiers: Default::default()
+            }
+        );
     }) as Box<dyn FnMut(_)>);
     html_canvas2.add_event_listener_with_callback("mousedown", closure.as_ref().unchecked_ref()).unwrap();
     closure.forget();
-
 
     log::info!("window created");
 
