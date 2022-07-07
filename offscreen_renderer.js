@@ -1,13 +1,34 @@
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
+import { toWrappedEvent } from "./event.js";
 
-export async function sharedWorker2() {
-    const worker = new SharedWorker("worker.js", { type: "module" });
-    /**
-     * SharedWorkers communicate via the `postMessage` function in their `port` property.
-     * Therefore you must use the SharedWorker's `port` property when calling `Comlink.wrap`.
-     */
-    const obj = Comlink.wrap(worker.port);
-    console.log(`Counter please: ${await obj.counter}`);
-    await obj.inc();
-    console.log(`Counter pretty please: ${await obj.counter}`);
+export async function createOffscreenRenderer(config) {
+    const canvas = document.querySelector(config.canvasId);
+
+    const hasOffscreenSupport = !!canvas.transferControlToOffscreen;
+    if (hasOffscreenSupport) {
+        // instantiate worker
+        const worker = new Worker("worker.js", { type: "module" });
+        const obj = Comlink.wrap(worker);
+
+        // transfer control over canvas to worker
+        const offscreen = canvas.transferControlToOffscreen();
+        Comlink.transfer(offscreen, [offscreen]);
+        obj.initialize(offscreen);
+
+        // register UI event listeners
+        const dispatchToWorker = (e) => {
+            obj.dispatchCanvasEvent(JSON.stringify(toWrappedEvent(e)));
+        }
+        canvas.onmousedown = dispatchToWorker;
+        canvas.onmouseup = dispatchToWorker;
+        canvas.onmousemove = dispatchToWorker;
+        canvas.onwheel = dispatchToWorker;
+        window.onkeydown = dispatchToWorker;
+        window.onkeyup = dispatchToWorker;
+        window.onkeypress = dispatchToWorker;
+
+        return obj;
+    } else {
+        throw Error(`Canvas with id "${config.canvasId}" does not support offscreen rendering.`);
+    }
 }

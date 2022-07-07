@@ -4,6 +4,7 @@ use winit::event::{ElementState, KeyboardInput, MouseButton, MouseScrollDelta, V
 use winit::event_loop::EventLoop;
 use winit::window::Window;
 
+pub use zarr_wasm::zarr::ZarrArray;
 pub use numcodecs_wasm::*;
 
 pub mod event;
@@ -46,6 +47,11 @@ pub fn main(data: &[u16], shape: &[u32], canvas: JsValue) {
 }
 
 async fn start_event_loop(data: Vec<u16>, shape: Vec<u32>, canvas: JsValue) {
+    let zarr_array = ZarrArray::open_zarr_array("http://localhost:8005/".to_string(), "ome-zarr/m.ome.zarr/0/2".to_string()).await;
+    log::info!("ZarrArray {:?}", zarr_array.shape());
+
+
+
     let volume = make_raw_volume_block(data, shape);
 
     let html_canvas = canvas

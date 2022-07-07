@@ -49,7 +49,9 @@ const obj = {
         // this is just a test, can be removed
         testDeviceSharing();
 
-        const {data, shape} = await getRawZarrArray();
+        const rawZarrArray = await getRawZarrArray();
+        console.log(rawZarrArray);
+        const {data, shape} = rawZarrArray;
         main(data, shape, this.canvas);
     },
     dispatchCanvasEvent(eventString) {
