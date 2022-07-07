@@ -9,6 +9,7 @@ pub mod volume;
 pub mod offscreen_playground {
     use wasm_bindgen::prelude::*;
 
+    use crate::event;
     use crate::renderer::camera::{Camera, CameraView, Projection};
     use crate::renderer::context::{ContextDescriptor, GPUContext};
     use crate::renderer::geometry::Bounds3D;
@@ -152,7 +153,7 @@ pub mod offscreen_playground {
         pub fn run(
             dvr: DVR,
             window: winit::window::Window,
-            event_loop: winit::event_loop::EventLoop<WindowEvent>,
+            event_loop: winit::event_loop::EventLoop<event::Event<()>>,
         ) {
             let distance_from_center = 50.;
 
@@ -198,85 +199,84 @@ pub mod offscreen_playground {
                     }
                     // todo: handle events
                     Event::UserEvent(e) => match e {
-                        WindowEvent::Resized(_) => {}
-                        WindowEvent::Moved(_) => {}
-                        WindowEvent::CloseRequested => {}
-                        WindowEvent::Destroyed => {}
-                        WindowEvent::DroppedFile(_) => {}
-                        WindowEvent::HoveredFile(_) => {}
-                        WindowEvent::HoveredFileCancelled => {}
-                        WindowEvent::ReceivedCharacter(_) => {}
-                        WindowEvent::Focused(_) => {}
-                        WindowEvent::KeyboardInput {
-                            input:
-                                KeyboardInput {
-                                    virtual_keycode: Some(virtual_keycode),
-                                    state: ElementState::Pressed,
-                                    ..
-                                },
-                            ..
-                        } => match virtual_keycode {
-                            VirtualKeyCode::D => camera.view.move_right(TRANSLATION_SPEED),
-                            VirtualKeyCode::A => camera.view.move_left(TRANSLATION_SPEED),
-                            VirtualKeyCode::W | VirtualKeyCode::Up => {
-                                camera.view.move_forward(TRANSLATION_SPEED)
-                            }
-                            VirtualKeyCode::S | VirtualKeyCode::Down => {
-                                camera.view.move_backward(TRANSLATION_SPEED)
-                            }
-                            VirtualKeyCode::C => {
-                                if camera.projection().is_orthographic() {
-                                    camera.set_projection(perspective.clone());
-                                } else {
-                                    camera.set_projection(orthographic.clone());
+                        event::Event::Window(window_event) => match window_event {
+                            WindowEvent::Resized(_) => {}
+                            WindowEvent::Moved(_) => {}
+                            WindowEvent::CloseRequested => {}
+                            WindowEvent::Destroyed => {}
+                            WindowEvent::DroppedFile(_) => {}
+                            WindowEvent::HoveredFile(_) => {}
+                            WindowEvent::HoveredFileCancelled => {}
+                            WindowEvent::ReceivedCharacter(_) => {}
+                            WindowEvent::Focused(_) => {}
+                            WindowEvent::KeyboardInput {
+                                input:
+                                    KeyboardInput {
+                                        virtual_keycode: Some(virtual_keycode),
+                                        state: ElementState::Pressed,
+                                        ..
+                                    },
+                                ..
+                            } => match virtual_keycode {
+                                VirtualKeyCode::D => camera.view.move_right(TRANSLATION_SPEED),
+                                VirtualKeyCode::A => camera.view.move_left(TRANSLATION_SPEED),
+                                VirtualKeyCode::W | VirtualKeyCode::Up => {
+                                    camera.view.move_forward(TRANSLATION_SPEED)
+                                }
+                                VirtualKeyCode::S | VirtualKeyCode::Down => {
+                                    camera.view.move_backward(TRANSLATION_SPEED)
+                                }
+                                VirtualKeyCode::C => {
+                                    if camera.projection().is_orthographic() {
+                                        camera.set_projection(perspective.clone());
+                                    } else {
+                                        camera.set_projection(orthographic.clone());
+                                    }
+                                }
+                                _ => {}
+                            },
+                            WindowEvent::ModifiersChanged(_) => {}
+                            WindowEvent::CursorMoved { position, .. } => {
+                                let mouse_position =
+                                    glam::Vec2::new(position.x as f32, position.y as f32);
+                                let delta = (mouse_position - last_mouse_position) / resolution;
+                                last_mouse_position = mouse_position;
+
+                                if left_mouse_pressed {
+                                    camera.view.orbit(delta, false);
+                                } else if right_mouse_pressed {
+                                    let translation = delta * TRANSLATION_SPEED * 20.;
+                                    camera.view.move_right(translation.x);
+                                    camera.view.move_down(translation.y);
                                 }
                             }
-                            _ => {}
-                        },
-                        WindowEvent::ModifiersChanged(_) => {}
-                        WindowEvent::CursorMoved { position, .. } => {
-                            let mouse_position =
-                                glam::Vec2::new(position.x as f32, position.y as f32);
-                            let delta = (mouse_position - last_mouse_position) / resolution;
-                            last_mouse_position = mouse_position;
-
-                            if left_mouse_pressed {
-                                camera.view.orbit(delta, false);
-                            } else if right_mouse_pressed {
-                                let translation = delta * TRANSLATION_SPEED * 20.;
-                                camera.view.move_right(translation.x);
-                                camera.view.move_down(translation.y);
+                            WindowEvent::CursorEntered { .. } => {}
+                            WindowEvent::CursorLeft { .. } => {}
+                            WindowEvent::MouseWheel {
+                                delta: MouseScrollDelta::PixelDelta(delta),
+                                ..
+                            } => {
+                                camera.view.move_forward(
+                                    (f64::min(delta.y.abs(), 1.) * delta.y.signum()) as f32
+                                        * TRANSLATION_SPEED,
+                                );
                             }
-                        }
-                        WindowEvent::CursorEntered { .. } => {}
-                        WindowEvent::CursorLeft { .. } => {}
-                        WindowEvent::MouseWheel {
-                            delta: MouseScrollDelta::PixelDelta(delta),
-                            ..
-                        } => {
-                            camera.view.move_forward(
-                                (f64::min(delta.y.abs(), 1.) * delta.y.signum()) as f32
-                                    * TRANSLATION_SPEED,
-                            );
-                        }
-                        WindowEvent::MouseInput { state, button, .. } => {
-                            log::info!("user mouse event {:?} {:?}", button, state);
-                            match button {
+                            WindowEvent::MouseInput { state, button, .. } => match button {
                                 MouseButton::Left => {
-                                    log::info!("{:?}", state);
                                     left_mouse_pressed = state == ElementState::Pressed;
                                 }
                                 MouseButton::Right => {
                                     right_mouse_pressed = state == ElementState::Pressed;
                                 }
                                 _ => {}
-                            }
-                        }
-                        WindowEvent::TouchpadPressure { .. } => {}
-                        WindowEvent::AxisMotion { .. } => {}
-                        WindowEvent::Touch(_) => {}
-                        WindowEvent::ScaleFactorChanged { .. } => {}
-                        WindowEvent::ThemeChanged(_) => {}
+                            },
+                            WindowEvent::TouchpadPressure { .. } => {}
+                            WindowEvent::AxisMotion { .. } => {}
+                            WindowEvent::Touch(_) => {}
+                            WindowEvent::ScaleFactorChanged { .. } => {}
+                            WindowEvent::ThemeChanged(_) => {}
+                            _ => {}
+                        },
                         _ => {}
                     },
                     Event::RedrawRequested(_) => {

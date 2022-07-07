@@ -1,15 +1,15 @@
 use wasm_bindgen::{prelude::*, JsCast};
-use winit::event::WindowEvent;
-use winit::event::{DeviceId, ElementState, MouseButton};
 
 pub use numcodecs_wasm::*;
 
+pub mod event;
 pub mod renderer;
 pub mod util;
 
 use util::init;
 use util::window;
 
+use crate::event::handler::register_default_js_event_handlers;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::window::window_builder_without_size;
 
@@ -59,11 +59,6 @@ pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock 
 async fn make_offscreen_dvr(data: Vec<u16>, shape: Vec<u32>, canvas: JsValue) -> JsValue {
     let volume = make_raw_volume_block(data, shape);
 
-    log::info!(
-        "scale factor {}",
-        web_sys::window().unwrap().device_pixel_ratio()
-    );
-
     let html_canvas = canvas
         .clone()
         .unchecked_into::<web_sys::HtmlCanvasElement>();
@@ -73,26 +68,7 @@ async fn make_offscreen_dvr(data: Vec<u16>, shape: Vec<u32>, canvas: JsValue) ->
     let event_loop = winit::event_loop::EventLoop::with_user_event();
     let window = builder.build(&event_loop).unwrap();
 
-    // todo: map events to windowevents
-    let event_loop_proxy = event_loop.create_proxy();
-    let closure = Closure::wrap(Box::new(move |event: JsValue| {
-        let mouse_event = event.unchecked_into::<web_sys::MouseEvent>();
-        log::info!("generic event {:?}", mouse_event);
-        event_loop_proxy
-            .send_event(WindowEvent::MouseInput {
-                device_id: unsafe { DeviceId::dummy() },
-                state: ElementState::Pressed,
-                button: MouseButton::Left,
-                modifiers: Default::default(),
-            })
-            .ok();
-    }) as Box<dyn FnMut(_)>);
-    html_canvas2
-        .add_event_listener_with_callback("mousedown", closure.as_ref().unchecked_ref())
-        .unwrap();
-    closure.forget();
-
-    log::info!("window created");
+    register_default_js_event_handlers(&html_canvas2, &event_loop);
 
     let dvr = renderer::offscreen_playground::DVR::new(canvas, volume).await;
     Closure::once_into_js(move || renderer::offscreen_playground::DVR::run(dvr, window, event_loop))

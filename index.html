@@ -53,7 +53,7 @@
 
     import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 
-    console.log('device pixel ratio', window.devicePixelRatio, typeof window.devicePixelRatio);
+    import { toWrappedEvent } from "./event.js";
 
     async function start(canvasId) {
         const canvas = document.querySelector(canvasId);
@@ -75,30 +75,17 @@
 
             obj.run();
 
-            canvas.onmousedown = (e) => {
-
-                const event = {
-                    ...e,
-                    type: "mousedown",
-                    x: e.offsetX,
-                    y: e.offsetY,
-                    button: e.button,
-                    shiftKey: e.shiftKey,
-                    ctrlKey: e.ctrlKey,
-                    altKey: e.altKey,
-                    metaKey: e.metaKey,
-                    bubbles: true,
-                    cancelable: true,
-                    composed: true,
-                    target: offscreen,
-                };
-                const evt = new MouseEvent(e.type, event);
-                offscreen.dispatchEvent(evt);
-
-                console.log(e);
-
-                obj.dispatchCanvasEvent(JSON.stringify(event));
+            const dispatchToWorker = (e) => {
+                obj.dispatchCanvasEvent(JSON.stringify(toWrappedEvent(e)));
             }
+            canvas.onmousedown = dispatchToWorker;
+            canvas.onmouseup = dispatchToWorker;
+            canvas.onmousemove = dispatchToWorker;
+            canvas.onwheel = dispatchToWorker;
+            window.onkeydown = dispatchToWorker;
+            window.onkeyup = dispatchToWorker;
+            window.onkeypress = dispatchToWorker;
+
         } else {
             console.warn(`Canvas with id "${canvasId}" does not support offscreen rendering.`);
         }
