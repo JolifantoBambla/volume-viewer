@@ -1,6 +1,16 @@
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { toWrappedEvent } from "./event.js";
 
+// todo: define config options
+//  - canvas
+//    - parentId: string | null (default: document.body)
+//    - canvasId: string | null (default: create new canvas & attach to config.canvas.parentId)
+//    - width: uint
+//    - height: uint
+//  - numThreads: uint | null (default: navigator.hardwareConcurrency)
+//  - logLevel: string | null (default: error)
+
+
 export async function createOffscreenRenderer(config) {
     const canvas = document.querySelector(config.canvasId);
 

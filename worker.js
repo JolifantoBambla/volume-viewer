@@ -1,7 +1,7 @@
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 // importScripts("../../../dist/umd/comlink.js");
 
-import init, {testDeviceSharing, main} from "./pkg/volume_viewer.js";
+import init, {testDeviceSharing, main, initThreadPool} from "./pkg/volume_viewer.js";
 
 import { openArray } from 'https://cdn.skypack.dev/zarr';
 
@@ -32,6 +32,10 @@ const obj = {
     async run() {
         // initialize wasm (including module specific initialization)
         await init();
+
+        // initialize the thread pool using all available cores
+        // todo: make configurable
+        await initThreadPool(navigator.hardwareConcurrency);
 
         // this is just a test, can be removed
         testDeviceSharing();

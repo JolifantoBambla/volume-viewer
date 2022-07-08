@@ -1,3 +1,5 @@
+pub use wasm_bindgen_rayon::init_thread_pool;
+
 use glam::{Vec2, Vec3};
 use wasm_bindgen::{prelude::*, JsCast};
 use winit::event::{
@@ -30,13 +32,11 @@ use crate::window::window_builder_without_size;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
+// This function is run when the WASM module is instantiated.
 #[wasm_bindgen(start)]
 pub fn initialize() {
-    // initialize panic hook
-    init::set_panic_hook();
-
-    // initialize logger
-    init::set_logger(None);
+    // note: init stuff used to happen here, but when using WebAssembly threads this function is
+    // called once per thread and not once globally, so this moved to `main
 }
 
 // todo: lib.rs should contain only init and event_loop stuff
@@ -45,6 +45,10 @@ pub fn initialize() {
 //  create thread pool that is supplied with event proxies sending events to event loop
 #[wasm_bindgen]
 pub fn main(canvas: JsValue) {
+    // todo: make logger configurable
+    init::set_panic_hook();
+    init::set_logger(None);
+
     wasm_bindgen_futures::spawn_local(start_event_loop(canvas));
 }
 
