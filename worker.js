@@ -7,19 +7,6 @@ import { openArray } from 'https://cdn.skypack.dev/zarr';
 
 import { toWrappedEvent } from "./event.js";
 
-async function getRawZarrArray() {
-    const store = 'http://localhost:8005/';
-    const path = 'ome-zarr/m.ome.zarr/0';
-
-    const z = await openArray({
-        store,
-        path: `${path}/2`,
-        mode: "r"
-    });
-
-    return await z.getRaw([0, 0]);
-}
-
 const obj = {
     counter: 0,
     canvas: null,
@@ -49,10 +36,7 @@ const obj = {
         // this is just a test, can be removed
         testDeviceSharing();
 
-        const rawZarrArray = await getRawZarrArray();
-        console.log(rawZarrArray);
-        const {data, shape} = rawZarrArray;
-        main(data, shape, this.canvas);
+        main(this.canvas);
     },
     dispatchCanvasEvent(eventString) {
         if (this.canvas) {

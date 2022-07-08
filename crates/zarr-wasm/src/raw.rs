@@ -8,8 +8,10 @@ extern "C" {
     #[derive(Debug, Clone)]
     pub type RawArray;
 
-    #[wasm_bindgen(method, getter, js_class = "RawArray")]
-    pub fn data(this: &RawArray) -> JsValue;
+    #[wasm_bindgen(method, getter, js_class = "RawArray", js_name = "data")]
+    pub fn data_uint16(this: &RawArray) -> Vec<u16>;
+
+    //  todo: other data types (macro)
 
     #[wasm_bindgen(method, getter, js_class = "RawArray", js_name = "dtype")]
     pub fn data_type_js(this: &RawArray) -> String;
@@ -28,5 +30,41 @@ extern "C" {
 }
 
 // todo: get typed array from raw array
-impl RawArray {}
+impl RawArray {
+    pub fn get_data_type(&self) -> DataType {
+        serde_json::from_str(&self.data_type_js()).unwrap()
+    }
 
+    pub fn get_data_uint16(&self) -> Vec<u16> {
+        let data_type = self.get_data_type();
+        match data_type {
+            DataType::Uint16LittleEndian => {
+                #[cfg(target_endian = "little")]
+                {
+                    self.data_uint16()
+                }
+                #[cfg(not(target_endian = "little"))]
+                {
+                    self.data_uint16()
+                        .iter()
+                        .map(|x| u16::from_le(*x))
+                        .collect()
+                }
+            }
+            DataType::Uint16BigEndian => {
+                #[cfg(target_endian = "little")]
+                {
+                    self.data_uint16()
+                        .iter()
+                        .map(|x| u16::from_be(*x))
+                        .collect()
+                }
+                #[cfg(not(target_endian = "little"))]
+                {
+                    self.data_uint16()
+                }
+            }
+            _ => panic!("Raw array is not a u16 array"),
+        }
+    }
+}

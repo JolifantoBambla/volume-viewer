@@ -133,4 +133,3 @@ impl Renderer {
         self.ctx.queue.submit(Some(encoder.finish()));
     }
 }
-

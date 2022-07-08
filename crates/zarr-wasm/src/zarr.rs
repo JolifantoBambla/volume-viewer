@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 
 use crate::data_type::DataType;
 use crate::raw::RawArray;
@@ -90,7 +90,7 @@ pub struct OpenArrayOptions {
     pub read_only: Option<bool>,
 
     #[serde(rename = "dimensionSeparator")]
-    pub dimension_separator: Option<DimensionSeparator>
+    pub dimension_separator: Option<DimensionSeparator>,
 }
 
 impl Default for OpenArrayOptions {
@@ -111,7 +111,7 @@ impl Default for OpenArrayOptions {
             cache_metadata: None,
             cache_attributes: None,
             read_only: None,
-            dimension_separator: None
+            dimension_separator: None,
         }
     }
 }
@@ -129,19 +129,11 @@ pub struct Slice {
 #[serde(untagged)]
 pub enum DimensionArraySelection {
     Slice(Slice),
-    Number(u32),
-    Numbers(Vec<u32>),
+    Number(f32),
     #[serde(rename = "...")]
     Ellipsis,
     #[serde(rename = ":")]
     Separator,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum ArraySelection {
-    Multiple(Vec<Option<DimensionArraySelection>>),
-    Single(Option<DimensionArraySelection>),
 }
 
 #[derive(Deserialize, Serialize)]
@@ -154,6 +146,15 @@ pub struct GetOptions {
     #[serde(rename = "progressCallback")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress_callback: Option<String>,
+}
+
+impl Default for GetOptions {
+    fn default() -> Self {
+        Self {
+            concurrency_limit: None,
+            progress_callback: None,
+        }
+    }
 }
 
 #[wasm_bindgen(module = "https://cdn.skypack.dev/zarr")]
@@ -216,10 +217,17 @@ impl ZarrArray {
         array.unchecked_into::<ZarrArray>()
     }
 
-    pub async fn get_raw_data(&self, selection: Option<Vec<DimensionArraySelection>>, options: Option<GetOptions>) -> RawArray {
-        self.get_raw(JsValue::from_serde(&selection).unwrap(), JsValue::from_serde(&options).unwrap())
-            .await
-            .unchecked_into::<RawArray>()
+    pub async fn get_raw_data(
+        &self,
+        selection: Option<Vec<DimensionArraySelection>>,
+        options: GetOptions,
+    ) -> RawArray {
+        self.get_raw(
+            JsValue::from_serde(&selection).unwrap(),
+            JsValue::from_serde(&options).unwrap(),
+        )
+        .await
+        .unchecked_into::<RawArray>()
     }
 
     pub fn data_type(&self) -> DataType {

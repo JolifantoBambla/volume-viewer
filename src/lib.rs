@@ -1,25 +1,27 @@
 use glam::{Vec2, Vec3};
 use wasm_bindgen::{prelude::*, JsCast};
-use winit::event::{ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
+use winit::event::{
+    ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
+};
 use winit::event_loop::EventLoop;
 use winit::window::Window;
 
-pub use zarr_wasm::zarr::ZarrArray;
 pub use numcodecs_wasm::*;
+pub use zarr_wasm::zarr::{DimensionArraySelection, GetOptions, ZarrArray};
 
 pub mod event;
 pub mod renderer;
 pub mod util;
 
+use crate::event::Event;
 use util::init;
 use util::window;
-use crate::event::Event;
 
 use crate::event::handler::register_default_js_event_handlers;
 use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::geometry::Bounds3D;
-use crate::renderer::Renderer;
 use crate::renderer::volume::RawVolumeBlock;
+use crate::renderer::Renderer;
 use crate::window::window_builder_without_size;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -42,18 +44,29 @@ pub fn initialize() {
 //  create CustomEvent enum that consists of WindowEvent and can be extended by other events
 //  create thread pool that is supplied with event proxies sending events to event loop
 #[wasm_bindgen]
-pub fn main(data: &[u16], shape: &[u32], canvas: JsValue) {
-    wasm_bindgen_futures::spawn_local(start_event_loop(data.to_vec(), shape.to_vec(), canvas));
+pub fn main(canvas: JsValue) {
+    wasm_bindgen_futures::spawn_local(start_event_loop(canvas));
 }
 
-async fn start_event_loop(data: Vec<u16>, shape: Vec<u32>, canvas: JsValue) {
-    let zarr_array = ZarrArray::open_zarr_array("http://localhost:8005/".to_string(), "ome-zarr/m.ome.zarr/0/2".to_string()).await;
+async fn start_event_loop(canvas: JsValue) {
+    let zarr_array = ZarrArray::open_zarr_array(
+        "http://localhost:8005/".to_string(),
+        "ome-zarr/m.ome.zarr/0/2".to_string(),
+    )
+    .await;
     log::info!("ZarrArray {:?}", zarr_array.shape());
 
-    //zarr_array.get_raw().await;
+    let selection = vec![
+        DimensionArraySelection::Number(0.),
+        DimensionArraySelection::Number(0.),
+    ];
+    let raw = zarr_array
+        .get_raw_data(Some(selection), GetOptions::default())
+        .await;
+    log::info!("RawArray {:?}", raw.shape());
+    let d = raw.data_uint16();
 
-
-    let volume = make_raw_volume_block(data, shape);
+    let volume = make_raw_volume_block(d, raw.shape());
 
     let html_canvas = canvas
         .clone()
@@ -93,7 +106,10 @@ pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<
     // TODO: refactor these params
     let distance_from_center = 50.;
 
-    let resolution = Vec2::new(renderer.canvas.width() as f32, renderer.canvas.height() as f32);
+    let resolution = Vec2::new(
+        renderer.canvas.width() as f32,
+        renderer.canvas.height() as f32,
+    );
 
     const TRANSLATION_SPEED: f32 = 5.0;
 
@@ -147,11 +163,11 @@ pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<
                     WindowEvent::Focused(_) => {}
                     WindowEvent::KeyboardInput {
                         input:
-                        KeyboardInput {
-                            virtual_keycode: Some(virtual_keycode),
-                            state: ElementState::Pressed,
-                            ..
-                        },
+                            KeyboardInput {
+                                virtual_keycode: Some(virtual_keycode),
+                                state: ElementState::Pressed,
+                                ..
+                            },
                         ..
                     } => match virtual_keycode {
                         VirtualKeyCode::D => camera.view.move_right(TRANSLATION_SPEED),
@@ -173,8 +189,7 @@ pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<
                     },
                     WindowEvent::ModifiersChanged(_) => {}
                     WindowEvent::CursorMoved { position, .. } => {
-                        let mouse_position =
-                            glam::Vec2::new(position.x as f32, position.y as f32);
+                        let mouse_position = glam::Vec2::new(position.x as f32, position.y as f32);
                         let delta = (mouse_position - last_mouse_position) / resolution;
                         last_mouse_position = mouse_position;
 
@@ -225,7 +240,8 @@ pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<
                             &renderer.ctx.device,
                             renderer.ctx.surface_configuration.as_ref().unwrap(),
                         );
-                        renderer.ctx
+                        renderer
+                            .ctx
                             .surface
                             .as_ref()
                             .unwrap()
@@ -241,10 +257,10 @@ pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<
 
                 frame.present();
                 log::info!(
-                            "Frame rendered, {}, {}",
-                            renderer.canvas.width(),
-                            renderer.canvas.height()
-                        );
+                    "Frame rendered, {}, {}",
+                    renderer.canvas.width(),
+                    renderer.canvas.height()
+                );
             }
             _ => {}
         }
@@ -263,7 +279,6 @@ pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock 
         shape[0],
     )
 }
-
 
 // Test device sharing between WASM and JS context, could be useful at some point
 
