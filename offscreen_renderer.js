@@ -17,6 +17,7 @@ export async function createOffscreenRenderer(config) {
 
         // register UI event listeners
         const dispatchToWorker = (e) => {
+            e.preventDefault();
             obj.dispatchCanvasEvent(JSON.stringify(toWrappedEvent(e)));
         }
         canvas.onmousedown = dispatchToWorker;
