@@ -2,17 +2,17 @@ import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 // importScripts("../../../dist/umd/comlink.js");
 
 import init, {testDeviceSharing, main, initThreadPool} from "./pkg/volume_viewer.js";
-
-import { openArray } from 'https://cdn.skypack.dev/zarr';
-
 import { toWrappedEvent } from "./event.js";
 
-const obj = {
-    counter: 0,
-    canvas: null,
-    inc() {
-        this.counter++;
-    },
+class VolumeRenderer {
+    #canvas;
+    #initialized;
+
+    constructor() {
+        this.#initialized = false;
+        this.#canvas = null;
+    }
+
     initialize(offscreenCanvas) {
         // This is a hack so that wgpu can create an instance from a dedicated worker
         // See: https://github.com/gfx-rs/wgpu/issues/1986
@@ -27,9 +27,16 @@ const obj = {
             setProperty(name, value) {},
         };
 
-        this.canvas = offscreenCanvas;
-    },
+        this.#canvas = offscreenCanvas;
+        this.#initialized = true;
+    }
+
     async run() {
+        if (!this.#initialized) {
+            console.warn('\'run\' called on uninitialized VolumeRenderer.')
+            return;
+        }
+
         // initialize wasm (including module specific initialization)
         await init();
 
@@ -40,25 +47,20 @@ const obj = {
         // this is just a test, can be removed
         testDeviceSharing();
 
-        main(this.canvas);
-    },
+        // start event loop
+        main(this.#canvas);
+    }
+
+    /**
+     * Dispatches a serialized event to the OffscreenCanvas.
+     * @param eventString a serialized event
+     */
     dispatchCanvasEvent(eventString) {
-        if (this.canvas) {
-            this.canvas.dispatchEvent(toWrappedEvent(JSON.parse(eventString)));
+        if (this.#canvas) {
+            this.#canvas.dispatchEvent(toWrappedEvent(JSON.parse(eventString)));
         }
     }
-};
+}
 
-Comlink.expose(obj);
-
-/**
- * When a connection is made into this shared worker, expose `obj`
- * via the connection `port`.
- */
-//onconnect = function (event) {
-//    const port = event.ports[0];
-//    Comlink.expose(obj, port);
-//};
-
-// Single line alternative:
-// onconnect = (e) => Comlink.expose(obj, e.ports[0]);
+const renderer = new VolumeRenderer();
+Comlink.expose(renderer);
