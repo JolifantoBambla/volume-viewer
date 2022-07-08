@@ -1,7 +1,9 @@
 pub use wasm_bindgen_rayon::init_thread_pool;
+use rayon::prelude::*;
 
 use glam::{Vec2, Vec3};
 use wasm_bindgen::{prelude::*, JsCast};
+use wgpu::util::DeviceExt;
 use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
 };
@@ -52,6 +54,16 @@ pub fn main(canvas: JsValue) {
     wasm_bindgen_futures::spawn_local(start_event_loop(canvas));
 }
 
+async fn test_async_loading(event_loop_proxy: winit::event_loop::EventLoopProxy<ZarrArray>) {
+    log::info!("test_async_loading");
+    let zarr_array = ZarrArray::open_zarr_array(
+        "http://localhost:8005/".to_string(),
+        "ome-zarr/m.ome.zarr/0/2".to_string(),
+    ).await;
+    log::info!("ZarrArray in async task {:?} {:?}", zarr_array.shape(), rayon::current_thread_index());
+    event_loop_proxy.send_event(zarr_array).ok();
+}
+
 async fn start_event_loop(canvas: JsValue) {
     let zarr_array = ZarrArray::open_zarr_array(
         "http://localhost:8005/".to_string(),
@@ -83,8 +95,27 @@ async fn start_event_loop(canvas: JsValue) {
 
     register_default_js_event_handlers(&html_canvas2, &event_loop);
 
-    let dvr = Renderer::new(canvas, volume).await;
-    let start_closure = Closure::once_into_js(move || run_event_loop(dvr, window, event_loop));
+    let renderer = Renderer::new(canvas, volume).await;
+
+    let foo = renderer::passes::dvr::Uniforms::default();
+    log::info!("spawning async task");
+    rayon::spawn(|| {
+        log::info!("spawning locally");
+        let event_loop = winit::event_loop::EventLoop::with_user_event();
+        wasm_bindgen_futures::spawn_local(test_async_loading(event_loop.create_proxy()));
+        event_loop.run(|event, _, control_flow| {
+            *control_flow = winit::event_loop::ControlFlow::Poll;
+            log::info!("event {:?}", event);
+            if let winit::event::Event::UserEvent(event) = event {
+                log::info!("ZarrArray {:?}", event.shape());
+                *control_flow = winit::event_loop::ControlFlow::Exit;
+            }
+        });
+        log::info!("async task finished");
+    });
+    log::info!("main thread goes on");
+
+    let start_closure = Closure::once_into_js(move || run_event_loop(renderer, window, event_loop));
 
     // make sure to handle JS exceptions thrown inside start.
     // Otherwise wasm_bindgen_futures Queue would break and never handle any tasks again.

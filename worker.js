@@ -63,4 +63,5 @@ class VolumeRenderer {
 }
 
 const renderer = new VolumeRenderer();
+
 Comlink.expose(renderer);
