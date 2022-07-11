@@ -7,6 +7,7 @@ import { toWrappedEvent } from "./event.js";
 class VolumeRenderer {
     #canvas;
     #initialized;
+    #device;
 
     constructor() {
         this.#initialized = false;
@@ -43,6 +44,12 @@ class VolumeRenderer {
         // initialize the thread pool using all available cores
         // todo: make configurable
         await initThreadPool(navigator.hardwareConcurrency);
+
+        // note this is used to share a GPUDevice handle with the JS side
+        this.#canvas.addEventListener('from-rust', e => {
+            this.#device = e.detail;
+            console.log('device limits', this.#device.limits);
+        });
 
         // this is just a test, can be removed
         testDeviceSharing();

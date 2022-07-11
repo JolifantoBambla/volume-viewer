@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 pub use wasm_bindgen_rayon::init_thread_pool;
 use rayon::prelude::*;
 
@@ -95,6 +96,17 @@ async fn start_event_loop(canvas: JsValue) {
 
     register_default_js_event_handlers(&html_canvas2, &event_loop);
 
+    // this part shows a GPUDevice handle can be shared via a custom event posted to the canvas
+    let exposed_device = expose_device().await;
+    let event_from_rust = web_sys::CustomEvent::new("from-rust").ok().unwrap();
+    event_from_rust.init_custom_event_with_can_bubble_and_cancelable_and_detail(
+        "from-rust",
+        false,
+        false,
+        &exposed_device,
+    );
+    html_canvas2.dispatch_event(&event_from_rust);
+
     let renderer = Renderer::new(canvas, volume).await;
 
     let foo = renderer::passes::dvr::Uniforms::default();
@@ -103,6 +115,7 @@ async fn start_event_loop(canvas: JsValue) {
         log::info!("spawning locally");
         let event_loop = winit::event_loop::EventLoop::with_user_event();
         wasm_bindgen_futures::spawn_local(test_async_loading(event_loop.create_proxy()));
+        // todo: this should use a dummy window or return instead of using controlflow
         event_loop.run(|event, _, control_flow| {
             *control_flow = winit::event_loop::ControlFlow::Poll;
             log::info!("event {:?}", event);
@@ -348,3 +361,4 @@ async fn expose_device() -> web_sys::GpuDevice {
 
     device.id
 }
+
