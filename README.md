@@ -28,4 +28,4 @@ wasm-pack build --target web -- . -Z build-std=panic_abort,std
 ## Run
 This project requires cross-origin isolation headers to be set.
 Use the `server.py` script provided by this project to serve the built package.
-
+(This should not be necessary anymore, since coi-serviceworker takes care of that.)
