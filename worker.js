@@ -1,5 +1,4 @@
-import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
-// importScripts("../../../dist/umd/comlink.js");
+import * as Comlink from "./external-js/src/comlink.mjs";
 
 import init, {testDeviceSharing, main, initThreadPool} from "./pkg/volume_viewer.js";
 import { toWrappedEvent } from "./event.js";
@@ -8,6 +7,7 @@ class VolumeRenderer {
     #canvas;
     #initialized;
     #device;
+    #loader;
 
     constructor() {
         this.#initialized = false;
@@ -28,7 +28,10 @@ class VolumeRenderer {
             setProperty(name, value) {},
         };
 
+        const worker = new Worker('./loader.js', { type: 'module' });
+
         this.#canvas = offscreenCanvas;
+        this.#loader = worker;
         this.#initialized = true;
     }
 
@@ -50,6 +53,14 @@ class VolumeRenderer {
             this.#device = e.detail;
             console.log('device limits', this.#device.limits);
         });
+
+        this.#canvas.addEventListener('loader-request', e => {
+            this.#loader.postMessage(e.detail);
+        });
+        this.#loader.addEventListener('message', e => {
+            console.log('got event', e);
+            this.#canvas.dispatchEvent(new CustomEvent('zarr:group', { detail: e.detail }));
+        })
 
         // this is just a test, can be removed
         testDeviceSharing();

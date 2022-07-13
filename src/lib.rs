@@ -2,8 +2,6 @@ use std::collections::HashMap;
 pub use wasm_bindgen_rayon::init_thread_pool;
 use rayon::prelude::*;
 
-use wasm_rs_async_executor::single_threaded as executor;
-
 use glam::{Vec2, Vec3};
 use wasm_bindgen::{prelude::*, JsCast};
 use wgpu::util::DeviceExt;
@@ -31,7 +29,7 @@ use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::geometry::Bounds3D;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::Renderer;
-use crate::volume_loader::{BrickResponse, Channel, create_new_channel_pair, RequestEvent, ResponseEvent};
+use crate::volume_loader::{BrickResponse, Channel, create_new_channel_pair, load_volume, loader_main, RequestEvent, ResponseEvent, test_async_loading2, using_async, VolumeRequest};
 use crate::window::window_builder_without_size;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -60,18 +58,8 @@ pub fn main(canvas: JsValue) {
     wasm_bindgen_futures::spawn_local(start_event_loop(canvas));
 }
 
-async fn test_async_loading(event_loop_proxy: winit::event_loop::EventLoopProxy<ZarrArray>) {
-    log::info!("test_async_loading");
-    let zarr_array = ZarrArray::open_zarr_array(
-        "http://localhost:8005/".to_string(),
-        "ome-zarr/m.ome.zarr/0/2".to_string(),
-    ).await;
-    log::info!("ZarrArray in async task {:?} {:?}", zarr_array.shape(), rayon::current_thread_index());
-    event_loop_proxy.send_event(zarr_array).ok();
-}
-
 async fn start_event_loop(canvas: JsValue) {
-    let zarr_array = ZarrArray::open_zarr_array(
+    let zarr_array = ZarrArray::open(
         "http://localhost:8005/".to_string(),
         "ome-zarr/m.ome.zarr/0/2".to_string(),
     )
@@ -112,60 +100,34 @@ async fn start_event_loop(canvas: JsValue) {
     );
     html_canvas2.dispatch_event(&event_from_rust);
 
+    let mut loader_request = HashMap::new();
+    loader_request.insert("store", "http://localhost:8005/");
+    loader_request.insert("path", "ome-zarr/m.ome.zarr/0");
+    event_from_rust.init_custom_event_with_can_bubble_and_cancelable_and_detail(
+        "loader-request",
+        false,
+        false,
+        &JsValue::from_serde(&loader_request).unwrap(),
+    );
+    html_canvas2.dispatch_event(&event_from_rust);
+
     let renderer = Renderer::new(canvas, volume).await;
 
     let (main_thread_channel, loader_thread_channel) = create_new_channel_pair::<RequestEvent, ResponseEvent>();
 
-    //let main_event_loop_proxy = send_wrapper::SendWrapper::new(event_loop.create_proxy());
-    log::info!("spawning async task");
-
-    //let (sender, receiver) = channel();
+    /*
     rayon::spawn(move || {
-        log::info!("spawning locally");
-        let fut = async {
-            log::info!("test_async_loading fut");
-            let zarr_array = ZarrArray::open_zarr_array(
-                "http://localhost:8005/".to_string(),
-                "ome-zarr/m.ome.zarr/0/2".to_string(),
-            ).await;
-            log::info!("ZarrArray in async task {:?} {:?}", zarr_array.shape(), rayon::current_thread_index());
-        };
-        log::info!("created future");
-
-
-        let event_loop = winit::event_loop::EventLoop::with_user_event();
-        wasm_bindgen_futures::spawn_local(test_async_loading(event_loop.create_proxy()));
-        // todo: this should use a dummy window or return instead of using controlflow
-        event_loop.run(move |event, _, control_flow| {
-            *control_flow = winit::event_loop::ControlFlow::Poll;
-            log::info!("event {:?}", event);
-            if let winit::event::Event::UserEvent(event) = event {
-                log::info!("ZarrArray {:?}", event.shape());
-                loader_thread_channel.sender.send(ResponseEvent::Brick(BrickResponse {
-                    data: vec![],
-                    shape: event.shape(),
-                }),
-                ).unwrap();
-                //sender.send(event.shape()).ok();
-                /*
-                main_event_loop_proxy.send_event(
-                    Event::RawArray(
-                        crate::event::RawArrayReceived {
-                            data: vec![],
-                            shape: event.shape(),
-                        },
-                    ),
-                ).ok();
-                */
-                //sender.send(main_event_loop_proxy).unwrap();
-                *control_flow = winit::event_loop::ControlFlow::Exit;
-            }
-        });
-
+        loader_main(loader_thread_channel)
     });
-    log::info!("main thread goes on");
+    rayon::spawn(move || {
+        load_volume(loader_thread_channel.sender.clone())
+    });
+    */
+    main_thread_channel.sender.send(RequestEvent::Volume(VolumeRequest{
+        store: "http://localhost:8005/".to_string(),
+        path: "ome-zarr/m.ome.zarr/0/2".to_string()
+    })).ok();
 
-    //let foo = receiver.recv().unwrap();
 
     let start_closure = Closure::once_into_js(move || run_event_loop(renderer, window, event_loop, main_thread_channel));
 
@@ -357,11 +319,6 @@ pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<
                 renderer.render(&view);
 
                 frame.present();
-                log::info!(
-                    "Frame rendered, {}, {}",
-                    renderer.canvas.width(),
-                    renderer.canvas.height()
-                );
             }
             _ => {}
         }

@@ -1,4 +1,4 @@
-import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
+import * as Comlink from "./external-js/src/comlink.mjs";
 import { toWrappedEvent } from "./event.js";
 
 // todo: define config options

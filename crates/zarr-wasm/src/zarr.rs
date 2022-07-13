@@ -3,27 +3,10 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
 use crate::data_type::DataType;
+use crate::persistence_mode::PersistenceMode;
 use crate::raw::RawArray;
 
 // TODO: mapping from zarr-wasm to ome-zarr
-
-#[derive(Serialize, Deserialize)]
-pub enum PersistenceMode {
-    #[serde(rename = "r")]
-    ReadOnly,
-
-    #[serde(rename = "r+")]
-    ReadWrite,
-
-    #[serde(rename = "a")]
-    ReadWriteNonExisting,
-
-    #[serde(rename = "w")]
-    Create,
-
-    #[serde(rename = "w-")]
-    CreateNonExisting,
-}
 
 pub type ChunksArgument = Vec<u32>;
 
@@ -203,18 +186,18 @@ extern "C" {
     pub async fn get_raw(this: &ZarrArray, selection: JsValue, options: JsValue) -> JsValue;
 
     #[wasm_bindgen(js_name = "openArray")]
-    pub async fn open_array(options: JsValue) -> JsValue;
+    async fn open_array(options: JsValue) -> JsValue;
 }
 
 impl ZarrArray {
-    pub async fn open_zarr_array(store: String, path: String) -> ZarrArray {
+    pub async fn open(store: String, path: String) -> ZarrArray {
         let options = OpenArrayOptions {
             store,
             path: Some(path),
             ..Default::default()
         };
         let array = open_array(JsValue::from_serde(&options).unwrap()).await;
-        array.unchecked_into::<ZarrArray>()
+        array.unchecked_into()
     }
 
     pub async fn get_raw_data(

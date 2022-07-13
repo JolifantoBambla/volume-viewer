@@ -34,6 +34,13 @@ pub fn convert_js_event<'a, T>(js_event: JsValue) -> Result<Event<'a, T>, Conver
         "keydown" | "keypress" | "keyup" => {
             convert_keyboard_event(event.unchecked_into::<KeyboardEvent>())
         }
+        "zarr:group" => {
+            log::info!("zarr:group event in rust: {:?}", event);
+            Err(ConversionError {
+                event_type: event.type_(),
+                message: "Unsupported event type".to_string(),
+            })
+        }
         _ => Err(ConversionError {
             event_type: event.type_(),
             message: "Unsupported event type".to_string(),
