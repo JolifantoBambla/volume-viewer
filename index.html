@@ -6,13 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Volume Viewer</title>
 </head>
+<body style="background-color:rgb(51, 51, 51);">
 
-<body>
+<!-- <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.0/dist/tweakpane.min.js"></script> -->
 <script type="module">
     import { createOffscreenRenderer } from './offscreen_renderer.js';
+
+    // can it do transfer functions?
+    // maybe: https://github.com/tweakpane/plugin-essentials
+    //const pane = new Tweakpane.Pane();
+
     async function start() {
         try {
-            (await createOffscreenRenderer({canvasId: 'canvas'})).run();
+            await (await createOffscreenRenderer({canvasId: 'canvas'})).run();
         } catch (e) {
             console.error(e);
         }
@@ -21,23 +27,8 @@
 </script>
 
 <div>
-    <div>
-        <label for="ome-zarr-store">OME-Zarr file store:</label>
-        <input type="text" id="ome-zarr-store" name="ome-zarr-store" value="http://localhost:8005/"><br><br>
-    </div>
-    <div>
-        <label for="ome-zarr-path">OME-Zarr file path:</label>
-        <input type="text" id="ome-zarr-path" name="ome-zarr-path" value="ome-zarr/m.ome.zarr/0"><br><br>
-    </div>
-
-    <canvas id="existing-canvas" width="800" height="600" oncontextmenu="return false;" ></canvas>
     <canvas id="canvas" width="800" height="600"></canvas>
-
-    <div hidden>
-        <label for="z-slice">Z Slice:</label>
-        <input type="range" id="z-slice" name="z-slice" min="0" max="0">
-    </div>
-
 </div>
+
 </body>
 </html>

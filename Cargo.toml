@@ -21,6 +21,7 @@ runner = 'wasm-bindgen-test-runner'
 [dependencies]
 bytemuck = { version = "1.9.1", features = ["derive"] }
 futures-intrusive = "0.4.0"
+futures = "0.3.21"
 glam = { version = "0.20.5", features = ["bytemuck"] }
 instant = "0.1.12"
 js-sys = "0.3.57"
@@ -28,13 +29,15 @@ log = "0.4.17"
 rayon = "1.5.3"
 readonly = "0.2.0"
 reqwest = "0.11.10"
+send_wrapper = "0.6.0"
 serde = "1.0.137"
 serde_json = "1.0.81"
 wasm-bindgen = { version = "0.2.63", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4.30"
 wasm-bindgen-rayon = { version = "1.0.3", features = ["no-bundler"] }
 wasm-logger = "0.2.0"
-web-sys = { version = "0.3.58", features = ["Document", "HtmlCanvasElement", "HtmlInputElement", "Gpu", "GpuDevice", "OffscreenCanvas", "Performance", "Window", "Event", "EventInit", "CustomEvent", "CustomEventInit","EventTarget"] }
+wasm-rs-async-executor = "0.9.0"
+web-sys = { version = "0.3.58", features = ["Document", "HtmlCanvasElement", "HtmlInputElement", "Gpu", "GpuDevice", "OffscreenCanvas", "Performance", "Window", "Event", "EventInit", "CustomEvent", "CustomEventInit","EventTarget", "WorkerNavigator"] }
 wgpu = { version = "0.13.1" }
 winit = { version = "0.26.1", features = [] }
 

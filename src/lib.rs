@@ -1,6 +1,12 @@
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
+use futures::task::LocalSpawnExt;
 pub use wasm_bindgen_rayon::init_thread_pool;
 use rayon::prelude::*;
+
+use wasm_rs_async_executor::single_threaded as executor;
 
 use glam::{Vec2, Vec3};
 use wasm_bindgen::{prelude::*, JsCast};
@@ -18,9 +24,10 @@ pub mod event;
 pub mod renderer;
 pub mod util;
 
-use crate::event::Event;
+use crate::event::{Event, RawArrayReceived};
 use util::init;
 use util::window;
+use zarr_wasm::raw::RawArray;
 
 use crate::event::handler::register_default_js_event_handlers;
 use crate::renderer::camera::{Camera, CameraView, Projection};
@@ -63,6 +70,11 @@ async fn test_async_loading(event_loop_proxy: winit::event_loop::EventLoopProxy<
     ).await;
     log::info!("ZarrArray in async task {:?} {:?}", zarr_array.shape(), rayon::current_thread_index());
     event_loop_proxy.send_event(zarr_array).ok();
+}
+
+pub struct Channel<T, V> {
+    pub receiver: mpsc::Receiver<T>,
+    pub sender: mpsc::Sender<V>,
 }
 
 async fn start_event_loop(canvas: JsValue) {
@@ -109,26 +121,68 @@ async fn start_event_loop(canvas: JsValue) {
 
     let renderer = Renderer::new(canvas, volume).await;
 
-    let foo = renderer::passes::dvr::Uniforms::default();
+
+
+    let (request_sender, request_receiver) = mpsc::channel();
+    let (data_sender, data_receiver) = mpsc::channel();
+
+    let main_thread_channel = Channel {
+        receiver: data_receiver,
+        sender: request_sender,
+    };
+    let loader_thread_channel = Channel {
+        receiver: request_receiver,
+        sender: data_sender,
+    };
+
+    //let main_event_loop_proxy = send_wrapper::SendWrapper::new(event_loop.create_proxy());
     log::info!("spawning async task");
-    rayon::spawn(|| {
+
+    //let (sender, receiver) = channel();
+    rayon::spawn(move || {
         log::info!("spawning locally");
+        let fut = async {
+            log::info!("test_async_loading fut");
+            let zarr_array = ZarrArray::open_zarr_array(
+                "http://localhost:8005/".to_string(),
+                "ome-zarr/m.ome.zarr/0/2".to_string(),
+            ).await;
+            log::info!("ZarrArray in async task {:?} {:?}", zarr_array.shape(), rayon::current_thread_index());
+        };
+        log::info!("created future");
+
+
         let event_loop = winit::event_loop::EventLoop::with_user_event();
         wasm_bindgen_futures::spawn_local(test_async_loading(event_loop.create_proxy()));
         // todo: this should use a dummy window or return instead of using controlflow
-        event_loop.run(|event, _, control_flow| {
+        event_loop.run(move |event, _, control_flow| {
             *control_flow = winit::event_loop::ControlFlow::Poll;
             log::info!("event {:?}", event);
             if let winit::event::Event::UserEvent(event) = event {
                 log::info!("ZarrArray {:?}", event.shape());
+                loader_thread_channel.sender.send(event.shape()).unwrap();
+                //sender.send(event.shape()).ok();
+                /*
+                main_event_loop_proxy.send_event(
+                    Event::RawArray(
+                        crate::event::RawArrayReceived {
+                            data: vec![],
+                            shape: event.shape(),
+                        },
+                    ),
+                ).ok();
+                */
+                //sender.send(main_event_loop_proxy).unwrap();
                 *control_flow = winit::event_loop::ControlFlow::Exit;
             }
         });
-        log::info!("async task finished");
+
     });
     log::info!("main thread goes on");
 
-    let start_closure = Closure::once_into_js(move || run_event_loop(renderer, window, event_loop));
+    //let foo = receiver.recv().unwrap();
+
+    let start_closure = Closure::once_into_js(move || run_event_loop(renderer, window, event_loop, main_thread_channel));
 
     // make sure to handle JS exceptions thrown inside start.
     // Otherwise wasm_bindgen_futures Queue would break and never handle any tasks again.
@@ -150,7 +204,7 @@ async fn start_event_loop(canvas: JsValue) {
     }
 }
 
-pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<Event<()>>) {
+pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<Event<()>>, channel: Channel<Vec<u32>, ()>) {
     // TODO: refactor these params
     let distance_from_center = 50.;
 
@@ -191,6 +245,12 @@ pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<
         let _ = (&renderer.ctx.instance, &renderer.ctx.adapter);
 
         *control_flow = winit::event_loop::ControlFlow::Poll;
+
+        let foo = channel.receiver.try_recv();
+        if foo.is_ok() {
+            let shape = foo.unwrap();
+            log::info!("shape in event loop!!!!!!!! {:?}", shape);
+        }
 
         // todo: refactor input handling
         match event {
@@ -276,6 +336,9 @@ pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<
                     WindowEvent::ThemeChanged(_) => {}
                     _ => {}
                 },
+                Event::RawArray(raw_array) => {
+                    log::info!("got raw array {:?}", raw_array.shape);
+                }
                 _ => {}
             },
             winit::event::Event::RedrawRequested(_) => {
