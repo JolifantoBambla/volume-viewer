@@ -1,8 +1,4 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
-use futures::task::LocalSpawnExt;
 pub use wasm_bindgen_rayon::init_thread_pool;
 use rayon::prelude::*;
 
@@ -23,6 +19,7 @@ pub use zarr_wasm::zarr::{DimensionArraySelection, GetOptions, ZarrArray};
 pub mod event;
 pub mod renderer;
 pub mod util;
+pub mod volume_loader;
 
 use crate::event::{Event, RawArrayReceived};
 use util::init;
@@ -34,6 +31,7 @@ use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::geometry::Bounds3D;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::Renderer;
+use crate::volume_loader::{BrickResponse, Channel, create_new_channel_pair, RequestEvent, ResponseEvent};
 use crate::window::window_builder_without_size;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -70,11 +68,6 @@ async fn test_async_loading(event_loop_proxy: winit::event_loop::EventLoopProxy<
     ).await;
     log::info!("ZarrArray in async task {:?} {:?}", zarr_array.shape(), rayon::current_thread_index());
     event_loop_proxy.send_event(zarr_array).ok();
-}
-
-pub struct Channel<T, V> {
-    pub receiver: mpsc::Receiver<T>,
-    pub sender: mpsc::Sender<V>,
 }
 
 async fn start_event_loop(canvas: JsValue) {
@@ -121,19 +114,7 @@ async fn start_event_loop(canvas: JsValue) {
 
     let renderer = Renderer::new(canvas, volume).await;
 
-
-
-    let (request_sender, request_receiver) = mpsc::channel();
-    let (data_sender, data_receiver) = mpsc::channel();
-
-    let main_thread_channel = Channel {
-        receiver: data_receiver,
-        sender: request_sender,
-    };
-    let loader_thread_channel = Channel {
-        receiver: request_receiver,
-        sender: data_sender,
-    };
+    let (main_thread_channel, loader_thread_channel) = create_new_channel_pair::<RequestEvent, ResponseEvent>();
 
     //let main_event_loop_proxy = send_wrapper::SendWrapper::new(event_loop.create_proxy());
     log::info!("spawning async task");
@@ -160,7 +141,11 @@ async fn start_event_loop(canvas: JsValue) {
             log::info!("event {:?}", event);
             if let winit::event::Event::UserEvent(event) = event {
                 log::info!("ZarrArray {:?}", event.shape());
-                loader_thread_channel.sender.send(event.shape()).unwrap();
+                loader_thread_channel.sender.send(ResponseEvent::Brick(BrickResponse {
+                    data: vec![],
+                    shape: event.shape(),
+                }),
+                ).unwrap();
                 //sender.send(event.shape()).ok();
                 /*
                 main_event_loop_proxy.send_event(
@@ -204,7 +189,7 @@ async fn start_event_loop(canvas: JsValue) {
     }
 }
 
-pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<Event<()>>, channel: Channel<Vec<u32>, ()>) {
+pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<Event<()>>, channel: Channel<ResponseEvent, RequestEvent>) {
     // TODO: refactor these params
     let distance_from_center = 50.;
 
@@ -248,8 +233,13 @@ pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<
 
         let foo = channel.receiver.try_recv();
         if foo.is_ok() {
-            let shape = foo.unwrap();
-            log::info!("shape in event loop!!!!!!!! {:?}", shape);
+            let response = foo.unwrap();
+            match response {
+                ResponseEvent::Brick(brick) => {
+                    log::info!("shape in event loop!!!!!!!! {:?}", brick.shape);
+                }
+                ResponseEvent::Volume(volume) => {}
+            }
         }
 
         // todo: refactor input handling

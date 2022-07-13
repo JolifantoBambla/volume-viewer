@@ -21,7 +21,6 @@ runner = 'wasm-bindgen-test-runner'
 [dependencies]
 bytemuck = { version = "1.9.1", features = ["derive"] }
 futures-intrusive = "0.4.0"
-futures = "0.3.21"
 glam = { version = "0.20.5", features = ["bytemuck"] }
 instant = "0.1.12"
 js-sys = "0.3.57"
