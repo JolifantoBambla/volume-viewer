@@ -11,18 +11,7 @@ macro_rules! transmute_copy {
     };
 }
 
-macro_rules! force_clone {
-    ($src:expr, $src_type:ty, $dst_type:ty) => {
-        unsafe {
-            let transmuted: $dst_type = std::mem::transmute($src);
-            $src = std::mem::transmute(transmuted.clone());
-            std::mem::transmute::<$dst_type, $src_type>(transmuted)
-        }
-    };
-}
-
 pub(crate) use transmute_copy;
-pub(crate) use force_clone;
 
 // helper structs to extract private fields - sorry :/
 // todo: ignore dead-code

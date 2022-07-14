@@ -72,7 +72,7 @@ export class OmeZarrDataSource extends VolumeDataSource {
 
     async loadChunkAtLevel(chunk, level) {
         // todo: translate volume chunk address
-        const raw = await this.#zarrArrays[level].getRaw(null);
+        const raw = await this.#zarrArrays[level].getRaw(chunk);
         // todo: cast to u8 and normalize
         return raw;
     }
@@ -100,13 +100,11 @@ export class VolumeLoader {
     #dataSource;
 
     constructor() {
-        console.log('hello')
         this.#initialized = false;
         this.#dataSource = null;
     }
 
     async initialize(store, path, dataSourceType = null) {
-        console.log('initializing')
         if (this.#initialized) {
             throw Error("VolumeLoader is already initialized. Call reset instead!");
         }

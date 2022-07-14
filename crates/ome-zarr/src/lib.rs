@@ -97,9 +97,3 @@ pub mod zarr_v2 {
 
     // todo: fill_value validation & usage: https://zarr.readthedocs.io/en/stable/spec/v2.html#fill-value-encoding
 }
-
-type OMEZarrAttributes = ome_ngff::metadata::Metadata;
-
-fn main() {
-    println!("Hello, world!");
-}

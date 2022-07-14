@@ -1,6 +1,6 @@
 use std::fmt;
 use wasm_bindgen::{JsCast, JsValue};
-use web_sys::{CustomEvent, KeyboardEvent, MouseEvent, WheelEvent};
+use web_sys::{KeyboardEvent, MouseEvent, WheelEvent};
 use winit::dpi::{LogicalPosition, PhysicalPosition};
 use winit::event::{
     DeviceId, ElementState, KeyboardInput, MouseButton, MouseScrollDelta, TouchPhase,

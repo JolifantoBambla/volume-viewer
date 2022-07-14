@@ -1,7 +1,6 @@
-use serde::{Deserialize, Serialize};
+use crate::persistence_mode::PersistenceMode;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use crate::persistence_mode::PersistenceMode;
 
 #[wasm_bindgen(module = "https://cdn.skypack.dev/zarr")]
 extern "C" {
@@ -29,7 +28,13 @@ extern "C" {
     fn attrs(this: &Group) -> JsValue;
 
     #[wasm_bindgen(js_name = "openGroup")]
-    async fn open_group(store: String, path: String, mode: JsValue, chunk_store: JsValue, cache_attrs: bool) -> JsValue;
+    async fn open_group(
+        store: String,
+        path: String,
+        mode: JsValue,
+        chunk_store: JsValue,
+        cache_attrs: bool,
+    ) -> JsValue;
 }
 
 impl Group {

@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 pub use wasm_bindgen_rayon::init_thread_pool;
-use rayon::prelude::*;
 
 use glam::{Vec2, Vec3};
 use wasm_bindgen::{prelude::*, JsCast};
-use wgpu::util::DeviceExt;
 use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
 };
@@ -17,19 +15,16 @@ pub use zarr_wasm::zarr::{DimensionArraySelection, GetOptions, ZarrArray};
 pub mod event;
 pub mod renderer;
 pub mod util;
-pub mod volume_loader;
 
 use crate::event::{Event, RawArrayReceived};
 use util::init;
 use util::window;
-use zarr_wasm::raw::RawArray;
 
 use crate::event::handler::register_default_js_event_handlers;
 use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::geometry::Bounds3D;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::Renderer;
-use crate::volume_loader::{BrickResponse, Channel, create_new_channel_pair, load_volume, loader_main, RequestEvent, ResponseEvent, test_async_loading2, using_async, VolumeRequest};
 use crate::window::window_builder_without_size;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -54,10 +49,9 @@ static mut GLOBAL_EVENT_LOOP_PROXY: Option<winit::event_loop::EventLoopProxy<Eve
 pub fn dispatch_chunk_received(data: Vec<u16>, shape: Vec<u32>) {
     unsafe {
         if let Some(event_loop_proxy) = GLOBAL_EVENT_LOOP_PROXY.as_ref() {
-            event_loop_proxy.send_event(Event::RawArray(RawArrayReceived {
-                data,
-                shape,
-            })).ok();
+            event_loop_proxy
+                .send_event(Event::RawArray(RawArrayReceived { data, shape }))
+                .ok();
         } else {
             log::error!("dispatchChunkReceived called on uninitialized event loop");
         }
@@ -106,6 +100,7 @@ async fn start_event_loop(canvas: JsValue) {
     let event_loop = winit::event_loop::EventLoop::with_user_event();
     let window = builder.build(&event_loop).unwrap();
 
+    // instantiate global event proxy
     unsafe {
         GLOBAL_EVENT_LOOP_PROXY = Some(event_loop.create_proxy());
     }
@@ -121,7 +116,7 @@ async fn start_event_loop(canvas: JsValue) {
         false,
         &exposed_device,
     );
-    html_canvas2.dispatch_event(&event_from_rust);
+    html_canvas2.dispatch_event(&event_from_rust).ok();
 
     let mut loader_request = HashMap::new();
     loader_request.insert("store", "http://localhost:8005/");
@@ -132,27 +127,11 @@ async fn start_event_loop(canvas: JsValue) {
         false,
         &JsValue::from_serde(&loader_request).unwrap(),
     );
-    html_canvas2.dispatch_event(&event_from_rust);
+    html_canvas2.dispatch_event(&event_from_rust).ok();
 
     let renderer = Renderer::new(canvas, volume).await;
 
-    let (main_thread_channel, loader_thread_channel) = create_new_channel_pair::<RequestEvent, ResponseEvent>();
-
-    /*
-    rayon::spawn(move || {
-        loader_main(loader_thread_channel)
-    });
-    rayon::spawn(move || {
-        load_volume(loader_thread_channel.sender.clone())
-    });
-    */
-    main_thread_channel.sender.send(RequestEvent::Volume(VolumeRequest{
-        store: "http://localhost:8005/".to_string(),
-        path: "ome-zarr/m.ome.zarr/0/2".to_string()
-    })).ok();
-
-
-    let start_closure = Closure::once_into_js(move || run_event_loop(renderer, window, event_loop, main_thread_channel));
+    let start_closure = Closure::once_into_js(move || run_event_loop(renderer, window, event_loop));
 
     // make sure to handle JS exceptions thrown inside start.
     // Otherwise wasm_bindgen_futures Queue would break and never handle any tasks again.
@@ -174,7 +153,7 @@ async fn start_event_loop(canvas: JsValue) {
     }
 }
 
-pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<Event<()>>, channel: Channel<ResponseEvent, RequestEvent>) {
+pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<Event<()>>) {
     // TODO: refactor these params
     let distance_from_center = 50.;
 
@@ -215,17 +194,6 @@ pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<
         let _ = (&renderer.ctx.instance, &renderer.ctx.adapter);
 
         *control_flow = winit::event_loop::ControlFlow::Poll;
-
-        let foo = channel.receiver.try_recv();
-        if foo.is_ok() {
-            let response = foo.unwrap();
-            match response {
-                ResponseEvent::Brick(brick) => {
-                    log::info!("shape in event loop!!!!!!!! {:?}", brick.shape);
-                }
-                ResponseEvent::Volume(volume) => {}
-            }
-        }
 
         // todo: refactor input handling
         match event {
@@ -394,4 +362,3 @@ async fn expose_device() -> web_sys::GpuDevice {
 
     device.id
 }
-

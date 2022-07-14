@@ -55,5 +55,3 @@ pub fn register_default_js_event_handlers(
     register_window_event_handlers(canvas, &closure);
     closure.forget();
 }
-
-
