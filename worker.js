@@ -1,6 +1,6 @@
-import * as Comlink from "./external-js/src/comlink.mjs";
+import * as Comlink from "./node_modules/comlink/dist/esm/comlink.mjs";
 
-import init, {testDeviceSharing, main, initThreadPool} from "./pkg/volume_viewer.js";
+import init, {main, initThreadPool, dispatchChunkReceived} from "./pkg/volume_viewer.js";
 import { toWrappedEvent } from "./event.js";
 
 class VolumeRenderer {
@@ -14,7 +14,7 @@ class VolumeRenderer {
         this.#canvas = null;
     }
 
-    initialize(offscreenCanvas) {
+    async initialize(offscreenCanvas) {
         // This is a hack so that wgpu can create an instance from a dedicated worker
         // See: https://github.com/gfx-rs/wgpu/issues/1986
         self.Window = WorkerGlobalScope;
@@ -29,9 +29,14 @@ class VolumeRenderer {
         };
 
         const worker = new Worker('./loader.js', { type: 'module' });
+        const volumeDataSource = Comlink.wrap(worker);
+        await volumeDataSource.initialize('http://localhost:8005/', 'ome-zarr/m.ome.zarr/0', null);
 
         this.#canvas = offscreenCanvas;
-        this.#loader = worker;
+        this.#loader = {
+            worker,
+            volumeDataSource,
+        };
         this.#initialized = true;
     }
 
@@ -54,16 +59,12 @@ class VolumeRenderer {
             console.log('device limits', this.#device.limits);
         });
 
-        this.#canvas.addEventListener('loader-request', e => {
-            this.#loader.postMessage(e.detail);
+        this.#canvas.addEventListener('loader-request', _ => {
+            (async () => {
+                const chunk = await this.#loader.volumeDataSource.loadChunkAtLevel([0, 0], 2);
+                dispatchChunkReceived(chunk.data, chunk.shape);
+            })();
         });
-        this.#loader.addEventListener('message', e => {
-            console.log('got event', e);
-            this.#canvas.dispatchEvent(new CustomEvent('zarr:group', { detail: e.detail }));
-        })
-
-        // this is just a test, can be removed
-        testDeviceSharing();
 
         // start event loop
         main(this.#canvas);

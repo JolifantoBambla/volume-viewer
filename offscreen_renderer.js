@@ -1,4 +1,5 @@
-import * as Comlink from "./external-js/src/comlink.mjs";
+import * as Comlink from "./node_modules/comlink/dist/esm/comlink.mjs";
+
 import { toWrappedEvent } from "./event.js";
 
 // todo: define config options
@@ -23,7 +24,7 @@ export async function createOffscreenRenderer(config) {
         // transfer control over canvas to worker
         const offscreen = canvas.transferControlToOffscreen();
         Comlink.transfer(offscreen, [offscreen]);
-        obj.initialize(offscreen);
+        await obj.initialize(offscreen);
 
         // register UI event listeners
         const dispatchToWorker = (e) => {

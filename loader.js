@@ -1,9 +1,7 @@
-import { openGroup, openArray, slice } from 'https://cdn.skypack.dev/zarr';
+import * as Comlink from "./js/external/src/comlink.mjs";
 
-self.onmessage = e => {
-    console.log(e);
-    openGroup(e.data.store, e.data.path)
-        .then(group => {
-            self.postMessage(group);
-        })
-};
+import { VolumeLoader } from "./js/src/volume-data-source.js";
+
+const volumeLoader = new VolumeLoader();
+
+Comlink.expose(volumeLoader);

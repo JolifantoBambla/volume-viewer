@@ -45,6 +45,25 @@ pub fn initialize() {
     // called once per thread and not once globally, so this moved to `main
 }
 
+/// The `GLOBAL_EVENT_LOOP_PROXY` is a means to send data to the running application.
+/// It is initialized by `start_event_loop`.
+static mut GLOBAL_EVENT_LOOP_PROXY: Option<winit::event_loop::EventLoopProxy<Event<()>>> = None;
+
+///
+#[wasm_bindgen(js_name = "dispatchChunkReceived")]
+pub fn dispatch_chunk_received(data: Vec<u16>, shape: Vec<u32>) {
+    unsafe {
+        if let Some(event_loop_proxy) = GLOBAL_EVENT_LOOP_PROXY.as_ref() {
+            event_loop_proxy.send_event(Event::RawArray(RawArrayReceived {
+                data,
+                shape,
+            })).ok();
+        } else {
+            log::error!("dispatchChunkReceived called on uninitialized event loop");
+        }
+    }
+}
+
 // todo: lib.rs should contain only init and event_loop stuff
 //  communication with JS side should only be done via events
 //  create CustomEvent enum that consists of WindowEvent and can be extended by other events
@@ -86,6 +105,10 @@ async fn start_event_loop(canvas: JsValue) {
     let builder = window_builder_without_size("Offscreen DVR".to_string(), html_canvas);
     let event_loop = winit::event_loop::EventLoop::with_user_event();
     let window = builder.build(&event_loop).unwrap();
+
+    unsafe {
+        GLOBAL_EVENT_LOOP_PROXY = Some(event_loop.create_proxy());
+    }
 
     register_default_js_event_handlers(&html_canvas2, &event_loop);
 

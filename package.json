@@ -1,0 +1,27 @@
+{
+  "name": "volume-viewer",
+  "version": "1.0.0",
+  "description": "A web-based volume viewer for large-scale multichannel volume data",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JolifantoBambla/volume-viewer.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/JolifantoBambla/volume-viewer/issues"
+  },
+  "homepage": "https://github.com/JolifantoBambla/volume-viewer#readme",
+  "dependencies": {
+    "coi-serviceworker": "^0.1.6",
+    "comlink": "^4.3.1",
+    "zarr": "^0.5.1"
+  }
+}
