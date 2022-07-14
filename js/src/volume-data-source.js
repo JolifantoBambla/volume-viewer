@@ -1,4 +1,6 @@
-import { openGroup, openArray, } from '../../node_modules/zarr/zarr.mjs';
+import init, { initThreadPool, convertToUint8, maxValue } from "../../pkg/volume_viewer.js";
+
+import { openGroup, openArray } from '../../node_modules/zarr/zarr.mjs';
 
 // todo: maybe typescript?
 
@@ -74,6 +76,10 @@ export class OmeZarrDataSource extends VolumeDataSource {
         // todo: translate volume chunk address
         const raw = await this.#zarrArrays[level].getRaw(chunk);
         // todo: cast to u8 and normalize
+
+        // this test uses multithreading to transform data from uint16 to uint8
+        console.log(convertToUint8(raw.data, maxValue(raw.data)));
+
         return raw;
     }
 }
@@ -108,6 +114,10 @@ export class VolumeLoader {
         if (this.#initialized) {
             throw Error("VolumeLoader is already initialized. Call reset instead!");
         }
+
+        await init();
+        await initThreadPool(navigator.hardwareConcurrency);
+
         this.#dataSource = await createVolumeDataSource(store, path, dataSourceType);
         this.#initialized = true;
     }
