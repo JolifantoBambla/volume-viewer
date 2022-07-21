@@ -125,7 +125,7 @@ var<uniform> uniforms: Uniforms;
 
 // Helper stuff
 
-fn sample(x: float3) -> f32 {
+fn sample_volume(x: float3) -> f32 {
     return f32(textureSampleLevel(volume_data, volume_sampler, x, 0.).x);
 }
 
@@ -272,7 +272,7 @@ fn dvr(start: float3, step: float3, num_steps: i32, ray: Ray) -> float4 {
 
     var sample_location = start;
     for (var i: i32 = 0; i < num_steps; i += 1) {
-        let value = sample(sample_location);
+        let value = sample_volume(sample_location);
 
         let dt_scale = 1.;
 
@@ -300,7 +300,7 @@ fn central_differences(x: float3, step: float3) -> float3 {
         let h = step[i];
         var offset = float3();
         offset[i] = h;
-        central_differences[i] = sample(x - offset) - sample(x + offset) / (2. * h);
+        central_differences[i] = sample_volume(x - offset) - sample_volume(x + offset) / (2. * h);
     }
     return central_differences;
 }
@@ -311,7 +311,7 @@ fn max_in_neighborhood(x: float3, step: float3) -> f32 {
         let h = step[i];
         var offset = float3();
         offset[i] = h;
-        max_value = max(max_value, max(sample(x - offset), sample(x + offset)));
+        max_value = max(max_value, max(sample_volume(x - offset), sample_volume(x + offset)));
     }
     return max_value;
 }
