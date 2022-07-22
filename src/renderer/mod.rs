@@ -5,6 +5,7 @@ pub mod pass;
 pub mod passes;
 pub mod resources;
 pub mod volume;
+pub mod wgsl;
 
 use wasm_bindgen::prelude::*;
 
