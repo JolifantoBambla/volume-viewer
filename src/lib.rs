@@ -76,7 +76,7 @@ pub fn main(canvas: JsValue) {
         .include("foo.wgsl", include_str!("renderer/wgsl/foo.wgsl"))
         .include("bar.wgsl", include_str!("renderer/wgsl/bar.wgsl"))
         .include("baz.wgsl", include_str!("renderer/wgsl/baz.wgsl"))
-        .preprocess("@include(baz.wgsl)").ok().unwrap()
+        .preprocess("@include(baz.wgsl)").err().unwrap()
     );
 
     wasm_bindgen_futures::spawn_local(start_event_loop(canvas));

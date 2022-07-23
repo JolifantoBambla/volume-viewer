@@ -7,11 +7,12 @@ use regex::Regex;
 pub struct CouldNotResolve {
     line_number: usize,
     identifier: String,
+    file: String,
 }
 
 impl Display for CouldNotResolve {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Could not resolve include \"{}\" at line {}", self.identifier, self.line_number)
+        write!(f, "Could not resolve include \"{}\" at {}, line {}", self.identifier, self.file, self.line_number)
     }
 }
 
@@ -19,11 +20,12 @@ impl Display for CouldNotResolve {
 pub struct RecursiveInclude {
     line_number: usize,
     identifier: String,
+    file: String,
 }
 
 impl Display for RecursiveInclude {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Could not resolve include \"{}\" at line {}", self.identifier, self.line_number)
+        write!(f, "Could not resolve include \"{}\" at {}, line {}", self.identifier, self.file, self.line_number)
     }
 }
 
@@ -113,28 +115,27 @@ impl WGSLPreprocessor {
                     }
 
                     if include_stack.contains(&identifier) {
-                        // recursive
                         return Err(IncludeResolveError::RecursiveInclude(
                             RecursiveInclude {
                                 line_number,
                                 identifier: identifier.to_string(),
+                                file: include_stack.pop().unwrap_or("source").to_string()
                             }
                         ));
                     }
 
                     if let Some(source) = self.include_files.get(identifier) {
-                        resolved_includes.insert(identifier);
                         include_stack.push(&*identifier);
                         source_stack.push(lines);
                         source_stack.push(source.lines().enumerate());
                         resolved = false;
                         break;
                     } else {
-                        // not found
                         return Err(IncludeResolveError::ColdNotResolve(
                             CouldNotResolve {
                                 line_number,
                                 identifier: identifier.to_string(),
+                                file: include_stack.pop().unwrap_or("source").to_string()
                             }
                         ));
                     }
@@ -143,7 +144,9 @@ impl WGSLPreprocessor {
                 }
             }
             if resolved {
-                include_stack.pop();
+                if let Some(resolved_include) = include_stack.pop() {
+                    resolved_includes.insert(resolved_include);
+                }
             }
         }
         Ok(resolved_source.join("\n"))
