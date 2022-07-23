@@ -1,126 +1,162 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt;
+use std::fmt::{Debug, Display, Formatter};
 use regex::Regex;
 
-pub fn resolve_includes() {
-    const STDLIB: HashMap<&str, &str> = HashMap::from([
-        ("utl::type_alias", include_str!("type_alias.wgsl"))
-    ]);
+#[derive(Debug, Clone)]
+pub struct CouldNotResolve {
+    line_number: usize,
+    identifier: String,
 }
 
+impl Display for CouldNotResolve {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "Could not resolve include \"{}\" at line {}", self.identifier, self.line_number)
+    }
+}
 
-
-// todo: define errors
 #[derive(Debug, Clone)]
-pub struct PreprocessorError {}
+pub struct RecursiveInclude {
+    line_number: usize,
+    identifier: String,
+}
 
-const INCLUDE_REGEX: &str = "^@include\((?P<file>\S+)\)";
+impl Display for RecursiveInclude {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "Could not resolve include \"{}\" at line {}", self.identifier, self.line_number)
+    }
+}
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
+pub enum IncludeResolveError {
+    ColdNotResolve(CouldNotResolve),
+    RecursiveInclude(RecursiveInclude),
+}
+
+impl Display for IncludeResolveError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            IncludeResolveError::ColdNotResolve(err) => {
+                Display::fmt(&err, f)
+            }
+            IncludeResolveError::RecursiveInclude(err) => {
+                Display::fmt(&err, f)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum PreprocessorError {
+    IncludeResolveError(IncludeResolveError),
+}
+
+impl Display for PreprocessorError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            PreprocessorError::IncludeResolveError(err) => {
+                Display::fmt(&err, f)
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct WGSLPreprocessor {
     include_files: HashMap<String, String>,
     include_regex: Regex,
 }
 
+impl Default for WGSLPreprocessor {
+    fn default() -> Self {
+        Self {
+            include_files: HashMap::new(),
+            include_regex: Regex::new(r"^@include\((?P<identifier>\S+)\)").expect("Could not construct regex"),
+        }
+    }
+}
+
 impl WGSLPreprocessor {
-    pub fn new() -> Self {
+    pub fn new(include_syntax: &str) -> Self {
         WGSLPreprocessor {
-            include_regex: Regex::new(INCLUDE_REGEX).expect("Could not construct regex"),
+            include_regex: Regex::new(include_syntax).expect("Could not construct regex"),
             ..Default::default()
         }
     }
 
     pub fn include<K, V>(&mut self, identifier: K, source: V) -> &mut Self
-    where K: Into<String>, V: Into<String>
-    {
+        where K: Into<String>, V: Into<String> {
         self.include_files.insert(identifier.into(), source.into());
         self
     }
 
-    pub fn resolve_include<S>(&self, source: S) -> Result<String, PreprocessorError>
-    where S: Into<String>
-    {
-        Ok("".to_string())
-    }
+    pub fn resolve_includes<S>(&self, source: S) -> Result<String, IncludeResolveError>
+        where S: Into<String> {
+        let src = source.into();
+        let mut resolved_includes = HashSet::new();
+        let mut include_stack = Vec::new();
+        let mut resolved_source = Vec::new();
 
-    fn expand_recursive(
-        &self,
-        expanded_src: &mut Vec<String>,
-        src: &str,
-        in_file: Option<&str>,
-        include_stack: &mut Vec<&str>,
-        include_set: &mut HashSet<&str>,
-    ) -> Result<(), PreprocessorError> {
-        let mut need_line_directive = false;
-        // Iterate through each line in the src input
-        // - If the line matches our INCLUDE_RE regex, recurse
-        // - Otherwise, add the line to our outputs and continue to the next line
-        for (line_num, line) in src.lines().enumerate() {
-            if let Some(caps) = self.include_regex.captures(line) {
-                // The following expect should be impossible, but write a nice message anyways
-                let cap_match = caps
-                    .name("file")
-                    .expect("Could not find capture group with name \"file\"");
-                let included_file = cap_match.as_str();
+        let mut source_stack = vec![src.lines().enumerate()];
+        while !source_stack.is_empty() {
+            let mut lines = source_stack.pop().unwrap();
+            let mut resolved = true;
+            while let Some((line_number, line)) = lines.next() {
+                if let Some(includes) = self.include_regex.captures(line) {
+                    let identifier = includes
+                        .name("identifier")
+                        .expect("Capture group \"identifier\" does not exist.")
+                        .as_str();
 
-                // if this file has already been included, continue to the next line
-                // this acts as a header guard
-                if include_set.contains(&included_file) {
-                    continue;
-                }
+                    if resolved_includes.contains(identifier) {
+                        continue;
+                    }
 
-                // return if the included file already exists in the include_stack
-                // this signals that we're in an infinite loop
-                if include_stack.contains(&included_file) {
-                    let in_file = in_file.map(|s| s.to_string());
-                    let problem_include = included_file.to_string();
-                    let include_stack = include_stack.into_iter().map(|s| s.to_string()).collect();
-                    return Err(Error::RecursiveInclude {
-                        in_file: in_file,
-                        line_num: line_num,
-                        problem_include: problem_include,
-                        include_stack: include_stack,
-                    });
-                }
+                    if include_stack.contains(&identifier) {
+                        // recursive
+                        return Err(IncludeResolveError::RecursiveInclude(
+                            RecursiveInclude {
+                                line_number,
+                                identifier: identifier.to_string(),
+                            }
+                        ));
+                    }
 
-                // if the included file exists in our context, recurse
-                if let Some(src) = self.included_files.get(included_file) {
-                    include_stack.push(&included_file);
-                    self.expand_recursive(
-                        expanded_src,
-                        &src,
-                        Some(included_file),
-                        include_stack,
-                        include_set,
-                    )?;
-                    include_stack.pop();
-                    need_line_directive = true;
+                    if let Some(source) = self.include_files.get(identifier) {
+                        resolved_includes.insert(identifier);
+                        include_stack.push(&*identifier);
+                        source_stack.push(lines);
+                        source_stack.push(source.lines().enumerate());
+                        resolved = false;
+                        break;
+                    } else {
+                        // not found
+                        return Err(IncludeResolveError::ColdNotResolve(
+                            CouldNotResolve {
+                                line_number,
+                                identifier: identifier.to_string(),
+                            }
+                        ));
+                    }
                 } else {
-                    let in_file = in_file.map(|s| s.to_string());
-                    let problem_include = included_file.to_string();
-                    return Err(Error::FileNotFound {
-                        in_file: in_file,
-                        line_num: line_num,
-                        problem_include: problem_include,
-                    });
+                    resolved_source.push(String::from(line));
                 }
-            } else {
-                // Got a regular line
-                if need_line_directive {
-                    // add a #line directive to reset the line number so that GL compilation error
-                    // messages contain line numbers that map to the users file
-                    expanded_src.push(format!("#line {} 0", line_num + 1));
-                }
-                need_line_directive = false;
-                expanded_src.push(String::from(line));
+            }
+            if resolved {
+                include_stack.pop();
             }
         }
+        Ok(resolved_source.join("\n"))
+    }
 
-        // Add the in_file to the include set to prevent
-        // future inclusions
-        if let Some(in_file) = in_file {
-            include_set.insert(in_file);
+    pub fn preprocess<S>(&self, source: S) -> Result<String, PreprocessorError>
+        where S: Into<String> {
+        let resolved_includes = self.resolve_includes(source);
+        if resolved_includes.is_err() {
+            return Err(PreprocessorError::IncludeResolveError(resolved_includes.err().unwrap()))
         }
-        Ok(())
+        // todo: resolve other preprocessor directives
+        Ok(resolved_includes.ok().unwrap())
     }
 }
 
