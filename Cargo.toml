@@ -44,6 +44,7 @@ winit = { version = "0.26.1", features = [] }
 ome-ngff = { git = "https://github.com/JolifantoBambla/ome-ngff-metadata.git", features = ["log"] }
 ome-zarr = { path = "crates/ome-zarr" }
 numcodecs-wasm = { path = "crates/numcodecs-wasm" }
+wgsl-preprocessor = { path = "crates/wgsl-preprocessor" }
 zarr-wasm = { path = "crates/zarr-wasm" }
 # blosc = "0.1.3" doesn't work out of the box, maybe try this later
 

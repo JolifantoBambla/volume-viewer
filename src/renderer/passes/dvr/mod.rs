@@ -5,6 +5,7 @@ use crate::renderer::{
 };
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
+use wgsl_preprocessor::WGSLPreprocessor;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -74,12 +75,14 @@ pub struct DVR {
 }
 
 impl DVR {
-    pub fn new(ctx: &Arc<GPUContext>) -> Self {
+    pub fn new(wgsl_preprocessor: &WGSLPreprocessor, ctx: &Arc<GPUContext>) -> Self {
         let shader_module = ctx
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("dvr.wgsl"))),
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
+                    &*wgsl_preprocessor.preprocess(include_str!("dvr.wgsl")).ok().unwrap()
+                )),
             });
         let pipeline = ctx
             .device

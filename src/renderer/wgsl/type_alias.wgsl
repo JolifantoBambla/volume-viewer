@@ -1,3 +1,5 @@
+// Type aliases (because writing vec3<f32> is annoying)
+// todo: maybe use vec3f and stuff instead?
 type int2 = vec2<i32>;
 type int3 = vec3<i32>;
 type int4 = vec4<i32>;

@@ -20,6 +20,8 @@ use std::sync::Arc;
 use wasm_bindgen::JsCast;
 use web_sys::OffscreenCanvas;
 use wgpu::util::DeviceExt;
+use wgsl_preprocessor::WGSLPreprocessor;
+use crate::renderer::wgsl::create_wgsl_preprocessor;
 
 pub struct Renderer {
     pub(crate) canvas: OffscreenCanvas,
@@ -35,6 +37,8 @@ pub struct Renderer {
 
     volume_transform: glam::Mat4,
     uniform_buffer: wgpu::Buffer,
+
+    wgsl_preprocessor: WGSLPreprocessor,
 }
 
 impl Renderer {
@@ -45,6 +49,8 @@ impl Renderer {
                 .await
                 .with_surface_from_offscreen_canvas(&canvas),
         );
+
+        let wgsl_preprocessor = create_wgsl_preprocessor();
 
         let volume_texture =
             resources::Texture::from_raw_volume_block(&ctx.device, &ctx.queue, &volume);
@@ -79,7 +85,7 @@ impl Renderer {
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 
-        let z_slice_pass = dvr::DVR::new(&ctx);
+        let z_slice_pass = dvr::DVR::new(&wgsl_preprocessor, &ctx);
         let full_screen_pass = present_to_screen::PresentToScreen::new(&ctx);
         let z_slice_bind_group = z_slice_pass.create_bind_group(dvr::Resources {
             volume: &volume_texture.view,
@@ -109,6 +115,7 @@ impl Renderer {
             dvr_result_extent,
             volume_transform,
             uniform_buffer,
+            wgsl_preprocessor,
         }
     }
 
