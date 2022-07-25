@@ -81,7 +81,10 @@ impl DVR {
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
-                    &*wgsl_preprocessor.preprocess(include_str!("dvr.wgsl")).ok().unwrap()
+                    &*wgsl_preprocessor
+                        .preprocess(include_str!("dvr.wgsl"))
+                        .ok()
+                        .unwrap(),
                 )),
             });
         let pipeline = ctx

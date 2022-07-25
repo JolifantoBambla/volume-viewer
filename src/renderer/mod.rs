@@ -15,13 +15,13 @@ use crate::renderer::pass::GPUPass;
 use crate::renderer::passes::{dvr, present_to_screen};
 
 use crate::renderer::volume::RawVolumeBlock;
+use crate::renderer::wgsl::create_wgsl_preprocessor;
 use bytemuck;
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
 use web_sys::OffscreenCanvas;
 use wgpu::util::DeviceExt;
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::renderer::wgsl::create_wgsl_preprocessor;
 
 pub struct Renderer {
     pub(crate) canvas: OffscreenCanvas,

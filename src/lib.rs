@@ -1,6 +1,6 @@
+use rayon::prelude::*;
 use std::collections::HashMap;
 pub use wasm_bindgen_rayon::init_thread_pool;
-use rayon::prelude::*;
 
 use glam::{Vec2, Vec3};
 use wasm_bindgen::{prelude::*, JsCast};
@@ -14,6 +14,7 @@ pub use numcodecs_wasm::*;
 pub use zarr_wasm::zarr::{DimensionArraySelection, GetOptions, ZarrArray};
 
 pub mod event;
+pub mod page_table;
 pub mod renderer;
 pub mod util;
 
@@ -332,9 +333,7 @@ pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock 
 
 #[wasm_bindgen(js_name = "maxValue")]
 pub fn max_value(data: Vec<u16>) -> f32 {
-    *data.par_iter()
-        .max()
-        .unwrap() as f32
+    *data.par_iter().max().unwrap() as f32
 }
 
 #[wasm_bindgen(js_name = "convertToUint8")]

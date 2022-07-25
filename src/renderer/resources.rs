@@ -1,9 +1,13 @@
 use crate::renderer::volume::RawVolumeBlock;
 use wgpu::util::DeviceExt;
-use wgpu::{Device, Extent3d, Queue, TextureView};
+use wgpu::{
+    Device, Extent3d, Queue, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+    TextureView, TextureViewDescriptor,
+};
 
 #[readonly::make]
 pub struct Texture {
+    pub texture: wgpu::Texture,
     pub view: TextureView,
     pub extent: Extent3d,
 }
@@ -14,24 +18,53 @@ impl Texture {
     }
 
     pub fn create_storage_texture(device: &Device, width: u32, height: u32) -> Self {
-        let texture_extent = wgpu::Extent3d {
+        let texture_extent = Extent3d {
             width,
             height,
             depth_or_array_layers: 1,
         };
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
+        let texture = device.create_texture(&TextureDescriptor {
             label: None,
             size: texture_extent,
             mip_level_count: 1,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
         });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = texture.create_view(&TextureViewDescriptor::default());
         Self {
+            texture,
             view,
             extent: texture_extent,
+        }
+    }
+
+    pub fn create_page_directory(device: &Device, queue: &Queue, extent: Extent3d) -> Self {
+        let texture = device.create_texture_with_data(
+            queue,
+            &TextureDescriptor {
+                label: Some("Page Directory"),
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D3,
+                format: TextureFormat::Rgba32Uint,
+                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+            },
+            bytemuck::cast_slice(
+                vec![
+                    0u8;
+                    (extent.width * extent.height * extent.depth_or_array_layers * 4) as usize
+                ]
+                .as_slice(),
+            ),
+        );
+        let view = texture.create_view(&TextureViewDescriptor::default());
+        Self {
+            texture,
+            view,
+            extent,
         }
     }
 
@@ -43,20 +76,20 @@ impl Texture {
     ) -> Self {
         let texture = device.create_texture_with_data(
             queue,
-            &wgpu::TextureDescriptor {
+            &TextureDescriptor {
                 label: Some("Texture3D"),
                 size: extent,
                 mip_level_count: 1,
                 sample_count: 1,
-                dimension: wgpu::TextureDimension::D3,
-                format: wgpu::TextureFormat::R8Unorm,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                dimension: TextureDimension::D3,
+                format: TextureFormat::R8Unorm,
+                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
             },
             bytemuck::cast_slice(data),
         );
-        let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-
+        let texture_view = texture.create_view(&TextureViewDescriptor::default());
         Self {
+            texture,
             view: texture_view,
             extent,
         }

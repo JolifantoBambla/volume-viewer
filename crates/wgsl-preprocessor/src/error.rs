@@ -20,7 +20,11 @@ impl IncludeError {
 
 impl Display for IncludeError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}, line {}: could not include \"{}\"", self.file, self.line_number, self.identifier)
+        write!(
+            f,
+            "{}, line {}: could not include \"{}\"",
+            self.file, self.line_number, self.identifier
+        )
     }
 }
 
@@ -51,10 +55,7 @@ pub enum PreprocessorError {
 impl Display for PreprocessorError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            PreprocessorError::IncludeResolveError(err) => {
-                Display::fmt(&err, f)
-            }
+            PreprocessorError::IncludeResolveError(err) => Display::fmt(&err, f),
         }
     }
 }
-
