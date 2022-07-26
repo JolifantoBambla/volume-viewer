@@ -1,4 +1,6 @@
 use crate::renderer::volume::RawVolumeBlock;
+use crate::util::extent::extent_volume;
+use js_sys::Math::max;
 use wgpu::util::DeviceExt;
 use wgpu::{
     Device, Extent3d, Queue, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
@@ -18,14 +20,14 @@ impl Texture {
     }
 
     pub fn create_storage_texture(device: &Device, width: u32, height: u32) -> Self {
-        let texture_extent = Extent3d {
+        let extent = Extent3d {
             width,
             height,
             depth_or_array_layers: 1,
         };
         let texture = device.create_texture(&TextureDescriptor {
             label: None,
-            size: texture_extent,
+            size: extent,
             mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,
@@ -36,7 +38,7 @@ impl Texture {
         Self {
             texture,
             view,
-            extent: texture_extent,
+            extent,
         }
     }
 
@@ -68,6 +70,59 @@ impl Texture {
         }
     }
 
+    pub fn create_brick_cache(device: &Device, queue: &Queue) -> Self {
+        let max_texture_dimension = device.limits().max_texture_dimension_3d;
+        let extent = Extent3d {
+            width: max_texture_dimension,
+            height: max_texture_dimension,
+            depth_or_array_layers: max_texture_dimension,
+        };
+        let texture = device.create_texture(&TextureDescriptor {
+            label: Some("Usage Buffer"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D3,
+            format: TextureFormat::R8Unorm,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+        });
+        let view = texture.create_view(&TextureViewDescriptor::default());
+        Self {
+            texture,
+            view,
+            extent,
+        }
+    }
+
+    pub fn create_u32_storage_3d(
+        label: String,
+        device: &device,
+        queue: &Queue,
+        extent: Extent3d,
+    ) -> Self {
+        let texture = device.create_texture_with_data(
+            queue,
+            &TextureDescriptor {
+                label: Some(label.as_str()),
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D3,
+                format: TextureFormat::R32Uint,
+                usage: TextureUsages::TEXTURE_BINDING
+                    | TextureUsages::COPY_DST
+                    | TextureUsages::STORAGE_BINDING,
+            },
+            &bytemuck::cast_slice(vec![0u32, extent_volume(extent) as usize].as_slice()),
+        );
+        let view = texture.create_view(&TextureViewDescriptor::default());
+        Self {
+            texture,
+            view,
+            extent,
+        }
+    }
+
     pub fn create_texture_3d(
         device: &Device,
         queue: &Queue,
@@ -87,10 +142,10 @@ impl Texture {
             },
             bytemuck::cast_slice(data),
         );
-        let texture_view = texture.create_view(&TextureViewDescriptor::default());
+        let view = texture.create_view(&TextureViewDescriptor::default());
         Self {
             texture,
-            view: texture_view,
+            view,
             extent,
         }
     }

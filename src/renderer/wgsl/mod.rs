@@ -5,6 +5,7 @@ pub fn create_wgsl_preprocessor() -> WGSLPreprocessor {
 
     wgsl_preprocessor
         .include("aabb", include_str!("aabb.wgsl"))
+        .include("bresenham", include_str!("bresenham.wgsl"))
         .include("camera", include_str!("camera.wgsl"))
         .include("constant", include_str!("constant.wgsl"))
         .include("page_table", include_str!("page_table.wgsl"))

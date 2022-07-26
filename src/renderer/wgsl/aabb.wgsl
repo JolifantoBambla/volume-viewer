@@ -26,3 +26,7 @@ fn intersect_aabb(ray: Ray, bounds: AABB) -> Intersection {
     }
     return Intersection(true, t0, t1);
 }
+
+fn aabb_contains(aabb: AABB, p: float3) -> bool {
+    return all(p > aabb.min) && all(p < aabb.max);
+}

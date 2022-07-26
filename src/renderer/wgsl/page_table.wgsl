@@ -22,3 +22,33 @@ struct PageTableEntry {
 fn to_page_table_entry(v: uint4) -> PageTableEntry {
     return PageTableEntry(v.xyz, v.w);
 }
+
+// todo: fix all these alignment issues here and on cpu side!
+// todo: I probably won't need all this stuff -> find out what is needed and kick out the rest
+
+struct VolumeResolutionMeta {
+    volume_size: uint3,
+    padded_volume_size: uint3,
+    scale: float3,
+}
+
+struct PageTableMeta {
+    offset: uint3,
+    extent: uint3,
+    volume_meta: VolumeResolutionMeta,
+}
+
+struct PageDirectoryMeta {
+    brick_size: uint3,
+    extent: uint3,
+    resolutions: array<PageTableMeta>,
+}
+
+fn pt_canonical_to_voxel(page_table_meta: PageDirectoryMeta, p: float3, level: u32) -> int32 {
+    return int3(p * page_directory_meta.resolutions[level].volume_meta.volume_size);
+}
+
+fn pt_compute_lod(page_table_meta: PageDirectoryMeta, distance_to_camera: f32) -> u32 {
+    // todo: select based on distance to camera
+    return min(arrayLength(page_table_meta.resolutions), 0u);
+}
