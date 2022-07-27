@@ -2,6 +2,7 @@ import * as Comlink from "./node_modules/comlink/dist/esm/comlink.mjs";
 
 import init, {main, initThreadPool, dispatchChunkReceived} from "./pkg/volume_viewer.js";
 import { toWrappedEvent } from "./event.js";
+import { BRICK_REQUEST_EVENT, BRICK_RESPONSE_EVENT } from './js/src/volume-data-source.js';
 
 class VolumeRenderer {
     #canvas;
@@ -65,7 +66,7 @@ class VolumeRenderer {
                 dispatchChunkReceived(chunk.data, chunk.shape);
 
                 this.#canvas.dispatchEvent(new CustomEvent(
-                    'data-loader:brick-response',
+                    BRICK_RESPONSE_EVENT,
                     {
                         detail: {
                             address: [0, 1, 2, 3],
@@ -79,6 +80,17 @@ class VolumeRenderer {
                 ));
             })();
         });
+
+        this.#canvas.addEventListener(BRICK_REQUEST_EVENT, e => {
+            //console.log('got brick request', e.detail, e);
+            this.#loader.worker.postMessage({
+                type: e.type,
+                addresses: e.detail.addresses,
+            });
+        });
+        this.#loader.worker.addEventListener('message', e => {
+            console.log('message from loader', e.data.addresses[0][0]);
+        })
 
         // start event loop
         main(this.#canvas);

@@ -27,7 +27,10 @@ use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::geometry::Bounds3D;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::Renderer;
-use crate::sparse_residency_resource::texture3d::data_source::HtmlEventTargetTexture3DSource;
+use crate::sparse_residency_resource::texture3d::data_source::{
+    HtmlEventTargetTexture3DSource, SparseResidencyTexture3DSource,
+};
+use crate::sparse_residency_resource::texture3d::page_table::PageTableAddress;
 use crate::sparse_residency_resource::texture3d::volume_meta::MultiResolutionVolumeMeta;
 use crate::sparse_residency_resource::texture3d::SparseResidencyTexture3D;
 use crate::window::window_builder_without_size;
@@ -134,7 +137,7 @@ async fn start_event_loop(canvas: JsValue) {
     );
     html_canvas2.dispatch_event(&event_from_rust).ok();
 
-    let src = HtmlEventTargetTexture3DSource::new(
+    let mut src = HtmlEventTargetTexture3DSource::new(
         MultiResolutionVolumeMeta {
             brick_size: UVec3::default(),
             resolutions: vec![],
@@ -143,6 +146,9 @@ async fn start_event_loop(canvas: JsValue) {
             .clone()
             .unchecked_into::<web_sys::EventTarget>(),
     );
+    for i in 0..100 {
+        src.request_bricks(vec![PageTableAddress::from([i, i, i, i])]);
+    }
 
     let renderer = Renderer::new(canvas, volume).await;
 

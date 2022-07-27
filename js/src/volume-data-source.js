@@ -4,6 +4,8 @@ import { openGroup, openArray } from '../../node_modules/zarr/zarr.mjs';
 
 // todo: maybe typescript?
 
+export const BRICK_REQUEST_EVENT = 'data-loader:brick-request';
+export const BRICK_RESPONSE_EVENT = 'data-loader:brick-response';
 
 // Note: bioformats2raw only generates 2D chunks
 // we use the following brick size for our dataset:
@@ -124,10 +126,12 @@ async function createVolumeDataSource(store, path, dataSourceType) {
 export class VolumeLoader {
     #initialized;
     #dataSource;
+    #postMessage;
 
-    constructor() {
+    constructor(postMessage) {
         this.#initialized = false;
         this.#dataSource = null;
+        this.#postMessage = postMessage;
     }
 
     async initialize(store, path, dataSourceType = null) {
@@ -169,5 +173,15 @@ export class VolumeLoader {
         }
         // todo: this is very naive - should probably be in a task queue and keep track / cache volume chunks
         return this.#dataSource.loadChunkAtLevel(chunk, level);
+    }
+
+    async handleExternEvent(e) {
+        if (e.type === BRICK_REQUEST_EVENT) {
+            setTimeout(() => {
+                console.log('handling external event', e.addresses[0][0]);
+                this.#postMessage(e);
+            }, Math.random() * 10000); // this is a test to make sure the message handling is actually async -> it is!
+        }
+
     }
 }

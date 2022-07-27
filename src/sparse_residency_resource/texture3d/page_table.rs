@@ -124,7 +124,7 @@ impl PageDirectoryMeta {
     }
 }
 
-//#[derive(Deserialize, Serialize)]
+#[derive(Clone, Copy)]
 pub struct PageTableAddress {
     pub(crate) location: UVec3,
     pub(crate) level: u32,

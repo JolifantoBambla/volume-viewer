@@ -2,7 +2,7 @@ use crate::sparse_residency_resource::texture3d::page_table::PageTableAddress;
 use crate::sparse_residency_resource::texture3d::volume_meta::MultiResolutionVolumeMeta;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -81,14 +81,19 @@ impl SparseResidencyTexture3DSource for HtmlEventTargetTexture3DSource {
     }
 
     fn request_bricks(&mut self, brick_addresses: Vec<PageTableAddress>) {
-        let request = web_sys::CustomEvent::new(BRICK_REQUEST_EVENT).ok().unwrap();
-        /*request.init_custom_event_with_can_bubble_and_cancelable_and_detail(
-            "loader-request",
+        let request_event = web_sys::CustomEvent::new(BRICK_REQUEST_EVENT).ok().unwrap();
+        let mut request_data: HashMap<&str, Vec<[u32; 4]>> = HashMap::new();
+        request_data.insert(
+            "addresses",
+            brick_addresses.iter().map(|&a| a.into()).collect(),
+        );
+        request_event.init_custom_event_with_can_bubble_and_cancelable_and_detail(
+            BRICK_REQUEST_EVENT,
             false,
             false,
-            &JsValue::from_serde(&requested_bricks).unwrap(),
-        );*/
-        self.event_target.dispatch_event(&request).ok();
+            &JsValue::from_serde(&request_data).unwrap(),
+        );
+        self.event_target.dispatch_event(&request_event).ok();
     }
 
     fn poll_bricks(&mut self, limit: usize) -> Vec<(PageTableAddress, Brick)> {
