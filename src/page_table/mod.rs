@@ -1,12 +1,8 @@
 use crate::renderer::resources::Texture;
 use glam::{UVec3, UVec4, Vec3};
-use std::mem::size_of;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::BindingResource::Buffer;
-use wgpu::{Buffer, BufferAddress, BufferDescriptor, BufferUsages, Device, Extent3d, Queue};
-use winit::window::CursorIcon::Text;
-
-use crate::util::extent::{box_volume, extent_to_uvec, uvec_to_extent};
+use std::collections::HashMap;
+use wgpu::{Device, Queue};
+use crate::util::extent::{extent_to_uvec, uvec_to_extent};
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -168,29 +164,50 @@ impl PageDirectoryMeta {
     }
 }
 
+pub struct PageTableAddress {
+    location: UVec3,
+    level: u32,
+}
+
+pub struct Brick {
+    data: Vec<u8>,
+    min: u8,
+    max: u8,
+}
+
+pub trait SparseResidencyTexture3DSource {
+    fn get_meta(&self) -> &MultiResolutionVolumeMeta;
+
+    fn request_brick(&mut self, brick_address: PageTableEntry);
+
+    fn poll_bricks(&mut self) -> HashMap<PageTableAddress, Brick>;
+}
+
 /// Manages a 3D sparse residency texture.
 /// A sparse residency texture is not necessarily present in GPU memory as a whole.
-pub struct SparseResidencyTexture3D {
+pub struct SparseResidencyTexture3D<T>
+where
+    T: SparseResidencyTexture3DSource,
+{
     meta: PageDirectoryMeta,
     page_directory: Texture,
     brick_cache: Texture,
     brick_usage_buffer: Texture,
     request_buffer: Texture,
+    local_brick_cache: HashMap<PageTableAddress, Brick>,
+    source: T,
 }
 
-impl SparseResidencyTexture3D {
-    pub fn new(
-        volume_meta: &MultiResolutionVolumeMeta,
-        device: &Device,
-        queue: &Queue,
-    ) -> Self {
+impl<T: SparseResidencyTexture3DSource> SparseResidencyTexture3D<T> {
+    pub fn new(source: T, device: &Device, queue: &Queue) -> Self {
+        let volume_meta = source.get_meta();
         let meta = PageDirectoryMeta::new(volume_meta);
 
         // 1 page table entry per brick
         let page_directory =
             Texture::create_page_directory(device, queue, uvec_to_extent(meta.extent));
 
-        let brick_cache = Texture::create_brick_cache(device, queue);
+        let brick_cache = Texture::create_brick_cache(device);
 
         let brick_cache_size = extent_to_uvec(brick_cache.extent);
         let bricks_per_dimension = brick_cache_size / meta.brick_size;
@@ -217,6 +234,8 @@ impl SparseResidencyTexture3D {
             brick_cache,
             brick_usage_buffer,
             request_buffer,
+            local_brick_cache: HashMap::new(),
+            source,
         }
     }
 

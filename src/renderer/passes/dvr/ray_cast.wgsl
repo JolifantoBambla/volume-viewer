@@ -102,15 +102,14 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     let start_os = ray_at(ray_os, max(0., intersection_record.t_min));
     let end_os   = ray_at(ray_os, intersection_record.t_max);
 
+    MAYBE GET BRICK:
+        GET BRICK AND REPORT USAGE OR REQUEST
+
     ENTER LOOP UNTIL EXIT OR SATURATED
         DETERMINE LOD
         MAYBE GET BRICK
-        IF BRICK
-            IF NOT EMPTY
-                REPORT USAGE
-                STEP THROUGH BRICK
-        ELSE
-            REQUEST BRICK
+        IF BRICK MAPPED
+            STEP THROUGH BRICK
     STORE RESULT
 
     // initialize to invalid value

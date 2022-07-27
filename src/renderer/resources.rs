@@ -1,6 +1,5 @@
 use crate::renderer::volume::RawVolumeBlock;
 use crate::util::extent::extent_volume;
-use js_sys::Math::max;
 use wgpu::util::DeviceExt;
 use wgpu::{
     Device, Extent3d, Queue, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
@@ -70,7 +69,7 @@ impl Texture {
         }
     }
 
-    pub fn create_brick_cache(device: &Device, queue: &Queue) -> Self {
+    pub fn create_brick_cache(device: &Device) -> Self {
         let max_texture_dimension = device.limits().max_texture_dimension_3d;
         let extent = Extent3d {
             width: max_texture_dimension,
@@ -96,7 +95,7 @@ impl Texture {
 
     pub fn create_u32_storage_3d(
         label: String,
-        device: &device,
+        device: &Device,
         queue: &Queue,
         extent: Extent3d,
     ) -> Self {
@@ -113,7 +112,7 @@ impl Texture {
                     | TextureUsages::COPY_DST
                     | TextureUsages::STORAGE_BINDING,
             },
-            &bytemuck::cast_slice(vec![0u32, extent_volume(extent) as usize].as_slice()),
+            &bytemuck::cast_slice(vec![0u32; extent_volume(extent) as usize].as_slice()),
         );
         let view = texture.create_view(&TextureViewDescriptor::default());
         Self {
