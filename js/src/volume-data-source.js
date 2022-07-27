@@ -4,6 +4,20 @@ import { openGroup, openArray } from '../../node_modules/zarr/zarr.mjs';
 
 // todo: maybe typescript?
 
+
+// Note: bioformats2raw only generates 2D chunks
+// we use the following brick size for our dataset:
+//   (
+//      resolutions[0].chunkSize.x,
+//      resolutions[0].chunkSize.y,
+//      min(resolutions[0].shape.z,
+//          min(resolutions[0].chunkSize.x,
+//              resolutions[0].chunkSize.y
+//          )
+//      )
+//   )
+
+
 export class Chunk {
     /**
      * The canonical origin of the chunk (i.e. in [0,1]^3)
@@ -78,9 +92,12 @@ export class OmeZarrDataSource extends VolumeDataSource {
         // todo: cast to u8 and normalize
 
         // this test uses multithreading to transform data from uint16 to uint8
-        console.log(convertToUint8(raw.data, maxValue(raw.data)));
+        const uint8 = convertToUint8(raw.data, maxValue(raw.data));
 
-        return raw;
+        return {
+            ...raw,
+            data: uint8,
+        };
     }
 }
 
@@ -97,6 +114,9 @@ async function createVolumeDataSource(store, path, dataSourceType) {
             path: `${path}/${dataset.path}`,
             mode
         }));
+
+        const idx = resolutions.length - 1;
+        console.log(`res shape ${resolutions[idx].shape}, res chunks: ${resolutions[idx].chunks}, res chunkSize: ${resolutions[idx].chunkSize}, res numChunks: ${resolutions[idx].numChunks}`)
     }
     return new OmeZarrDataSource(group, attributes, resolutions);
 }

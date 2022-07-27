@@ -63,6 +63,20 @@ class VolumeRenderer {
             (async () => {
                 const chunk = await this.#loader.volumeDataSource.loadChunkAtLevel([0, 0], 2);
                 dispatchChunkReceived(chunk.data, chunk.shape);
+
+                this.#canvas.dispatchEvent(new CustomEvent(
+                    'data-loader:brick-response',
+                    {
+                        detail: {
+                            address: [0, 1, 2, 3],
+                            brick: {
+                                data: chunk.data,
+                                min: 0,
+                                max: 13,
+                            }
+                        }
+                    }
+                ));
             })();
         });
 

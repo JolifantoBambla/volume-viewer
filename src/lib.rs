@@ -2,7 +2,7 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 pub use wasm_bindgen_rayon::init_thread_pool;
 
-use glam::{Vec2, Vec3};
+use glam::{UVec3, Vec2, Vec3};
 use wasm_bindgen::{prelude::*, JsCast};
 use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
@@ -14,8 +14,8 @@ pub use numcodecs_wasm::*;
 pub use zarr_wasm::zarr::{DimensionArraySelection, GetOptions, ZarrArray};
 
 pub mod event;
-pub mod page_table;
 pub mod renderer;
+pub mod sparse_residency_resource;
 pub mod util;
 
 use crate::event::{Event, RawArrayReceived};
@@ -23,11 +23,13 @@ use util::init;
 use util::window;
 
 use crate::event::handler::register_default_js_event_handlers;
-use crate::page_table::{ExternalTexture3DSource, MultiResolutionVolumeMeta};
 use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::geometry::Bounds3D;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::Renderer;
+use crate::sparse_residency_resource::texture3d::data_source::HtmlEventTargetTexture3DSource;
+use crate::sparse_residency_resource::texture3d::volume_meta::MultiResolutionVolumeMeta;
+use crate::sparse_residency_resource::texture3d::SparseResidencyTexture3D;
 use crate::window::window_builder_without_size;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -132,21 +134,14 @@ async fn start_event_loop(canvas: JsValue) {
     );
     html_canvas2.dispatch_event(&event_from_rust).ok();
 
-    let src = ExternalTexture3DSource::new(
+    let src = HtmlEventTargetTexture3DSource::new(
         MultiResolutionVolumeMeta {
-            brick_size: Default::default(),
-            resolutions: vec![]
+            brick_size: UVec3::default(),
+            resolutions: vec![],
         },
-        &|requested_bricks| {
-            let request = web_sys::CustomEvent::new("brick-request").ok().unwrap();
-            /*request.init_custom_event_with_can_bubble_and_cancelable_and_detail(
-                "loader-request",
-                false,
-                false,
-                &JsValue::from_serde(&requested_bricks).unwrap(),
-            );*/
-            html_canvas2.dispatch_event(&request).ok();
-        }
+        html_canvas2
+            .clone()
+            .unchecked_into::<web_sys::EventTarget>(),
     );
 
     let renderer = Renderer::new(canvas, volume).await;
