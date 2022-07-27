@@ -23,6 +23,7 @@ use util::init;
 use util::window;
 
 use crate::event::handler::register_default_js_event_handlers;
+use crate::page_table::{ExternalTexture3DSource, MultiResolutionVolumeMeta};
 use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::geometry::Bounds3D;
 use crate::renderer::volume::RawVolumeBlock;
@@ -130,6 +131,23 @@ async fn start_event_loop(canvas: JsValue) {
         &JsValue::from_serde(&loader_request).unwrap(),
     );
     html_canvas2.dispatch_event(&event_from_rust).ok();
+
+    let src = ExternalTexture3DSource::new(
+        MultiResolutionVolumeMeta {
+            brick_size: Default::default(),
+            resolutions: vec![]
+        },
+        &|requested_bricks| {
+            let request = web_sys::CustomEvent::new("brick-request").ok().unwrap();
+            /*request.init_custom_event_with_can_bubble_and_cancelable_and_detail(
+                "loader-request",
+                false,
+                false,
+                &JsValue::from_serde(&requested_bricks).unwrap(),
+            );*/
+            html_canvas2.dispatch_event(&request).ok();
+        }
+    );
 
     let renderer = Renderer::new(canvas, volume).await;
 

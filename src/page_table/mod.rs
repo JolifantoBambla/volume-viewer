@@ -1,8 +1,16 @@
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
 use crate::renderer::resources::Texture;
 use glam::{UVec3, UVec4, Vec3};
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
+use std::collections::vec_deque::Drain;
+use std::rc::Rc;
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+use web_sys::{EventTarget};
 use wgpu::{Device, Queue};
-use crate::util::extent::{extent_to_uvec, uvec_to_extent};
+use crate::util::extent::{box_volume, extent_to_uvec, uvec_to_extent};
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -82,10 +90,10 @@ pub struct VolumeResolutionMeta {
 pub struct MultiResolutionVolumeMeta {
     /// The size of a brick in the brick cache. This is constant across all resolutions of the
     /// bricked multi-resolution volume.
-    brick_size: UVec3,
+    pub(crate) brick_size: UVec3,
 
     /// The resolutions
-    resolutions: Vec<VolumeResolutionMeta>,
+    pub(crate) resolutions: Vec<VolumeResolutionMeta>,
 }
 
 impl MultiResolutionVolumeMeta {
@@ -94,10 +102,7 @@ impl MultiResolutionVolumeMeta {
     }
 
     pub fn number_of_bricks(&self, level: usize) -> u32 {
-        self.bricks_per_dimension(level)
-            .to_array()
-            .iter()
-            .fold(1, |a, &b| a * b)
+        box_volume(self.bricks_per_dimension(level))
     }
 }
 
@@ -164,6 +169,7 @@ impl PageDirectoryMeta {
     }
 }
 
+//#[derive(Deserialize, Serialize)]
 pub struct PageTableAddress {
     location: UVec3,
     level: u32,
@@ -178,9 +184,101 @@ pub struct Brick {
 pub trait SparseResidencyTexture3DSource {
     fn get_meta(&self) -> &MultiResolutionVolumeMeta;
 
-    fn request_brick(&mut self, brick_address: PageTableEntry);
+    fn request_bricks(&mut self, brick_addresses: Vec<PageTableAddress>);
 
-    fn poll_bricks(&mut self) -> HashMap<PageTableAddress, Brick>;
+    fn poll_bricks(&mut self, limit: usize) -> Vec<(PageTableAddress, Brick)>;
+}
+
+pub struct HtmlEventTargetTexture3DSource {
+    volume_meta: MultiResolutionVolumeMeta,
+    brick_queue: Rc<RefCell<VecDeque<(PageTableAddress, Brick)>>>,
+    event_target: EventTarget,
+}
+
+impl HtmlEventTargetTexture3DSource {
+    pub fn new(volume_meta: MultiResolutionVolumeMeta, event_target: EventTarget) -> Self {
+        let mut brick_queue = Rc::new(RefCell::new(VecDeque::new()));
+        let mut receiver = brick_queue.clone();
+        let event_callback = Closure::wrap(Box::new(
+            move |event| {
+                receiver.borrow_mut().as_ref().take().push_back((
+                    PageTableAddress {
+                        location: Default::default(),
+                        level: 0
+                    },
+                    Brick {
+                        data: vec![],
+                        min: 0,
+                        max: 0
+                    }
+                ));
+            }
+        ) as Box<dyn FnMut(JsValue)>);
+
+        event_target
+            .add_event_listener_with_callback("brick-loaded", event_callback.as_ref().unchecked_ref())
+            .ok();
+        event_callback.forget();
+
+        Self {
+            volume_meta,
+            brick_queue,
+            event_target,
+        }
+    }
+}
+
+impl SparseResidencyTexture3DSource for HtmlEventTargetTexture3DSource {
+    fn get_meta(&self) -> &MultiResolutionVolumeMeta {
+        &self.volume_meta
+    }
+
+    fn request_bricks(&mut self, brick_addresses: Vec<PageTableAddress>) {
+        let request = web_sys::CustomEvent::new("brick-request").ok().unwrap();
+        /*request.init_custom_event_with_can_bubble_and_cancelable_and_detail(
+            "loader-request",
+            false,
+            false,
+            &JsValue::from_serde(&requested_bricks).unwrap(),
+        );*/
+        self.event_target.dispatch_event(&request).ok();
+    }
+
+    fn poll_bricks(&mut self, limit: usize) -> Vec<(PageTableAddress, Brick)> {
+        self.brick_queue.borrow_mut().as_ref().take().drain(..limit).collect()
+    }
+}
+
+
+pub struct ExternalTexture3DSource<'a> {
+    volume_meta: MultiResolutionVolumeMeta,
+    brick_queue: VecDeque<(PageTableAddress, Brick)>,
+    // because it might be boring otherwise!
+    request_fun: &'a dyn Fn(Vec<PageTableAddress>),
+}
+
+impl<'a> ExternalTexture3DSource<'a> {
+    pub fn new(volume_meta: MultiResolutionVolumeMeta, request_fun: &'a dyn Fn(Vec<PageTableAddress>)) -> Self {
+        Self {
+            volume_meta,
+            brick_queue: VecDeque::new(),
+            request_fun,
+        }
+    }
+}
+
+impl<'a> SparseResidencyTexture3DSource for ExternalTexture3DSource<'a> {
+    fn get_meta(&self) -> &MultiResolutionVolumeMeta {
+        &self.volume_meta
+    }
+
+    fn request_bricks(&mut self, brick_addresses: Vec<PageTableAddress>) {
+        (self.request_fun)(brick_addresses);
+    }
+
+    fn poll_bricks(&mut self, limit: usize) -> Vec<(PageTableAddress, Brick)> {
+        self.brick_queue.drain(..limit).collect()
+    }
 }
 
 /// Manages a 3D sparse residency texture.
