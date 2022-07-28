@@ -2,7 +2,7 @@ import * as Comlink from '../../node_modules/comlink/dist/esm/comlink.mjs';
 
 import init, {main, initThreadPool, dispatchChunkReceived} from '../../pkg/volume_viewer.js';
 import { toWrappedEvent } from './event.js';
-import { BRICK_REQUEST_EVENT, BRICK_RESPONSE_EVENT } from './volume-data-source.js';
+import { BrickAddress, BRICK_REQUEST_EVENT, BRICK_RESPONSE_EVENT } from './volume-data-source.js';
 
 export class VolumeRenderer {
     #canvas;
@@ -31,12 +31,13 @@ export class VolumeRenderer {
 
         const worker = new Worker('./data-loading-thread.js', { type: 'module' });
         const volumeDataSource = Comlink.wrap(worker);
-        await volumeDataSource.initialize(config.dataSource);
+        const volumeMeta = await volumeDataSource.initialize(config.dataSource);
 
         this.#canvas = offscreenCanvas;
         this.#loader = {
             worker,
             volumeDataSource,
+            volumeMeta,
         };
         this.#initialized = true;
     }
@@ -60,40 +61,22 @@ export class VolumeRenderer {
             console.log('device limits', this.#device.limits);
         });
 
-        this.#canvas.addEventListener('loader-request', _ => {
-            (async () => {
-                const chunk = await this.#loader.volumeDataSource.loadChunkAtLevel([0, 0], 2);
-                dispatchChunkReceived(chunk.data, chunk.shape);
-
-                this.#canvas.dispatchEvent(new CustomEvent(
-                    BRICK_RESPONSE_EVENT,
-                    {
-                        detail: {
-                            address: [0, 1, 2, 3],
-                            brick: {
-                                data: chunk.data,
-                                min: 0,
-                                max: 13,
-                            }
-                        }
-                    }
-                ));
-            })();
-        });
-
         this.#canvas.addEventListener(BRICK_REQUEST_EVENT, e => {
-            //console.log('got brick request', e.detail, e);
-            this.#loader.worker.postMessage({
-                type: e.type,
-                addresses: e.detail.addresses,
-            });
+            (async () => {
+                this.#loader.worker.postMessage({
+                    type: BRICK_REQUEST_EVENT,
+                    addresses: e.detail.addresses,
+                });
+            })()
         });
         this.#loader.worker.addEventListener('message', e => {
-            console.log('message from loader', e.data.addresses[0][0]);
+            if (e.data.type === BRICK_RESPONSE_EVENT) {
+                console.log('message from loader', e.data);
+            }
         })
 
         // start event loop
-        main(this.#canvas);
+        main(this.#canvas, this.#loader.volumeMeta);
     }
 
     /**

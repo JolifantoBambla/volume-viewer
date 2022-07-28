@@ -1,23 +1,19 @@
 import init, { initThreadPool, convertToUint8, maxValue } from "../../pkg/volume_viewer.js";
 
-import { openGroup, openArray } from '../../node_modules/zarr/zarr.mjs';
+import { openGroup, openArray, slice } from '../../node_modules/zarr/zarr.mjs';
 
 // todo: maybe typescript?
 
 export const BRICK_REQUEST_EVENT = 'data-loader:brick-request';
 export const BRICK_RESPONSE_EVENT = 'data-loader:brick-response';
 
-// Note: bioformats2raw only generates 2D chunks
-// we use the following brick size for our dataset:
-//   (
-//      resolutions[0].chunkSize.x,
-//      resolutions[0].chunkSize.y,
-//      min(resolutions[0].shape.z,
-//          min(resolutions[0].chunkSize.x,
-//              resolutions[0].chunkSize.y
-//          )
-//      )
-//   )
+export class BrickAddress {
+    constructor(index, level, channel = 0) {
+        this.index = index;
+        this.level = level;
+        this.channel = channel;
+    }
+}
 
 export class VolumeResolutionMeta {
     constructor(brickSize, volumeSize, scale) {
@@ -59,19 +55,40 @@ export class RawVolumeChunk {
     chunk;
 }
 
-export class ChunkLoader {
+/**
+ * An interface for brick loading.
+ */
+export class BrickLoader {
     /**
      * Loads a chunk of the volume at a given resolution level
+     * @param brickIndex
      * @param level
-     * @param chunk
+     * @param channel
      * @returns {Promise<RawVolumeChunk>}
      */
-    async loadChunkAtLevel(chunk, level) {
+    async loadBrickAtLevel(brickIndex, level, channel = 0) {
+        throw new Error("not implemented");
+    }
+
+    /**
+     * Returns the size of a single brick.
+     */
+    get brickSize() {
         throw new Error("not implemented");
     }
 }
 
-export class VolumeDataSource extends ChunkLoader {
+/**
+ * An interface for volume date sources
+ */
+export class VolumeDataSource extends BrickLoader {
+    #config;
+
+    constructor(config) {
+        super();
+        this.#config = config;
+    }
+
     /**
      * Translates a canonical address within the volume (i.e. within [0,1]^3) to a physical address within the array.
      * @param address the virtual address to translate
@@ -95,6 +112,18 @@ export class VolumeDataSource extends ChunkLoader {
     scaleAtResolution(level) {
         throw new Error("not implemented");
     }
+
+    get volumeMeta() {
+        throw new Error("not implemented");
+    }
+
+    async getMaxValue() {
+        throw new Error("not implemented");
+    }
+
+    get config() {
+        return this.#config;
+    }
 }
 
 export class OmeZarrDataSource extends VolumeDataSource {
@@ -102,29 +131,102 @@ export class OmeZarrDataSource extends VolumeDataSource {
     #omeZarrMeta;
     #zarrArrays;
 
-    constructor(zarrGroup, omeZarrMeta, zarrArrays) {
-        super();
+    #volumeMeta;
+    #maxValues;
+
+    constructor(zarrGroup, omeZarrMeta, zarrArrays, config) {
+        super(config);
+
         this.#zarrGroup = zarrGroup;
         this.#omeZarrMeta = omeZarrMeta;
         this.#zarrArrays = zarrArrays;
+
+        const brickSize = config.minimumBrickSize;
+        for (const arr of this.#zarrArrays) {
+            for (let i = 0; i < 3; ++i) {
+                brickSize[i] = Math.min(
+                    config.maximumBrickSize[i],
+                    arr.shape[arr.shape.length - 1 - i],
+                    Math.max(
+                        config.minimumBrickSize[i],
+                        brickSize[i],
+                        arr.chunks[arr.chunks.length - 1 - i]
+                    )
+                );
+            }
+        }
+        console.log('brick size', brickSize);
+
+        const resolutions = [];
+        for (let i = 0; i < this.#zarrArrays.length; ++i) {
+            const volumeSize = this.#zarrArrays[i]
+                .shape
+                .slice()
+                .reverse()
+                .slice(0, 3);
+            // todo: this is probably not exactly what I want
+            //  I need this to be the scale factor by which I can scale the [0,1]^3 box
+            //  this is independent of the volumeSize, which is in voxels
+            const scale = this.#omeZarrMeta
+                .multiscales[0]
+                .datasets[i]
+                .coordinateTransformations
+                .find(d => d.type === 'scale')
+                .scale
+                .slice()
+                .reverse()
+                .slice(0, 3);
+            resolutions.push(
+                new VolumeResolutionMeta(brickSize, volumeSize, scale)
+            );
+        }
+
+        this.#volumeMeta = new MultiResolutionVolumeMeta(brickSize, resolutions);
+        this.#maxValues = new Array(this.#zarrArrays[0].shape.slice().reverse()[3]);
     }
 
     get brickSize() {
-
+        return this.#volumeMeta.brickSize;
     }
 
-    async loadChunkAtLevel(chunk, level) {
-        // todo: translate volume chunk address
-        const raw = await this.#zarrArrays[level].getRaw(chunk);
-        // todo: cast to u8 and normalize
+    get volumeMeta() {
+        return this.#volumeMeta;
+    }
 
-        // this test uses multithreading to transform data from uint16 to uint8
-        const uint8 = convertToUint8(raw.data, maxValue(raw.data));
+    async loadBrickAtLevel(brickAddress) {
+        const brickSelection = [];
+        for (let i = 2; i >= 0; --i) {
+            const origin = brickAddress.index[i] * this.brickSize[i];
+            brickSelection.push(
+                slice(origin, origin + this.brickSize[i])
+            );
+        }
+        const raw = await this.#zarrArrays[brickAddress.level]
+            .getRaw([0, brickAddress.channel, ...brickSelection]);
+
+        // this uses multithreading to transform data from uint16 to uint8
+        const uint8 = convertToUint8(
+            raw.data,
+            await this.getMaxValue(brickAddress.channel)
+        );
 
         return {
             ...raw,
             data: uint8,
         };
+    }
+
+    async getMaxValue(channel = 0) {
+        if (!this.#maxValues[channel]) {
+            this.#maxValues[channel] = maxValue(
+                (await this.#zarrArrays
+                        .slice()
+                        .reverse()[0]
+                        .getRaw([0, channel])
+                ).data
+            );
+        }
+        return this.#maxValues[channel];
     }
 }
 
@@ -144,17 +246,17 @@ export class VolumeDataSourceConfig {
     }
 }
 
-async function createVolumeDataSource(dataSourceConfig) {
+async function createVolumeDataSource(config) {
     const mode = 'r';
 
-    const {store, path} = dataSourceConfig;
+    const {store, path} = config;
     const group = await openGroup(store, path, mode);
     const attributes = await group.attrs.asObject();
     const multiscale = attributes.multiscales[0];
     const resolutions = [];
     for (const dataset of multiscale.datasets) {
         resolutions.push(await openArray({
-            store: dataSourceConfig.store,
+            store: config.store,
             path: `${path}/${dataset.path}`,
             mode
         }));
@@ -162,7 +264,8 @@ async function createVolumeDataSource(dataSourceConfig) {
         const idx = resolutions.length - 1;
         console.log(`res shape ${resolutions[idx].shape}, res chunks: ${resolutions[idx].chunks}, res chunkSize: ${resolutions[idx].chunkSize}, res numChunks: ${resolutions[idx].numChunks}`)
     }
-    return new OmeZarrDataSource(group, attributes, resolutions);
+
+    return new OmeZarrDataSource(group, attributes, resolutions, config);
 }
 
 export class VolumeLoader {
@@ -170,10 +273,13 @@ export class VolumeLoader {
     #dataSource;
     #postMessage;
 
+    #currentlyLoading;
+
     constructor(postMessage) {
         this.#initialized = false;
         this.#dataSource = null;
         this.#postMessage = postMessage;
+        this.#currentlyLoading = {};
     }
 
     async initialize(dataSourceConfig) {
@@ -181,13 +287,15 @@ export class VolumeLoader {
             throw Error("VolumeLoader is already initialized. Call reset instead!");
         }
 
-        console.log('what');
-
         await init();
         await initThreadPool(navigator.hardwareConcurrency);
 
         this.#dataSource = await createVolumeDataSource(dataSourceConfig);
+
+        this.#currentlyLoading = {};
         this.#initialized = true;
+
+        return this.#dataSource.volumeMeta;
     }
 
     async reset(store, path, dataSourceType = null) {
@@ -199,32 +307,35 @@ export class VolumeLoader {
         return this.#initialized;
     }
 
-    isLoadingChunk(chunk, level) {
-        return false;
+    isLoadingChunk(brickAddress) {
+        return this.#currentlyLoading[JSON.stringify(brickAddress)] === true;
     }
 
     /**
      * Loads a chunk of the volume at a given resolution level
-     * @param chunk
-     * @param level
+     * @param brickAddress a `BrickAddress`
      */
-    async loadChunkAtLevel(chunk, level) {
+    async loadBrickAtLevel(brickAddress) {
         if (!this.#initialized) {
             throw Error("Can't load chunk from uninitialized data source");
         }
-        if (this.isLoadingChunk(chunk, level)) {
+        if (this.isLoadingChunk()) {
             return;
         }
-        // todo: this is very naive - should probably be in a task queue and keep track / cache volume chunks
-        return this.#dataSource.loadChunkAtLevel(chunk, level);
+        this.#currentlyLoading[JSON.stringify(brickAddress)] = true;
+        this.#postMessage({
+            type: BRICK_RESPONSE_EVENT,
+            brick: {
+                address: brickAddress,
+                data: await this.#dataSource.loadBrickAtLevel(brickAddress),
+            }
+        });
+        this.#currentlyLoading[JSON.stringify(brickAddress)] = false;
     }
 
     async handleExternEvent(e) {
         if (e.type === BRICK_REQUEST_EVENT) {
-            setTimeout(() => {
-                console.log('handling external event', e.addresses[0][0]);
-                this.#postMessage(e);
-            }, Math.random() * 10000); // this is a test to make sure the message handling is actually async -> it is!
+            e.addresses.map(a => this.loadBrickAtLevel(a));
         }
     }
 }

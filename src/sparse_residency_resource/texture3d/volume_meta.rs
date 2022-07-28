@@ -1,26 +1,38 @@
 use crate::util::extent::box_volume;
 use glam::{UVec3, Vec3};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy)]
+#[derive(Deserialize, Serialize)]
+pub struct BrickAddress {
+    /// x,y,z
+    pub(crate) index: [u32; 3],
+    pub(crate) level: u32,
+    pub(crate) channel: u32,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct VolumeResolutionMeta {
     /// The size of the volume in voxels.
     /// It is not necessarily a multiple of `brick_size`.
     /// See `padded_volume_size`.
-    volume_size: UVec3,
+    #[serde(rename = "volumeSize")]
+    volume_size: [u32; 3],
 
     /// The size of the volume in voxels padded s.t. it is a multiple of `PageTableMeta::brick_size`.
-    padded_volume_size: UVec3,
+    #[serde(rename = "paddedVolumeSize")]
+    padded_volume_size: [u32; 3],
 
     /// The spatial extent of the volume.
-    scale: Vec3,
+    scale: [f32; 3],
 }
 
 // todo: move out of here
-#[derive(Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MultiResolutionVolumeMeta {
     /// The size of a brick in the brick cache. This is constant across all resolutions of the
     /// bricked multi-resolution volume.
-    pub(crate) brick_size: UVec3,
+    #[serde(rename = "brickSize")]
+    pub(crate) brick_size: [u32; 3],
 
     /// The resolutions
     pub(crate) resolutions: Vec<VolumeResolutionMeta>,
@@ -28,7 +40,7 @@ pub struct MultiResolutionVolumeMeta {
 
 impl MultiResolutionVolumeMeta {
     pub fn bricks_per_dimension(&self, level: usize) -> UVec3 {
-        self.resolutions[level].padded_volume_size / self.brick_size
+        UVec3::from(self.resolutions[level].padded_volume_size) / UVec3::from(self.brick_size)
     }
 
     pub fn number_of_bricks(&self, level: usize) -> u32 {

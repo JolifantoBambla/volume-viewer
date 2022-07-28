@@ -71,15 +71,19 @@ pub fn dispatch_chunk_received(data: Vec<u16>, shape: Vec<u32>) {
 //  create CustomEvent enum that consists of WindowEvent and can be extended by other events
 //  create thread pool that is supplied with event proxies sending events to event loop
 #[wasm_bindgen]
-pub fn main(canvas: JsValue) {
+pub fn main(canvas: JsValue, volume_meta: JsValue) {
     // todo: make logger configurable
     init::set_panic_hook();
     init::set_logger(None);
 
-    wasm_bindgen_futures::spawn_local(start_event_loop(canvas));
+    let volume_meta: MultiResolutionVolumeMeta = volume_meta
+        .into_serde()
+        .expect("Received invalid volume meta. Shutting down.");
+
+    wasm_bindgen_futures::spawn_local(start_event_loop(canvas, volume_meta));
 }
 
-async fn start_event_loop(canvas: JsValue) {
+async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMeta) {
     let zarr_array = ZarrArray::open(
         "http://localhost:8005/".to_string(),
         "ome-zarr/m.ome.zarr/0/2".to_string(),
@@ -138,17 +142,12 @@ async fn start_event_loop(canvas: JsValue) {
     html_canvas2.dispatch_event(&event_from_rust).ok();
 
     let mut src = HtmlEventTargetTexture3DSource::new(
-        MultiResolutionVolumeMeta {
-            brick_size: UVec3::default(),
-            resolutions: vec![],
-        },
+        volume_meta,
         html_canvas2
             .clone()
             .unchecked_into::<web_sys::EventTarget>(),
     );
-    for i in 0..100 {
-        src.request_bricks(vec![PageTableAddress::from([i, i, i, i])]);
-    }
+    src.request_bricks(vec![PageTableAddress::from([0, 0, 0, 2])]);
 
     let renderer = Renderer::new(canvas, volume).await;
 
@@ -364,7 +363,7 @@ pub fn convert_to_uint8(data: Vec<u16>, max_value: f32) -> Vec<u8> {
 
 // Test device sharing between WASM and JS context, could be useful at some point
 
-#[wasm_bindgen(module = "/shared-gpu.js")]
+#[wasm_bindgen(module = "/js/src/shared-gpu.js")]
 extern "C" {
     #[wasm_bindgen(js_name = "printGpuDeviceLimits")]
     fn print_gpu_device_limits(device: web_sys::GpuDevice);

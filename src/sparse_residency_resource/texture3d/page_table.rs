@@ -117,7 +117,7 @@ impl PageDirectoryMeta {
             .fold(UVec3::ZERO, |a, b| a.max(b.offset + b.extent));
 
         Self {
-            brick_size: volume_meta.brick_size,
+            brick_size: UVec3::from(volume_meta.brick_size),
             extent,
             resolutions,
         }

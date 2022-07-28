@@ -1,12 +1,14 @@
 use crate::sparse_residency_resource::texture3d::page_table::PageTableAddress;
-use crate::sparse_residency_resource::texture3d::volume_meta::MultiResolutionVolumeMeta;
+use crate::sparse_residency_resource::texture3d::volume_meta::{
+    BrickAddress, MultiResolutionVolumeMeta,
+};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{CustomEvent, Event, EventTarget};
+use web_sys::{CustomEvent, EventTarget};
 
 #[derive(Deserialize, Serialize)]
 pub struct Brick {
@@ -82,10 +84,17 @@ impl SparseResidencyTexture3DSource for HtmlEventTargetTexture3DSource {
 
     fn request_bricks(&mut self, brick_addresses: Vec<PageTableAddress>) {
         let request_event = web_sys::CustomEvent::new(BRICK_REQUEST_EVENT).ok().unwrap();
-        let mut request_data: HashMap<&str, Vec<[u32; 4]>> = HashMap::new();
+        let mut request_data: HashMap<&str, Vec<BrickAddress>> = HashMap::new();
         request_data.insert(
             "addresses",
-            brick_addresses.iter().map(|&a| a.into()).collect(),
+            brick_addresses
+                .iter()
+                .map(|&a| BrickAddress {
+                    index: a.location.to_array(),
+                    level: a.level,
+                    channel: 0,
+                })
+                .collect(),
         );
         request_event.init_custom_event_with_can_bubble_and_cancelable_and_detail(
             BRICK_REQUEST_EVENT,
