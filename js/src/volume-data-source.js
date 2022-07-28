@@ -19,6 +19,27 @@ export const BRICK_RESPONSE_EVENT = 'data-loader:brick-response';
 //      )
 //   )
 
+export class VolumeResolutionMeta {
+    constructor(brickSize, volumeSize, scale) {
+        this.volumeSize = volumeSize;
+        this.paddedVolumeSize = [];
+        for (let i = 0; i < 3; ++i) {
+            this.paddedVolumeSize.push(
+                Math.ceil(volumeSize[i] / brickSize[i]) * brickSize[i]
+            );
+        }
+        this.scale = scale;
+    }
+}
+
+
+export class MultiResolutionVolumeMeta {
+    constructor(brickSize, resolutions) {
+        this.brickSize = brickSize;
+        this.resolutions = resolutions;
+    }
+}
+
 
 export class Chunk {
     /**
@@ -88,6 +109,10 @@ export class OmeZarrDataSource extends VolumeDataSource {
         this.#zarrArrays = zarrArrays;
     }
 
+    get brickSize() {
+
+    }
+
     async loadChunkAtLevel(chunk, level) {
         // todo: translate volume chunk address
         const raw = await this.#zarrArrays[level].getRaw(chunk);
@@ -103,16 +128,33 @@ export class OmeZarrDataSource extends VolumeDataSource {
     }
 }
 
-async function createVolumeDataSource(store, path, dataSourceType) {
+export class VolumeDataSourceConfig {
+    store;
+    path;
+    sourceType;
+    maximumBrickSize;
+    minimumBrickSize;
+
+    constructor({store, path, sourceType = "OME-Zarr"}, { maximumBrickSize = [256, 256, 256], minimumBrickSize = [32, 32, 32] }) {
+        this.store = store;
+        this.path = path;
+        this.sourceType = sourceType;
+        this.maximumBrickSize = maximumBrickSize;
+        this.minimumBrickSize = minimumBrickSize;
+    }
+}
+
+async function createVolumeDataSource(dataSourceConfig) {
     const mode = 'r';
 
+    const {store, path} = dataSourceConfig;
     const group = await openGroup(store, path, mode);
     const attributes = await group.attrs.asObject();
     const multiscale = attributes.multiscales[0];
     const resolutions = [];
     for (const dataset of multiscale.datasets) {
         resolutions.push(await openArray({
-            store,
+            store: dataSourceConfig.store,
             path: `${path}/${dataset.path}`,
             mode
         }));
@@ -134,15 +176,17 @@ export class VolumeLoader {
         this.#postMessage = postMessage;
     }
 
-    async initialize(store, path, dataSourceType = null) {
+    async initialize(dataSourceConfig) {
         if (this.#initialized) {
             throw Error("VolumeLoader is already initialized. Call reset instead!");
         }
 
+        console.log('what');
+
         await init();
         await initThreadPool(navigator.hardwareConcurrency);
 
-        this.#dataSource = await createVolumeDataSource(store, path, dataSourceType);
+        this.#dataSource = await createVolumeDataSource(dataSourceConfig);
         this.#initialized = true;
     }
 
@@ -182,6 +226,5 @@ export class VolumeLoader {
                 this.#postMessage(e);
             }, Math.random() * 10000); // this is a test to make sure the message handling is actually async -> it is!
         }
-
     }
 }

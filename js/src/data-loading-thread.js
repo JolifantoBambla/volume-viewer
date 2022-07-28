@@ -1,6 +1,6 @@
-import * as Comlink from "./js/external/src/comlink.mjs";
+import * as Comlink from '../../node_modules/comlink/dist/esm/comlink.mjs';
 
-import { VolumeLoader } from "./js/src/volume-data-source.js";
+import { VolumeLoader } from './volume-data-source.js';
 
 const volumeLoader = new VolumeLoader((message, transfer) => self.postMessage(message, transfer));
 

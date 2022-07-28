@@ -1,0 +1,7 @@
+import * as Comlink from '../../node_modules/comlink/dist/esm/comlink.mjs';
+
+import { VolumeRenderer } from './volume-renderer.js';
+
+const renderer = new VolumeRenderer();
+
+Comlink.expose(renderer);

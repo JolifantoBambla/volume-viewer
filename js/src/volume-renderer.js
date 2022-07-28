@@ -1,10 +1,10 @@
-import * as Comlink from "./node_modules/comlink/dist/esm/comlink.mjs";
+import * as Comlink from '../../node_modules/comlink/dist/esm/comlink.mjs';
 
-import init, {main, initThreadPool, dispatchChunkReceived} from "./pkg/volume_viewer.js";
-import { toWrappedEvent } from "./event.js";
-import { BRICK_REQUEST_EVENT, BRICK_RESPONSE_EVENT } from './js/src/volume-data-source.js';
+import init, {main, initThreadPool, dispatchChunkReceived} from '../../pkg/volume_viewer.js';
+import { toWrappedEvent } from './event.js';
+import { BRICK_REQUEST_EVENT, BRICK_RESPONSE_EVENT } from './volume-data-source.js';
 
-class VolumeRenderer {
+export class VolumeRenderer {
     #canvas;
     #initialized;
     #device;
@@ -15,7 +15,7 @@ class VolumeRenderer {
         this.#canvas = null;
     }
 
-    async initialize(offscreenCanvas) {
+    async initialize(offscreenCanvas, config) {
         // This is a hack so that wgpu can create an instance from a dedicated worker
         // See: https://github.com/gfx-rs/wgpu/issues/1986
         self.Window = WorkerGlobalScope;
@@ -29,9 +29,9 @@ class VolumeRenderer {
             setProperty(name, value) {},
         };
 
-        const worker = new Worker('./loader.js', { type: 'module' });
+        const worker = new Worker('./data-loading-thread.js', { type: 'module' });
         const volumeDataSource = Comlink.wrap(worker);
-        await volumeDataSource.initialize('http://localhost:8005/', 'ome-zarr/m.ome.zarr/0', null);
+        await volumeDataSource.initialize(config.dataSource);
 
         this.#canvas = offscreenCanvas;
         this.#loader = {
@@ -106,7 +106,3 @@ class VolumeRenderer {
         }
     }
 }
-
-const renderer = new VolumeRenderer();
-
-Comlink.expose(renderer);
