@@ -25,8 +25,9 @@ use util::window;
 use crate::event::handler::register_default_js_event_handlers;
 use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::geometry::Bounds3D;
+use crate::renderer::pass::ray_guided_dvr::RayGuidedDVR;
 use crate::renderer::volume::RawVolumeBlock;
-use crate::renderer::TrivialVolumeRenderer;
+use crate::renderer::{MultiChannelVolumeRenderer, TrivialVolumeRenderer};
 use crate::sparse_residency_resource::texture3d::data_source::{
     HtmlEventTargetTexture3DSource, SparseResidencyTexture3DSource,
 };
@@ -142,7 +143,16 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
     html_canvas2.dispatch_event(&event_from_rust).ok();
 
 
-    let renderer = TrivialVolumeRenderer::new(canvas, volume).await;
+    let renderer = MultiChannelVolumeRenderer::new(
+        canvas,
+        Box::new(HtmlEventTargetTexture3DSource::new(
+            volume_meta,
+            html_canvas2
+                .clone()
+                .unchecked_into::<web_sys::EventTarget>(),
+        ))
+    ).await;
+    /*
     let ctx = renderer.ctx.clone();
     let mut volume_texture = SparseResidencyTexture3D::new(
         Box::new(HtmlEventTargetTexture3DSource::new(
@@ -155,6 +165,7 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
         &ctx.queue
     );
     volume_texture.request_bricks();
+     */
 
     // NOTE: All resource allocations should happen before the main render loop
     // The reason for this is that receiving allocation errors is async, but
@@ -180,13 +191,13 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
     }
 }
 
-pub fn run_event_loop(renderer: TrivialVolumeRenderer, window: Window, event_loop: EventLoop<Event<()>>) {
+pub fn run_event_loop(renderer: MultiChannelVolumeRenderer, window: Window, event_loop: EventLoop<Event<()>>) {
     // TODO: refactor these params
     let distance_from_center = 50.;
 
     let resolution = Vec2::new(
-        renderer.canvas.width() as f32,
-        renderer.canvas.height() as f32,
+        renderer.window_size.width as f32,
+        renderer.window_size.height as f32,
     );
 
     const TRANSLATION_SPEED: f32 = 5.0;
@@ -195,7 +206,7 @@ pub fn run_event_loop(renderer: TrivialVolumeRenderer, window: Window, event_loo
     const FAR: f32 = 1000.0;
     let perspective = Projection::new_perspective(
         f32::to_radians(45.),
-        renderer.canvas.width() as f32 / renderer.canvas.height() as f32,
+        renderer.window_size.width as f32 / renderer.window_size.height as f32,
         NEAR,
         FAR,
     );

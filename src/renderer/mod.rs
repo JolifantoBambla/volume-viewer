@@ -32,7 +32,7 @@ use crate::renderer::pass::ray_guided_dvr::{RayGuidedDVR, Resources};
 
 pub struct MultiChannelVolumeRenderer {
     pub(crate) ctx: Arc<GPUContext>,
-    window_size: PhysicalSize<u32>,
+    pub(crate) window_size: PhysicalSize<u32>,
     volume_transform: glam::Mat4,
     wgsl_preprocessor: WGSLPreprocessor,
     volume_texture: SparseResidencyTexture3D,

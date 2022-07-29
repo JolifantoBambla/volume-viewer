@@ -43,7 +43,7 @@ struct Transforms {
 // Bindings
 
 // The bindings in group 0 should never change (except maybe the result image for double buffering?)
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+@group(0) @binding(0) var<uniform> uniforms: Transforms;
 @group(0) @binding(1) var volume_sampler: sampler;
 @group(0) @binding(2) var result: texture_storage_2d<rgba8unorm, write>;
 
@@ -57,16 +57,16 @@ struct Transforms {
 //    The default value 0 indicates that a brick has never been requested.
 
 // Bind group 1 holds all data for one channel of a multiresolution, multichannel volume
-@group(1) @binding(0) var<uniform> page_table_meta: PageDirectoryMeta;
-@group(1) @binding(1) var page_directory: texture_3d<f32>;
+@group(1) @binding(0) var<storage> page_table_meta: PageDirectoryMeta;
+@group(1) @binding(1) var page_directory: texture_3d<u32>;
 @group(1) @binding(2) var brick_cache: texture_3d<f32>;
-@group(1) @binding(3) var brick_usage_buffer: texture_3d<f32>;
-@group(1) @binding(4) var request_buffer: texture_3d<f32>;
+@group(1) @binding(3) var brick_usage_buffer: texture_storage_3d<r32uint, write>;
+@group(1) @binding(4) var request_buffer: texture_storage_3d<r32uint, write>;
 
 // Helper stuff
 
 fn sample_volume(x: float3) -> f32 {
-    return f32(textureSampleLevel(volume_data, volume_sampler, x, 0.).x);
+    return f32(textureSampleLevel(brick_cache, volume_sampler, x, 0.).x);
 }
 
 @stage(compute)
@@ -86,7 +86,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     // generate a ray and transform it to the volume's space (i.e. where the volume is a unit cube with x in [0,1]^3)
     let ray_ws = generate_camera_ray(uniforms.camera, float2(pixel), resolution);
-    let ray_os = transform_ray(ray_ws, uniforms.world_to_object);
+    let ray_os = transform_ray(ray_ws, uniforms.volume_transform.world_to_object);
 
     // terminate thread if the ray isn't within the unit cube
     let volume_bounds_os = AABB(float3(0.), float3(1.));
@@ -95,10 +95,17 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         return;
     }
 
-    let object_to_view = uniforms.camera.transform.world_to_object * uniforms.object_to_world;
+    let object_to_view = uniforms.camera.transform.world_to_object * uniforms.volume_transform.object_to_world;
 
     let start_os = ray_at(ray_os, max(0., intersection_record.t_min));
     let end_os   = ray_at(ray_os, intersection_record.t_max);
+
+    let s = sample_volume(float3());
+    if s == 0. && page_table_meta.resolutions[0].brick_size.x == 0u {
+        let page = u32(textureLoad(page_directory, int3(), 0).x);
+        textureStore(brick_usage_buffer, int3(), uint4(page));
+        textureStore(request_buffer, int3(), uint4(page));
+    }
 
     green(pixel);
 /*
@@ -145,9 +152,9 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 }
 
 // page table stuff
-fn select_level_of_detail(f32 distance) -> u32 {
+fn select_level_of_detail(distance: f32) -> u32 {
     // todo: select based on distance to camera
-    return 0; //page_table_meta.max_lod;
+    return 0u; //page_table_meta.max_lod;
 }
 
 fn is_saturated(color: float4) -> bool {

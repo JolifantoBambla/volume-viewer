@@ -56,11 +56,13 @@ impl SparseResidencyTexture3D {
             volume_size: UVec3::from_slice(r.volume_meta.volume_size.as_slice()).extend(0)
         }).collect();
 
+        log::info!("create pt meta buffer");
         let page_table_meta_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Page Table Meta"),
-            contents: &bytemuck::cast_vec(res_meta_data),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            contents: &bytemuck::cast_slice(res_meta_data.as_slice()),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
+        log::info!("created pt meta buffer");
 
         // 1 page table entry per brick
         let page_directory =

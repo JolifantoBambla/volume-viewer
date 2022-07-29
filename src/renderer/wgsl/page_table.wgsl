@@ -47,16 +47,17 @@ struct PageDirectoryMeta {
 */
 
 struct ResolutionMeta {
-    @size(16) brick_size: uint32,
-    @size(16) page_table_offset: uint32,
-    @size(16) page_table_extent: uint32,
-    @size(16) volume_size: uint32,
+    @size(16) brick_size: uint3,
+    @size(16) page_table_offset: uint3,
+    @size(16) page_table_extent: uint3,
+    @size(16) volume_size: uint3,
 }
 
 struct PageDirectoryMeta {
     resolutions: array<ResolutionMeta>,
 }
 
+/*
 fn pt_canonical_to_voxel(page_table_meta: PageDirectoryMeta, p: float3, level: u32) -> int32 {
     return int3(p * page_directory_meta.resolutions[level].volume_meta.volume_size);
 }
@@ -65,3 +66,4 @@ fn pt_compute_lod(page_table_meta: PageDirectoryMeta, distance_to_camera: f32) -
     // todo: select based on distance to camera
     return min(arrayLength(page_table_meta.resolutions), 0u);
 }
+*/
