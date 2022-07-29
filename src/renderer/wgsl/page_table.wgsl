@@ -27,21 +27,34 @@ fn to_page_table_entry(v: uint4) -> PageTableEntry {
 // todo: I probably won't need all this stuff -> find out what is needed and kick out the rest
 
 struct VolumeResolutionMeta {
-    volume_size: uint3,
-    padded_volume_size: uint3,
-    scale: float3,
+    @size(16) volume_size: uint3,
+    @size(16) padded_volume_size: uint3,
+    @size(16) scale: float3,
 }
 
 struct PageTableMeta {
-    offset: uint3,
-    extent: uint3,
+    @size(16) offset: uint3,
+    @size(16) extent: uint3,
     volume_meta: VolumeResolutionMeta,
 }
 
+/*
 struct PageDirectoryMeta {
-    brick_size: uint3,
-    extent: uint3,
+    @size(16) brick_size: uint3,
+    @size(16) extent: uint3,
     resolutions: array<PageTableMeta>,
+}
+*/
+
+struct ResolutionMeta {
+    @size(16) brick_size: uint32,
+    @size(16) page_table_offset: uint32,
+    @size(16) page_table_extent: uint32,
+    @size(16) volume_size: uint32,
+}
+
+struct PageDirectoryMeta {
+    resolutions: array<ResolutionMeta>,
 }
 
 fn pt_canonical_to_voxel(page_table_meta: PageDirectoryMeta, p: float3, level: u32) -> int32 {

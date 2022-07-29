@@ -1,10 +1,7 @@
 use crate::renderer::volume::RawVolumeBlock;
 use crate::util::extent::extent_volume;
 use wgpu::util::DeviceExt;
-use wgpu::{
-    Device, Extent3d, Queue, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-    TextureView, TextureViewDescriptor,
-};
+use wgpu::{Device, ErrorFilter, Extent3d, Queue, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor};
 
 #[readonly::make]
 pub struct Texture {
@@ -53,13 +50,10 @@ impl Texture {
                 format: TextureFormat::Rgba32Uint,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
             },
-            bytemuck::cast_slice(
-                vec![
-                    0u8;
-                    (extent.width * extent.height * extent.depth_or_array_layers * 4) as usize
-                ]
-                .as_slice(),
-            ),
+            vec![
+                0u8;
+                (extent.width * extent.height * extent.depth_or_array_layers * 4 * 4) as usize
+            ].as_slice(),
         );
         let view = texture.create_view(&TextureViewDescriptor::default());
         Self {
@@ -69,15 +63,17 @@ impl Texture {
         }
     }
 
-    pub fn create_brick_cache(device: &Device) -> Self {
+    pub fn create_brick_cache(device: &Device, extent: Extent3d) -> Self {
         let max_texture_dimension = device.limits().max_texture_dimension_3d;
-        let extent = Extent3d {
-            width: max_texture_dimension,
-            height: max_texture_dimension,
-            depth_or_array_layers: max_texture_dimension,
-        };
+        assert!(
+            extent.width <= max_texture_dimension &&
+            extent.height <= max_texture_dimension &&
+            extent.depth_or_array_layers <= max_texture_dimension,
+            "Brick cache extent must not exceed device limits"
+        );
+        //device.push_error_scope(ErrorFilter::OutOfMemory);
         let texture = device.create_texture(&TextureDescriptor {
-            label: Some("Usage Buffer"),
+            label: Some("Brick Cache"),
             size: extent,
             mip_level_count: 1,
             sample_count: 1,
@@ -85,6 +81,7 @@ impl Texture {
             format: TextureFormat::R8Unorm,
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
         });
+        //device.pop_error_scope();
         let view = texture.create_view(&TextureViewDescriptor::default());
         Self {
             texture,
@@ -112,7 +109,7 @@ impl Texture {
                     | TextureUsages::COPY_DST
                     | TextureUsages::STORAGE_BINDING,
             },
-            &bytemuck::cast_slice(vec![0u32; extent_volume(extent) as usize].as_slice()),
+            vec![0u8; (extent_volume(extent) * 4) as usize].as_slice(),
         );
         let view = texture.create_view(&TextureViewDescriptor::default());
         Self {

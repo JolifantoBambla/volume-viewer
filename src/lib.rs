@@ -26,7 +26,7 @@ use crate::event::handler::register_default_js_event_handlers;
 use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::geometry::Bounds3D;
 use crate::renderer::volume::RawVolumeBlock;
-use crate::renderer::Renderer;
+use crate::renderer::TrivialVolumeRenderer;
 use crate::sparse_residency_resource::texture3d::data_source::{
     HtmlEventTargetTexture3DSource, SparseResidencyTexture3DSource,
 };
@@ -141,16 +141,23 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
     );
     html_canvas2.dispatch_event(&event_from_rust).ok();
 
-    let mut src = HtmlEventTargetTexture3DSource::new(
-        volume_meta,
-        html_canvas2
-            .clone()
-            .unchecked_into::<web_sys::EventTarget>(),
+
+    let renderer = TrivialVolumeRenderer::new(canvas, volume).await;
+    let ctx = renderer.ctx.clone();
+    let mut volume_texture = SparseResidencyTexture3D::new(
+        Box::new(HtmlEventTargetTexture3DSource::new(
+            volume_meta,
+            html_canvas2
+                .clone()
+                .unchecked_into::<web_sys::EventTarget>(),
+        )),
+        &ctx.device,
+        &ctx.queue
     );
-    src.request_bricks(vec![PageTableAddress::from([0, 0, 0, 2])]);
+    volume_texture.request_bricks();
 
-    let renderer = Renderer::new(canvas, volume).await;
-
+    // NOTE: All resource allocations should happen before the main render loop
+    // The reason for this is that receiving allocation errors is async, but
     let start_closure = Closure::once_into_js(move || run_event_loop(renderer, window, event_loop));
 
     // make sure to handle JS exceptions thrown inside start.
@@ -173,7 +180,7 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
     }
 }
 
-pub fn run_event_loop(renderer: Renderer, window: Window, event_loop: EventLoop<Event<()>>) {
+pub fn run_event_loop(renderer: TrivialVolumeRenderer, window: Window, event_loop: EventLoop<Event<()>>) {
     // TODO: refactor these params
     let distance_from_center = 50.;
 

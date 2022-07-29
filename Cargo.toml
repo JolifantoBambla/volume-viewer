@@ -19,7 +19,8 @@ default = [
 runner = 'wasm-bindgen-test-runner'
 
 [dependencies]
-bytemuck = { version = "1.9.1", features = ["derive"] }
+bincode = "1.3.3"
+bytemuck = { version = "1.9.1", features = ["derive", "extern_crate_alloc"] }
 futures-intrusive = "0.4.0"
 glam = { version = "0.20.5", features = ["bytemuck"] }
 instant = "0.1.12"

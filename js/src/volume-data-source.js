@@ -28,14 +28,12 @@ export class VolumeResolutionMeta {
     }
 }
 
-
 export class MultiResolutionVolumeMeta {
     constructor(brickSize, resolutions) {
         this.brickSize = brickSize;
         this.resolutions = resolutions;
     }
 }
-
 
 export class Chunk {
     /**

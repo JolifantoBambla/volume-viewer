@@ -10,13 +10,14 @@ pub struct BrickAddress {
     pub(crate) channel: u32,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct VolumeResolutionMeta {
     /// The size of the volume in voxels.
     /// It is not necessarily a multiple of `brick_size`.
     /// See `padded_volume_size`.
     #[serde(rename = "volumeSize")]
-    volume_size: [u32; 3],
+    pub(crate) volume_size: [u32; 3],
 
     /// The size of the volume in voxels padded s.t. it is a multiple of `PageTableMeta::brick_size`.
     #[serde(rename = "paddedVolumeSize")]

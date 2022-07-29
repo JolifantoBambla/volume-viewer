@@ -2,6 +2,7 @@ use crate::sparse_residency_resource::texture3d::volume_meta::{
     MultiResolutionVolumeMeta, VolumeResolutionMeta,
 };
 use glam::{UVec3, UVec4};
+use serde::{Serialize};
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -61,15 +62,16 @@ impl Into<UVec4> for PageTableEntry {
     }
 }
 
-#[derive(Clone)]
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PageTableMeta {
     /// The offset of this resolution's page table in the page directory.
-    offset: UVec3,
+    pub(crate) offset: UVec3,
 
-    extent: UVec3,
+    pub(crate) extent: UVec3,
 
     ///
-    volume_meta: VolumeResolutionMeta,
+    pub(crate) volume_meta: VolumeResolutionMeta,
 }
 
 #[derive(Clone)]
@@ -81,7 +83,7 @@ pub struct PageDirectoryMeta {
     pub(crate) extent: UVec3,
 
     /// The resolutions
-    resolutions: Vec<PageTableMeta>,
+    pub(crate) resolutions: Vec<PageTableMeta>,
 }
 
 // todo: address translation
