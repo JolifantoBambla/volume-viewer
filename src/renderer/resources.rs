@@ -1,7 +1,10 @@
 use crate::renderer::volume::RawVolumeBlock;
 use crate::util::extent::extent_volume;
 use wgpu::util::DeviceExt;
-use wgpu::{Device, ErrorFilter, Extent3d, Queue, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor};
+use wgpu::{
+    Device, ErrorFilter, Extent3d, Queue, TextureDescriptor, TextureDimension, TextureFormat,
+    TextureUsages, TextureView, TextureViewDescriptor,
+};
 
 #[readonly::make]
 pub struct Texture {
@@ -53,7 +56,8 @@ impl Texture {
             vec![
                 0u8;
                 (extent.width * extent.height * extent.depth_or_array_layers * 4 * 4) as usize
-            ].as_slice(),
+            ]
+            .as_slice(),
         );
         let view = texture.create_view(&TextureViewDescriptor::default());
         Self {
@@ -66,9 +70,9 @@ impl Texture {
     pub fn create_brick_cache(device: &Device, extent: Extent3d) -> Self {
         let max_texture_dimension = device.limits().max_texture_dimension_3d;
         assert!(
-            extent.width <= max_texture_dimension &&
-            extent.height <= max_texture_dimension &&
-            extent.depth_or_array_layers <= max_texture_dimension,
+            extent.width <= max_texture_dimension
+                && extent.height <= max_texture_dimension
+                && extent.depth_or_array_layers <= max_texture_dimension,
             "Brick cache extent must not exceed device limits"
         );
         //device.push_error_scope(ErrorFilter::OutOfMemory);

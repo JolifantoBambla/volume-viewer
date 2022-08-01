@@ -1,3 +1,1 @@
-struct ProcessRequests {
-
-}
+struct ProcessRequests {}

@@ -142,7 +142,6 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
     );
     html_canvas2.dispatch_event(&event_from_rust).ok();
 
-
     let renderer = MultiChannelVolumeRenderer::new(
         canvas,
         Box::new(HtmlEventTargetTexture3DSource::new(
@@ -150,8 +149,9 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
             html_canvas2
                 .clone()
                 .unchecked_into::<web_sys::EventTarget>(),
-        ))
-    ).await;
+        )),
+    )
+    .await;
     /*
     let ctx = renderer.ctx.clone();
     let mut volume_texture = SparseResidencyTexture3D::new(
@@ -191,8 +191,11 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
     }
 }
 
-
-pub fn run_event_loop(renderer: MultiChannelVolumeRenderer, window: Window, event_loop: EventLoop<Event<()>>) {
+pub fn run_event_loop(
+    mut renderer: MultiChannelVolumeRenderer,
+    window: Window,
+    event_loop: EventLoop<Event<()>>,
+) {
     // TODO: refactor these params
     let distance_from_center = 50.;
 
@@ -349,7 +352,8 @@ pub fn run_event_loop(renderer: MultiChannelVolumeRenderer, window: Window, even
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
-                renderer.render(&view, frame_number);
+                let submission_index = renderer.render(&view, frame_number);
+                renderer.post_render(submission_index);
 
                 frame.present();
             }

@@ -1,3 +1,9 @@
+use crate::renderer::context::{ContextDescriptor, GPUContext};
+use crate::renderer::pass::GPUPass;
+use crate::renderer::pass::{dvr, present_to_screen};
+use crate::renderer::resources;
+use crate::renderer::wgsl::create_wgsl_preprocessor;
+use crate::{Camera, RawVolumeBlock};
 use bytemuck;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
@@ -5,12 +11,6 @@ use wasm_bindgen::JsCast;
 use web_sys::OffscreenCanvas;
 use wgpu::util::DeviceExt;
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::{Camera, RawVolumeBlock};
-use crate::renderer::context::{ContextDescriptor, GPUContext};
-use crate::renderer::pass::GPUPass;
-use crate::renderer::pass::{dvr, present_to_screen};
-use crate::renderer::resources;
-use crate::renderer::wgsl::create_wgsl_preprocessor;
 
 pub struct TrivialVolumeRenderer {
     pub(crate) canvas: OffscreenCanvas,

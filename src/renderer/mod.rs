@@ -1,18 +1,19 @@
 pub mod camera;
 pub mod context;
 pub mod geometry;
+pub mod gpu_list;
 pub mod pass;
 pub mod resources;
+pub mod trivial_volume_renderer;
 pub mod volume;
 pub mod wgsl;
-pub mod trivial_volume_renderer;
 
 use wasm_bindgen::prelude::*;
 
 use crate::renderer::camera::Camera;
 use crate::renderer::context::{ContextDescriptor, GPUContext};
-use crate::renderer::pass::{GPUPass, ray_guided_dvr};
 use crate::renderer::pass::{dvr, present_to_screen};
+use crate::renderer::pass::{ray_guided_dvr, GPUPass};
 
 use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::wgsl::create_wgsl_preprocessor;
@@ -20,15 +21,15 @@ use bytemuck;
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
 use web_sys::OffscreenCanvas;
-use wgpu::{BindGroup, Buffer, Extent3d, SamplerDescriptor};
 use wgpu::util::DeviceExt;
-use winit::dpi::PhysicalSize;
+use wgpu::{BindGroup, Buffer, Extent3d, SamplerDescriptor, SubmissionIndex};
 use wgsl_preprocessor::WGSLPreprocessor;
+use winit::dpi::PhysicalSize;
 
-pub use trivial_volume_renderer::TrivialVolumeRenderer;
-use crate::{SparseResidencyTexture3D, SparseResidencyTexture3DSource};
 use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::ray_guided_dvr::{RayGuidedDVR, Resources};
+use crate::{SparseResidencyTexture3D, SparseResidencyTexture3DSource};
+pub use trivial_volume_renderer::TrivialVolumeRenderer;
 
 pub struct MultiChannelVolumeRenderer {
     pub(crate) ctx: Arc<GPUContext>,
@@ -48,17 +49,23 @@ pub struct MultiChannelVolumeRenderer {
 
 impl MultiChannelVolumeRenderer {
     #[cfg(target_arch = "wasm32")]
-    pub async fn new(canvas: JsValue, volume_source: Box<dyn SparseResidencyTexture3DSource>) -> Self {
+    pub async fn new(
+        canvas: JsValue,
+        volume_source: Box<dyn SparseResidencyTexture3DSource>,
+    ) -> Self {
         let canvas = canvas.unchecked_into::<OffscreenCanvas>();
         let ctx = Arc::new(
             GPUContext::new(&ContextDescriptor::default())
                 .await
                 .with_surface_from_offscreen_canvas(&canvas),
         );
-        let window_size = PhysicalSize { width: canvas.width(), height: canvas.height() };
+        let window_size = PhysicalSize {
+            width: canvas.width(),
+            height: canvas.height(),
+        };
 
         let wgsl_preprocessor = create_wgsl_preprocessor();
-        let volume_texture = SparseResidencyTexture3D::new(volume_source, &ctx.device, &ctx.queue);
+        let volume_texture = SparseResidencyTexture3D::new(volume_source, &wgsl_preprocessor, &ctx);
 
         let volume_render_result_extent = Extent3d {
             width: window_size.width,
@@ -90,22 +97,20 @@ impl MultiChannelVolumeRenderer {
             &glam::Mat4::from_translation(glam::Vec3::new(-0.5, -0.5, -0.5)),
         );
         let uniforms = ray_guided_dvr::Uniforms::default();
-        let volume_render_uniform_buffer = ctx
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::bytes_of(&uniforms),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        let volume_render_uniform_buffer =
+            ctx.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: bytemuck::bytes_of(&uniforms),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
 
         let volume_render_pass = RayGuidedDVR::new(&volume_texture, &wgsl_preprocessor, &ctx);
-        let volume_render_bind_group = volume_render_pass.create_bind_group(
-            Resources {
-                volume_sampler: &volume_sampler,
-                output: &dvr_result.view,
-                uniforms: &volume_render_uniform_buffer,
-            }
-        );
+        let volume_render_bind_group = volume_render_pass.create_bind_group(Resources {
+            volume_sampler: &volume_sampler,
+            output: &dvr_result.view,
+            uniforms: &volume_render_uniform_buffer,
+        });
 
         let present_to_screen_pass = PresentToScreen::new(&ctx);
         let present_to_screen_bind_group =
@@ -135,18 +140,23 @@ impl MultiChannelVolumeRenderer {
             self.volume_transform,
             frame_number,
         );
-        self.ctx
-            .queue
-            .write_buffer(&self.volume_render_uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
+        self.ctx.queue.write_buffer(
+            &self.volume_render_uniform_buffer,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
     }
 
-    pub fn render(&self, surface_view: &wgpu::TextureView, frame_numer: u32) {
+    pub fn render(&self, surface_view: &wgpu::TextureView, frame_numer: u32) -> SubmissionIndex {
         let mut encoder = self
             .ctx
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        self.volume_render_pass
-            .encode(&mut encoder, &self.volume_render_bind_group, &self.volume_render_result_extent);
+        self.volume_render_pass.encode(
+            &mut encoder,
+            &self.volume_render_bind_group,
+            &self.volume_render_result_extent,
+        );
         self.present_to_screen_pass.encode(
             &mut encoder,
             &self.present_to_screen_bind_group,
@@ -154,9 +164,13 @@ impl MultiChannelVolumeRenderer {
         );
 
         // todo: process request & usage buffers
+        self.volume_texture
+            .encode_cache_management(&mut encoder, frame_numer);
 
-        self.ctx.queue.submit(Some(encoder.finish()));
+        self.ctx.queue.submit(Some(encoder.finish()))
+    }
 
-        // todo: update sparse texture -> this forces a CPU-GPU sync and should happen after render!
+    pub fn post_render(&mut self, submission_index: SubmissionIndex) {
+        self.volume_texture.update_cache(submission_index);
     }
 }

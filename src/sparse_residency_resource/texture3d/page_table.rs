@@ -2,7 +2,7 @@ use crate::sparse_residency_resource::texture3d::volume_meta::{
     MultiResolutionVolumeMeta, VolumeResolutionMeta,
 };
 use glam::{UVec3, UVec4};
-use serde::{Serialize};
+use serde::Serialize;
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq)]

@@ -1,14 +1,14 @@
+use crate::renderer::camera::TransformUniform;
 use crate::renderer::{
     camera::CameraUniform,
     context::GPUContext,
     pass::{AsBindGroupEntries, GPUPass},
 };
-use std::{borrow::Cow, sync::Arc};
+use crate::SparseResidencyTexture3D;
 use glam::UVec4;
+use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::renderer::camera::TransformUniform;
-use crate::SparseResidencyTexture3D;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -72,7 +72,11 @@ pub struct RayGuidedDVR {
 }
 
 impl RayGuidedDVR {
-    pub fn new(volume_texture: &SparseResidencyTexture3D, wgsl_preprocessor: &WGSLPreprocessor, ctx: &Arc<GPUContext>) -> Self {
+    pub fn new(
+        volume_texture: &SparseResidencyTexture3D,
+        wgsl_preprocessor: &WGSLPreprocessor,
+        ctx: &Arc<GPUContext>,
+    ) -> Self {
         let shader_module = ctx
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -95,13 +99,11 @@ impl RayGuidedDVR {
         let bind_group_layout = pipeline.get_bind_group_layout(0);
 
         let internal_bind_group_layout = pipeline.get_bind_group_layout(1);
-        let internal_bind_group = ctx
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &internal_bind_group_layout,
-                entries: &volume_texture.as_bind_group_entries(),
-            });
+        let internal_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &internal_bind_group_layout,
+            entries: &volume_texture.as_bind_group_entries(),
+        });
 
         Self {
             ctx: ctx.clone(),
@@ -117,10 +119,9 @@ impl RayGuidedDVR {
         bind_group: &BindGroup,
         output_extent: &wgpu::Extent3d,
     ) {
-        let mut cpass =
-            command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Ray Guided DVR")
-            });
+        let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Ray Guided DVR"),
+        });
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, bind_group, &[]);
         cpass.set_bind_group(1, &self.internal_bind_group, &[]);

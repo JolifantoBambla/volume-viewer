@@ -8,6 +8,7 @@ pub fn create_wgsl_preprocessor() -> WGSLPreprocessor {
         .include("bresenham", include_str!("bresenham.wgsl"))
         .include("camera", include_str!("camera.wgsl"))
         .include("constant", include_str!("constant.wgsl"))
+        .include("gpu_list", include_str!("gpu_list.wgsl"))
         .include("page_table", include_str!("page_table.wgsl"))
         .include("ray", include_str!("ray.wgsl"))
         .include("sphere", include_str!("sphere.wgsl"))
