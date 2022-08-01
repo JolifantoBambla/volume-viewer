@@ -35,15 +35,16 @@ fn black(pixel: int2) {
 
 // todo: come up with a better name...
 // todo: clean up those uniforms - find out what i really need and throw away the rest
-struct Transforms {
+struct Uniforms {
     camera: Camera,
     volume_transform: Transform,
+    @size(16) timestamp: u32,
 }
 
 // Bindings
 
 // The bindings in group 0 should never change (except maybe the result image for double buffering?)
-@group(0) @binding(0) var<uniform> uniforms: Transforms;
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var volume_sampler: sampler;
 @group(0) @binding(2) var result: texture_storage_2d<rgba8unorm, write>;
 
@@ -67,6 +68,34 @@ struct Transforms {
 
 fn sample_volume(x: float3) -> f32 {
     return f32(textureSampleLevel(brick_cache, volume_sampler, x, 0.).x);
+}
+
+/// Reports usage of a cached brick by storing the current frame's timestamp in the `brick_usage_buffer`.
+///
+/// # Arguments
+/// * `brick_address`: the address of the cached brick. The actual brick is located at `brick_address` * `brick_size`
+fn report_usage(brick_address: int3) {
+    textureStore(brick_usage_buffer, brick_address, uint4(uniforms.timestamp));
+}
+
+/// Requests a brick missing in the `brick_cache` by storing the current frame's timestamp in the `request_buffer`.
+///
+/// # Arguments
+/// * `page_address`:
+fn request_brick(page_address: int3) {
+    // todo: translate to actual location
+    textureStore(request_buffer, page_address, uint4(uniforms.timestamp));
+}
+
+fn get_page_address(location: float3, level: u32) -> uint3 {
+    let resolution = page_table_meta.resolutions[level];
+    let offset = resolution.page_table_offset;
+    let extent = resolution.page_table_extent;
+    return offset + uint3(float3(extent) * location);
+}
+
+fn get_page(page_address: uint3) -> PageTableEntry {
+    return to_page_table_entry(textureLoad(page_directory, int3(page_address), 0));
 }
 
 @stage(compute)
@@ -100,15 +129,37 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     let start_os = ray_at(ray_os, max(0., intersection_record.t_min));
     let end_os   = ray_at(ray_os, intersection_record.t_max);
 
+    let timestamp = uniforms.timestamp;
+
     let s = sample_volume(float3());
     if s == 0. && page_table_meta.resolutions[0].brick_size.x == 0u {
         let page = u32(textureLoad(page_directory, int3(), 0).x);
-        textureStore(brick_usage_buffer, int3(), uint4(page));
-        textureStore(request_buffer, int3(), uint4(page));
+        textureStore(brick_usage_buffer, int3(), uint4(timestamp));
+        textureStore(request_buffer, int3(), uint4(timestamp));
     }
 
-    green(pixel);
-/*
+    let lowest_lod = arrayLength(&page_table_meta.resolutions);
+    let brick_size = page_table_meta.resolutions[0].brick_size;
+
+    // todo: this should be in a loop:
+    let location = start_os;
+    let distance_to_camera = abs((object_to_view * float4(location, 1.)).z);
+    let lod = select_level_of_detail(distance_to_camera, lowest_lod);
+
+    let page_address = get_page_address(location, lod);
+    let page = get_page(page_address);
+    if page.flag == UNMAPPED {
+        red(pixel);
+        request_brick(int3(page_address));
+    } else if page.flag == EMPTY {
+        blue(pixel);
+    } else {
+        // todo: step through brick
+        green(pixel);
+        report_usage(int3(page.location / brick_size));
+    }
+
+    /*
     MAYBE GET BRICK:
         GET BRICK AND REPORT USAGE OR REQUEST
 
@@ -152,8 +203,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 }
 
 // page table stuff
-fn select_level_of_detail(distance: f32) -> u32 {
-    // todo: select based on distance to camera
+fn select_level_of_detail(distance: f32, lowest_lod: u32) -> u32 {
+    // todo: select based on distance to camera or screen size?
     return 0u; //page_table_meta.max_lod;
 }
 

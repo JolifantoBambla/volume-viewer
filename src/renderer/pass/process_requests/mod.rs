@@ -5,44 +5,43 @@ use crate::renderer::{
 };
 use std::{borrow::Cow, sync::Arc};
 use glam::UVec4;
-use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
+use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Buffer};
 use wgsl_preprocessor::WGSLPreprocessor;
 use crate::renderer::camera::TransformUniform;
+use crate::renderer::resources::Texture;
 use crate::SparseResidencyTexture3D;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Uniforms {
-    pub camera: CameraUniform,
-    pub volume_transform: TransformUniform,
-    pub timestamp: UVec4,
+pub struct Params {
+    pub max_requests: u32,
+    pub timestamp: u32,
 }
 
-impl Uniforms {
-    pub fn new(camera: CameraUniform, object_to_world: glam::Mat4, timestamp: u32) -> Self {
-        let volume_transform = TransformUniform::from_object_to_world(object_to_world);
+impl Params {
+    pub fn new(max_requests: u32, timestamp: u32) -> Self {
         Self {
-            camera,
-            volume_transform,
-            timestamp: UVec4::new(timestamp, timestamp, timestamp, timestamp),
+            max_requests,
+            timestamp,
         }
     }
 }
 
-impl Default for Uniforms {
+impl Default for Params {
     fn default() -> Self {
         Self {
-            camera: CameraUniform::default(),
-            volume_transform: TransformUniform::default(),
-            timestamp: UVec4::default(),
+            max_requests: 0,
+            timestamp: 0,
         }
     }
 }
 
 pub struct Resources<'a> {
-    pub volume_sampler: &'a wgpu::Sampler,
-    pub output: &'a wgpu::TextureView,
-    pub uniforms: &'a wgpu::Buffer,
+    pub page_table_meta: &'a Buffer,
+    pub request_buffer: &'a Texture,
+    pub params: &'a Buffer,
+    pub counters: &'a Buffer,
+    pub ids: &'a Buffer,
 }
 
 impl<'a> AsBindGroupEntries for Resources<'a> {
@@ -50,28 +49,36 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
         vec![
             BindGroupEntry {
                 binding: 0,
-                resource: self.uniforms.as_entire_binding(),
+                resource: self.page_table_meta.as_entire_binding(),
             },
             BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::Sampler(self.volume_sampler),
+                resource: wgpu::BindingResource::TextureView(&self.request_buffer.view),
             },
             BindGroupEntry {
                 binding: 2,
-                resource: wgpu::BindingResource::TextureView(self.output),
+                resource: self.page_table_meta.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 3,
+                resource: self.page_table_meta.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 4,
+                resource: self.page_table_meta.as_entire_binding(),
             },
         ]
     }
 }
 
-pub struct RayGuidedDVR {
+pub struct ProcessRequests {
     ctx: Arc<GPUContext>,
     pipeline: wgpu::ComputePipeline,
     bind_group_layout: BindGroupLayout,
     internal_bind_group: BindGroup,
 }
 
-impl RayGuidedDVR {
+impl ProcessRequests {
     pub fn new(volume_texture: &SparseResidencyTexture3D, wgsl_preprocessor: &WGSLPreprocessor, ctx: &Arc<GPUContext>) -> Self {
         let shader_module = ctx
             .device
@@ -79,7 +86,7 @@ impl RayGuidedDVR {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
                     &*wgsl_preprocessor
-                        .preprocess(include_str!("ray_cast.wgsl"))
+                        .preprocess(include_str!("process_requests.wgsl"))
                         .ok()
                         .unwrap(),
                 )),
@@ -92,6 +99,7 @@ impl RayGuidedDVR {
                 module: &shader_module,
                 entry_point: "main",
             });
+
         let bind_group_layout = pipeline.get_bind_group_layout(0);
 
         let internal_bind_group_layout = pipeline.get_bind_group_layout(1);
@@ -114,9 +122,11 @@ impl RayGuidedDVR {
     pub fn encode(
         &self,
         command_encoder: &mut wgpu::CommandEncoder,
-        bind_group: &BindGroup,
-        output_extent: &wgpu::Extent3d,
+        max_requests: u32,
+        timestamp: u32,
     ) {
+        // todo: write zeros to buffers to buffers
+
         let mut cpass =
             command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Ray Guided DVR")
@@ -133,13 +143,13 @@ impl RayGuidedDVR {
     }
 }
 
-impl<'a> GPUPass<Resources<'a>> for RayGuidedDVR {
+impl<'a> GPUPass<Resources<'a>> for ProcessRequests {
     fn ctx(&self) -> &Arc<GPUContext> {
         &self.ctx
     }
 
     fn label(&self) -> &str {
-        "Ray Guided DVR"
+        "Process Requests"
     }
 
     fn bind_group_layout(&self) -> &BindGroupLayout {

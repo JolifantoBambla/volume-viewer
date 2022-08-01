@@ -86,8 +86,7 @@ impl MultiChannelVolumeRenderer {
 
         // the volume is a unit cube ([0,1]^3)
         // we translate it s.t. its center is the origin and scale it to its original dimensions
-        // todo: scale should come from volume meta data (-> todo: add meta data to volume)
-        let volume_transform = glam::Mat4::from_scale(volume_texture.extent_f32()).mul_mat4(
+        let volume_transform = glam::Mat4::from_scale(volume_texture.volume_scale()).mul_mat4(
             &glam::Mat4::from_translation(glam::Vec3::new(-0.5, -0.5, -0.5)),
         );
         let uniforms = ray_guided_dvr::Uniforms::default();
@@ -130,17 +129,18 @@ impl MultiChannelVolumeRenderer {
         }
     }
 
-    pub fn update(&self, camera: &Camera) {
+    pub fn update(&self, camera: &Camera, frame_number: u32) {
         let uniforms = ray_guided_dvr::Uniforms::new(
             camera.create_uniform(),
-            self.volume_transform
+            self.volume_transform,
+            frame_number,
         );
         self.ctx
             .queue
             .write_buffer(&self.volume_render_uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
     }
 
-    pub fn render(&self, surface_view: &wgpu::TextureView) {
+    pub fn render(&self, surface_view: &wgpu::TextureView, frame_numer: u32) {
         let mut encoder = self
             .ctx
             .device

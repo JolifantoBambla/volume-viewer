@@ -191,6 +191,7 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
     }
 }
 
+
 pub fn run_event_loop(renderer: MultiChannelVolumeRenderer, window: Window, event_loop: EventLoop<Event<()>>) {
     // TODO: refactor these params
     let distance_from_center = 50.;
@@ -226,6 +227,7 @@ pub fn run_event_loop(renderer: MultiChannelVolumeRenderer, window: Window, even
     let mut last_mouse_position = Vec2::new(0., 0.);
     let mut left_mouse_pressed = false;
     let mut right_mouse_pressed = false;
+    let mut frame_number = 0;
 
     event_loop.run(move |event, _, control_flow| {
         // force ownership by the closure
@@ -323,7 +325,9 @@ pub fn run_event_loop(renderer: MultiChannelVolumeRenderer, window: Window, even
                 _ => {}
             },
             winit::event::Event::RedrawRequested(_) => {
-                renderer.update(&camera);
+                frame_number += 1;
+
+                renderer.update(&camera, frame_number);
 
                 let frame = match renderer.ctx.surface.as_ref().unwrap().get_current_texture() {
                     Ok(frame) => frame,
@@ -345,7 +349,7 @@ pub fn run_event_loop(renderer: MultiChannelVolumeRenderer, window: Window, even
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
-                renderer.render(&view);
+                renderer.render(&view, frame_number);
 
                 frame.present();
             }

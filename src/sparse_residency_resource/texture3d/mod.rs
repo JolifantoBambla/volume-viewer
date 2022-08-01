@@ -1,6 +1,7 @@
 pub mod data_source;
 pub mod page_table;
 pub mod volume_meta;
+mod algorithms;
 
 use std::cmp::min;
 use crate::renderer::resources::Texture;
@@ -13,7 +14,7 @@ use crate::sparse_residency_resource::texture3d::page_table::{
 use crate::util::extent::{extent_to_uvec, uvec_to_extent};
 use std::collections::HashMap;
 use glam::{UVec3, UVec4, Vec3};
-use wgpu::{BindGroupEntry, BindingResource, Buffer, BufferDescriptor, BufferUsages, Device, Extent3d, Maintain, MaintainBase, Queue};
+use wgpu::{BindGroupEntry, BindingResource, Buffer, BufferDescriptor, BufferUsages, CommandEncoder, Device, Extent3d, Maintain, MaintainBase, Queue};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use crate::renderer::pass::AsBindGroupEntries;
 
@@ -108,20 +109,26 @@ impl SparseResidencyTexture3D {
         }
     }
 
-    pub fn extent_f32(&self) -> Vec3 {
+    // todo: this should come from meta data (my current data set doesn't have such meta data)
+    pub fn volume_scale(&self) -> Vec3 {
         Vec3::new(
-            self.meta.extent.x as f32,
-            self.meta.extent.y as f32,
-            self.meta.extent.z as f32,
+            self.meta.resolutions[0].volume_meta.volume_size[0] as f32,
+            self.meta.resolutions[0].volume_meta.volume_size[1] as f32,
+            self.meta.resolutions[0].volume_meta.volume_size[2] as f32,
         )
+    }
+
+    pub fn encode_cache_management(&self, command_encoder: &mut CommandEncoder) {
+        // todo: find unused
+        // todo: find requested
     }
 
     /// Call this after rendering has completed to read back requests & usages
     pub fn update_cache(&mut self, device: &Device) {
-        // find unused
-        // find requested
-
         // todo: map buffers
+
+        // only getconstmappedrange is allowed?
+
         // buffers are mapped async, but we can't execute futures in synchronous code
         // so we need to synchronize the CPU and GPU here!
         device.poll(Maintain::Wait);
