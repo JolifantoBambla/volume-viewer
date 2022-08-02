@@ -12,3 +12,11 @@ fn blend(a: float4, b: float4) -> float4 {
         a.a + b.a * (1. - a.a)
     );
 }
+
+fn sum_components_uint4(v: uint4) -> u32 {
+    return v.x + v.y + v.z + v.w;
+}
+
+fn pack4x8uint(e: uint4) -> u32 {
+    return sum_components_uint4(e << uint4(24u, 16u, 8u, 0u));
+}

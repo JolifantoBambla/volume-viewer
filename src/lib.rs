@@ -342,33 +342,6 @@ pub fn run_event_loop(
                 frame_number += 1;
 
                 renderer.as_ref().borrow().update(&camera, frame_number);
-                /*
-                let frame = match renderer.ctx.surface.as_ref().unwrap().get_current_texture() {
-                    Ok(frame) => frame,
-                    Err(_) => {
-                        renderer.ctx.surface.as_ref().unwrap().configure(
-                            &renderer.ctx.device,
-                            renderer.ctx.surface_configuration.as_ref().unwrap(),
-                        );
-                        renderer
-                            .ctx
-                            .surface
-                            .as_ref()
-                            .unwrap()
-                            .get_current_texture()
-                            .expect("Failed to acquire next surface texture!")
-                    }
-                };
-                let view = frame
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-
-                let submission_index = renderer.render(&view, frame_number);
-
-                frame.present();
-                */
-
-                //renderer.post_render(submission_index);
 
                 wasm_bindgen_futures::spawn_local(calling_from_async(renderer.clone(), camera.clone(), frame_number, window.clone()));
             }

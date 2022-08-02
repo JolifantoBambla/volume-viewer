@@ -126,9 +126,7 @@ impl<T: bytemuck::Pod> GpuList<T> {
     /// panics if `GpuList::map_for_reading` has not been called and device has not been polled until
     /// mapping finished
     pub fn read_mapped(&self) -> Vec<T> {
-        log::info!("getting mapped buffer range of meta");
         let meta_view = self.meta_read_buffer.slice(..).get_mapped_range();
-        log::info!("getting mapped buffer range of list");
         let list_view = self.list_read_buffer.slice(..).get_mapped_range();
 
         let meta: GpuListMeta = bytemuck::cast_slice(&meta_view)[0];
@@ -140,13 +138,16 @@ impl<T: bytemuck::Pod> GpuList<T> {
         self.list_read_buffer.unmap();
         self.meta_read_buffer.unmap();
 
-        list.shrink_to(min(meta.fill_pointer - 1, self.capacity) as usize);
+        log::info!("meta: capacity {} fill_pointer {}", meta.capacity, meta.fill_pointer);
+
+        list.truncate(min(meta.fill_pointer, self.capacity) as usize);
 
         list
     }
 
-    pub fn read(&self) -> Vec<T> {
-        self.map_for_reading();
+    pub async fn read(&self) -> Vec<T> {
+        self.map_for_reading()
+            .await;
         self.ctx.device.poll(Maintain::Wait);
         self.read_mapped()
     }

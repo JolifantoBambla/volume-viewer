@@ -20,10 +20,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{
-    BindGroup, BindGroupEntry, BindingResource, Buffer, BufferDescriptor, BufferUsages,
-    CommandEncoder, Device, Extent3d, Maintain, MaintainBase, Queue, SubmissionIndex,
-};
+use wgpu::{BindGroup, BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, Device, Extent3d, Maintain, MaintainBase, Queue, SubmissionIndex};
 use wgsl_preprocessor::WGSLPreprocessor;
 
 /// Manages a 3D sparse residency texture.
@@ -161,9 +158,15 @@ impl SparseResidencyTexture3D {
     }
 
     pub fn encode_cache_management(&self, command_encoder: &mut CommandEncoder, timestamp: u32) {
+        self.ctx.queue.write_buffer(
+            &self.timestamp_uniform_buffer,
+            0 as BufferAddress,
+            &bytemuck::bytes_of(&Timestamp::new(timestamp))
+        );
+
         // todo: find unused
 
-        // todo: find requested
+        // find requested
         self.process_requests_pass.encode(
             command_encoder,
             &self.process_requests_bind_group,
@@ -196,6 +199,35 @@ impl SparseResidencyTexture3D {
         // todo: read and unmap buffers
         let requested_ids = self.process_requests_pass.read();
         log::info!("ids: {:?}", requested_ids);
+
+        // res levels:
+        // UVec3(0, 0, 0), UVec3(8, 8, 2)
+        // UVec3(0, 0, 2), UVec3(4, 4, 2)
+        // UVec3(0, 0, 4), UVec3(2, 2, 2)
+        // UVec3(2, 0, 4), UVec3(1, 1, 2)
+        // [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        // 84148480,
+        // 17039616,
+        // 50397440,
+        // 17105152,
+        // 33882368,
+        // 50659584,
+        // 100729088,
+        // 17170688,
+        // 33947904,
+        // 50725120,
+        // 100794624,
+        // 17236224,
+        // 34013440,
+        // 50790656,
+        // 33620737,
+        // 50397953]
+        log::info!("offsets {:?}, extents {:?}",
+            self.meta.resolutions.iter().map(|r| r.offset).collect::<Vec<UVec3>>(),
+            self.meta.resolutions.iter().map(|r| r.extent).collect::<Vec<UVec3>>());
+        let highest_extent = self.meta.resolutions[0].extent;
+        log::info!("packed {} unpacked {:?} or {:?}", highest_extent.x << 24 + highest_extent.y << 16 + highest_extent.z << 8 + 0, 134742528u32.to_le_bytes(), 134742528u32.to_be_bytes());
+
 
         let free_slots: Vec<usize> = Vec::new();
 
