@@ -66,6 +66,7 @@ impl Default for CameraUniform {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct CameraView {
     position: Vec3,
     center_of_projection: Vec3,
@@ -210,7 +211,7 @@ impl ToTransformUniform for CameraView {
     }
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 #[readonly::make]
 pub struct Projection {
     projection: Mat4,
@@ -250,6 +251,7 @@ impl Projection {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Camera {
     pub view: CameraView,
     projection: Projection,

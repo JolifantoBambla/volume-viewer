@@ -1,5 +1,6 @@
 use rayon::prelude::*;
 use std::collections::HashMap;
+use std::sync::Arc;
 pub use wasm_bindgen_rayon::init_thread_pool;
 
 use glam::{UVec3, Vec2, Vec3};
@@ -28,6 +29,7 @@ use crate::renderer::geometry::Bounds3D;
 use crate::renderer::pass::ray_guided_dvr::RayGuidedDVR;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::{MultiChannelVolumeRenderer, TrivialVolumeRenderer};
+use crate::renderer::context::GPUContext;
 use crate::sparse_residency_resource::texture3d::data_source::{
     HtmlEventTargetTexture3DSource, SparseResidencyTexture3DSource,
 };
@@ -196,6 +198,8 @@ pub fn run_event_loop(
     window: Window,
     event_loop: EventLoop<Event<()>>,
 ) {
+    let mut renderer = Arc::new(renderer);
+
     // TODO: refactor these params
     let distance_from_center = 50.;
 
@@ -331,7 +335,7 @@ pub fn run_event_loop(
                 frame_number += 1;
 
                 renderer.update(&camera, frame_number);
-
+                /*
                 let frame = match renderer.ctx.surface.as_ref().unwrap().get_current_texture() {
                     Ok(frame) => frame,
                     Err(_) => {
@@ -353,13 +357,45 @@ pub fn run_event_loop(
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
                 let submission_index = renderer.render(&view, frame_number);
-                renderer.post_render(submission_index);
 
                 frame.present();
+                */
+
+                //renderer.post_render(submission_index);
+
+                wasm_bindgen_futures::spawn_local(calling_from_async(renderer.clone(), camera.clone(), frame_number));
             }
             _ => {}
         }
     });
+}
+
+async fn calling_from_async(renderer: Arc<MultiChannelVolumeRenderer>, camera: Camera, frame_number: u32) {
+    log::info!("still async baby!");
+
+    let frame = match renderer.ctx.surface.as_ref().unwrap().get_current_texture() {
+        Ok(frame) => frame,
+        Err(_) => {
+            renderer.ctx.surface.as_ref().unwrap().configure(
+                &renderer.ctx.device,
+                renderer.ctx.surface_configuration.as_ref().unwrap(),
+            );
+            renderer
+                .ctx
+                .surface
+                .as_ref()
+                .unwrap()
+                .get_current_texture()
+                .expect("Failed to acquire next surface texture!")
+        }
+    };
+    let view = frame
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+
+    let submission_index = renderer.render(&view, frame_number);
+
+    frame.present();
 }
 
 pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock {

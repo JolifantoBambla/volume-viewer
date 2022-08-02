@@ -17,9 +17,13 @@ use crate::util::extent::{extent_to_uvec, uvec_to_extent};
 use glam::{UVec3, UVec4, Vec3};
 use std::cmp::min;
 use std::collections::HashMap;
+use std::sync::mpsc::channel;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{BindGroup, BindGroupEntry, BindingResource, Buffer, BufferDescriptor, BufferUsages, CommandEncoder, Device, Extent3d, Maintain, MaintainBase, Queue, SubmissionIndex};
+use wgpu::{
+    BindGroup, BindGroupEntry, BindingResource, Buffer, BufferDescriptor, BufferUsages,
+    CommandEncoder, Device, Extent3d, Maintain, MaintainBase, Queue, SubmissionIndex,
+};
 use wgsl_preprocessor::WGSLPreprocessor;
 
 /// Manages a 3D sparse residency texture.
@@ -171,7 +175,11 @@ impl SparseResidencyTexture3D {
 
     /// Call this after rendering has completed to read back requests & usages
     pub fn update_cache(&mut self, submission_index: SubmissionIndex) {
-        self.ctx.device.poll(Maintain::WaitForSubmissionIndex(submission_index));
+        /*
+        self.ctx
+            .device
+            .poll(Maintain::WaitForSubmissionIndex(submission_index));
+        */
 
         // todo: map buffers
         self.process_requests_pass.map_for_reading();

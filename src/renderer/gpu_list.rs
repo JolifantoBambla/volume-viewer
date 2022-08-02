@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::process::Command;
 use std::sync::Arc;
+use wasm_bindgen_futures::spawn_local;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages,
@@ -91,12 +92,19 @@ impl<T: bytemuck::Pod> GpuList<T> {
     }
 
     pub fn map_for_reading(&self) {
+        let (sender, receiver) = flume::bounded(2);
+        let sender2 = sender.clone();
         self.list_read_buffer
             .slice(..)
-            .map_async(MapMode::Read, |_| ());
+            .map_async(MapMode::Read, move |_| sender.send(0).unwrap());
         self.meta_read_buffer
             .slice(..)
-            .map_async(MapMode::Read, |_| ());
+            .map_async(MapMode::Read, move |_| sender2.send(0).unwrap());
+        self.ctx.device.poll(Maintain::Wait);
+        log::info!("waiting for buffers to be mapped");
+        receiver.recv().unwrap();
+        log::info!("waiting for second buffer to be mapped");
+        receiver.recv().unwrap();
         log::info!("mapped buffers");
     }
 
