@@ -351,8 +351,6 @@ pub fn run_event_loop(
 }
 
 async fn calling_from_async(mut renderer: Rc<RefCell<MultiChannelVolumeRenderer>>, camera: Camera, frame_number: u32, window: Rc<Window>) {
-    log::info!("still async baby!");
-
     let frame = match renderer.as_ref().borrow().ctx.surface.as_ref().unwrap().get_current_texture() {
         Ok(frame) => frame,
         Err(_) => {
@@ -380,8 +378,6 @@ async fn calling_from_async(mut renderer: Rc<RefCell<MultiChannelVolumeRenderer>
     renderer.as_ref().borrow_mut().post_render(submission_index).await;
 
     frame.present();
-
-    log::info!("rendered frame");
 
     // we request the redraw after rendering has definitely finished
     window.request_redraw();

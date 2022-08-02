@@ -1,5 +1,6 @@
 use crate::renderer::context::GPUContext;
 use crate::renderer::pass::AsBindGroupEntries;
+use futures::future::join_all;
 use std::cmp::min;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -11,6 +12,7 @@ use wgpu::{
     BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages,
     CommandEncoder, Maintain, MaintainBase, MapMode,
 };
+use crate::renderer::resources::map_buffer;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -92,34 +94,9 @@ impl<T: bytemuck::Pod> GpuList<T> {
     }
 
     pub async fn map_for_reading(&self) {
- //       let (sender, receiver) = flume::bounded(2);
-
-        //log::info!("creating channels");
-
-        let (sender1, receiver1) = futures_intrusive::channel::shared::oneshot_channel();
-        let (sender2, receiver2) = futures_intrusive::channel::shared::oneshot_channel();
-
-//        let sender2 = sender.clone();
-        self.list_read_buffer
-            .slice(..)
-            .map_async(MapMode::Read, move |v| sender1.send(v).unwrap());
-        self.meta_read_buffer
-            .slice(..)
-            .map_async(MapMode::Read, move |v| sender2.send(v).unwrap());
-
-        //log::info!("waiting for buffers to be mapped");
-        if let Some(Ok(v)) = receiver1.receive().await {
-          //  log::info!("mapped one buffer");
-        } else {
-           // log::info!("error mapping!");
-        }
-
-        if let Some(Ok(v)) = receiver2.receive().await {
-         //   log::info!("mapped one buffer");
-        } else {
-           // log::info!("error mapping!");
-        }
-        //log::info!("mapped buffers or died");
+        let list_buffer_future = map_buffer(&self.list_read_buffer, ..);
+        let meta_buffer_future = map_buffer(&self.meta_read_buffer, ..);
+        join_all([list_buffer_future, meta_buffer_future]).await;
     }
 
     /// read and unmaps buffer

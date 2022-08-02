@@ -1,10 +1,8 @@
+use std::ops::RangeBounds;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::util::extent::extent_volume;
 use wgpu::util::DeviceExt;
-use wgpu::{
-    Device, ErrorFilter, Extent3d, Queue, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureUsages, TextureView, TextureViewDescriptor,
-};
+use wgpu::{Buffer, BufferAddress, Device, ErrorFilter, Extent3d, MapMode, Queue, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor};
 
 #[readonly::make]
 pub struct Texture {
@@ -158,4 +156,20 @@ impl Texture {
             volume.create_extent(),
         )
     }
+}
+
+pub async fn map_buffer<S: RangeBounds<BufferAddress>>(buffer: &Buffer, bounds: S) {
+    let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+
+    buffer.slice(bounds)
+        .map_async(
+            MapMode::Read,
+            move |v| {
+                sender.send(v)
+                    .expect("Could not report buffer mapping");
+            });
+    receiver.receive()
+        .await
+        .expect("Could not map buffer")
+        .expect("I said: could not map buffer!");
 }

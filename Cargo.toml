@@ -25,6 +25,7 @@ runner = 'wasm-bindgen-test-runner'
 bincode = "1.3.3"
 bytemuck = { version = "1.11.0", features = ["derive", "extern_crate_alloc"] }
 flume = "0.10.14"
+futures = "0.3.21"
 futures-intrusive = "0.4.0"
 glam = { version = "0.20.5", features = ["bytemuck"] }
 instant = "0.1.12"
