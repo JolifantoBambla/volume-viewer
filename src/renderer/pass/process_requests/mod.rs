@@ -134,8 +134,9 @@ impl ProcessRequests {
         self.request_list.copy_to_readable(encoder);
     }
 
-    pub fn map_for_reading(&self) {
-        self.request_list.map_for_reading();
+    pub async fn map_for_reading(&self) {
+        self.request_list.map_for_reading()
+            .await;
     }
 
     pub fn read(&self) -> Vec<u32> {

@@ -91,21 +91,35 @@ impl<T: bytemuck::Pod> GpuList<T> {
         );
     }
 
-    pub fn map_for_reading(&self) {
-        let (sender, receiver) = flume::bounded(2);
-        let sender2 = sender.clone();
+    pub async fn map_for_reading(&self) {
+ //       let (sender, receiver) = flume::bounded(2);
+
+        //log::info!("creating channels");
+
+        let (sender1, receiver1) = futures_intrusive::channel::shared::oneshot_channel();
+        let (sender2, receiver2) = futures_intrusive::channel::shared::oneshot_channel();
+
+//        let sender2 = sender.clone();
         self.list_read_buffer
             .slice(..)
-            .map_async(MapMode::Read, move |_| sender.send(0).unwrap());
+            .map_async(MapMode::Read, move |v| sender1.send(v).unwrap());
         self.meta_read_buffer
             .slice(..)
-            .map_async(MapMode::Read, move |_| sender2.send(0).unwrap());
-        self.ctx.device.poll(Maintain::Wait);
-        log::info!("waiting for buffers to be mapped");
-        receiver.recv().unwrap();
-        log::info!("waiting for second buffer to be mapped");
-        receiver.recv().unwrap();
-        log::info!("mapped buffers");
+            .map_async(MapMode::Read, move |v| sender2.send(v).unwrap());
+
+        //log::info!("waiting for buffers to be mapped");
+        if let Some(Ok(v)) = receiver1.receive().await {
+          //  log::info!("mapped one buffer");
+        } else {
+           // log::info!("error mapping!");
+        }
+
+        if let Some(Ok(v)) = receiver2.receive().await {
+         //   log::info!("mapped one buffer");
+        } else {
+           // log::info!("error mapping!");
+        }
+        //log::info!("mapped buffers or died");
     }
 
     /// read and unmaps buffer

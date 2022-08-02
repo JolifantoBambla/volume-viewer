@@ -1,6 +1,9 @@
+use std::borrow::Borrow;
+use std::cell::RefCell;
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 pub use wasm_bindgen_rayon::init_thread_pool;
 
 use glam::{UVec3, Vec2, Vec3};
@@ -198,14 +201,16 @@ pub fn run_event_loop(
     window: Window,
     event_loop: EventLoop<Event<()>>,
 ) {
-    let mut renderer = Arc::new(renderer);
+    let mut renderer = Rc::new(RefCell::new(renderer));
 
     // TODO: refactor these params
     let distance_from_center = 50.;
 
+    let window_size = renderer.as_ref().borrow().window_size;
+
     let resolution = Vec2::new(
-        renderer.window_size.width as f32,
-        renderer.window_size.height as f32,
+        window_size.width as f32,
+        window_size.height as f32,
     );
 
     const TRANSLATION_SPEED: f32 = 5.0;
@@ -214,7 +219,7 @@ pub fn run_event_loop(
     const FAR: f32 = 1000.0;
     let perspective = Projection::new_perspective(
         f32::to_radians(45.),
-        renderer.window_size.width as f32 / renderer.window_size.height as f32,
+        window_size.width as f32 / window_size.height as f32,
         NEAR,
         FAR,
     );
@@ -236,16 +241,18 @@ pub fn run_event_loop(
     let mut right_mouse_pressed = false;
     let mut frame_number = 0;
 
+    let window = Rc::new(window);
+
     event_loop.run(move |event, _, control_flow| {
         // force ownership by the closure
-        let _ = (&renderer.ctx.instance, &renderer.ctx.adapter);
+        //let _ = (&renderer.as_ref().borrow().ctx.instance, &renderer.as_ref().borrow().ctx.adapter);
 
         *control_flow = winit::event_loop::ControlFlow::Poll;
 
         // todo: refactor input handling
         match event {
             winit::event::Event::RedrawEventsCleared => {
-                window.request_redraw();
+                //window.request_redraw();
             }
             // todo: handle events
             winit::event::Event::UserEvent(e) => match e {
@@ -334,7 +341,7 @@ pub fn run_event_loop(
             winit::event::Event::RedrawRequested(_) => {
                 frame_number += 1;
 
-                renderer.update(&camera, frame_number);
+                renderer.as_ref().borrow().update(&camera, frame_number);
                 /*
                 let frame = match renderer.ctx.surface.as_ref().unwrap().get_current_texture() {
                     Ok(frame) => frame,
@@ -363,24 +370,26 @@ pub fn run_event_loop(
 
                 //renderer.post_render(submission_index);
 
-                wasm_bindgen_futures::spawn_local(calling_from_async(renderer.clone(), camera.clone(), frame_number));
+                wasm_bindgen_futures::spawn_local(calling_from_async(renderer.clone(), camera.clone(), frame_number, window.clone()));
             }
             _ => {}
         }
     });
 }
 
-async fn calling_from_async(renderer: Arc<MultiChannelVolumeRenderer>, camera: Camera, frame_number: u32) {
+async fn calling_from_async(mut renderer: Rc<RefCell<MultiChannelVolumeRenderer>>, camera: Camera, frame_number: u32, window: Rc<Window>) {
     log::info!("still async baby!");
 
-    let frame = match renderer.ctx.surface.as_ref().unwrap().get_current_texture() {
+    let frame = match renderer.as_ref().borrow().ctx.surface.as_ref().unwrap().get_current_texture() {
         Ok(frame) => frame,
         Err(_) => {
-            renderer.ctx.surface.as_ref().unwrap().configure(
-                &renderer.ctx.device,
-                renderer.ctx.surface_configuration.as_ref().unwrap(),
+            renderer.as_ref().borrow().ctx.surface.as_ref().unwrap().configure(
+                &renderer.as_ref().borrow().ctx.device,
+                renderer.as_ref().borrow().ctx.surface_configuration.as_ref().unwrap(),
             );
             renderer
+                .as_ref()
+                .borrow()
                 .ctx
                 .surface
                 .as_ref()
@@ -393,9 +402,16 @@ async fn calling_from_async(renderer: Arc<MultiChannelVolumeRenderer>, camera: C
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
 
-    let submission_index = renderer.render(&view, frame_number);
+    let submission_index = renderer.as_ref().borrow().render(&view, frame_number);
+
+    renderer.as_ref().borrow_mut().post_render(submission_index).await;
 
     frame.present();
+
+    log::info!("rendered frame");
+
+    // we request the redraw after rendering has definitely finished
+    window.request_redraw();
 }
 
 pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock {

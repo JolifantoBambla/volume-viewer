@@ -174,7 +174,7 @@ impl SparseResidencyTexture3D {
     }
 
     /// Call this after rendering has completed to read back requests & usages
-    pub fn update_cache(&mut self, submission_index: SubmissionIndex) {
+    pub async fn update_cache(&mut self, submission_index: SubmissionIndex) {
         /*
         self.ctx
             .device
@@ -182,13 +182,16 @@ impl SparseResidencyTexture3D {
         */
 
         // todo: map buffers
-        self.process_requests_pass.map_for_reading();
+        self.process_requests_pass.map_for_reading()
+            .await;
 
         // only getconstmappedrange is allowed?
 
         // buffers are mapped async, but we can't execute futures in synchronous code
         // so we need to synchronize the CPU and GPU here!
-        self.ctx.device.poll(Maintain::Wait);
+
+        // this is a no-op on the web...
+        //self.ctx.device.poll(Maintain::Wait);
 
         // todo: read and unmap buffers
         let requested_ids = self.process_requests_pass.read();
