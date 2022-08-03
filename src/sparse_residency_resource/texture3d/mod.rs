@@ -209,43 +209,14 @@ impl SparseResidencyTexture3D {
                 self.page_directory.write(self.local_page_directory.as_slice(), &self.ctx);
             }
         }
-        if temp_frame == 1 {
-            log::info!("first frame");
-            for i in box_volume(self.meta.resolutions[0].extent)..self.local_page_directory.len() as u32 {
-                self.local_page_directory.insert(i as usize, UVec4::new(0, 0, 0, 2));
-            }
-        }
-        // res levels:
-        // UVec3(0, 0, 0), UVec3(8, 8, 2)
-        // UVec3(0, 0, 2), UVec3(4, 4, 2)
-        // UVec3(0, 0, 4), UVec3(2, 2, 2)
-        // UVec3(0, 0, 6), UVec3(1, 1, 2)
-        // [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        // 84148480,
-        // 17039616,
-        // 50397440,
-        // 17105152,
-        // 33882368,
-        // 50659584,
-        // 100729088,
-        // 17170688,
-        // 33947904,
-        // 50725120,
-        // 100794624,
-        // 17236224,
-        // 34013440,
-        // 50790656,
-        // 33620737,
-        // 50397953]
-        /*
-        log::info!("offsets {:?}, extents {:?}",
-            self.meta.resolutions.iter().map(|r| r.offset).collect::<Vec<UVec3>>(),
-            self.meta.resolutions.iter().map(|r| r.extent).collect::<Vec<UVec3>>());
-        let highest_extent = self.meta.resolutions[0].extent;
-        log::info!("packed {} unpacked {:?} or {:?}", highest_extent.x << 24 + highest_extent.y << 16 + highest_extent.z << 8 + 0, 134742528u32.to_le_bytes(), 134742528u32.to_be_bytes());
-         */
 
         let free_slots: Vec<usize> = Vec::new();
+
+        // todo: step by step:
+        //  - pass on brick requests
+        //  - insert bricks (for now just write them into their actual locations)
+        //  - trace them
+        //  - manage free slots (and all the rest
 
         let new_bricks = self
             .source
