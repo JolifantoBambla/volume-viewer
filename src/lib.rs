@@ -352,8 +352,9 @@ pub fn run_event_loop(
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
+                renderer.post_render();
                 let submission_index = renderer.render(&view, frame_number);
-                renderer.post_render(submission_index);
+
 
                 frame.present();
             }

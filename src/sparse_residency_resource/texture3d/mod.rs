@@ -41,7 +41,7 @@ pub struct SparseResidencyTexture3D {
 
     // Process Request Helper
     timestamp_uniform_buffer: Buffer,
-    process_requests_pass: ProcessRequests,
+    pub process_requests_pass: ProcessRequests,
     process_requests_bind_group: BindGroup,
 }
 
@@ -170,8 +170,7 @@ impl SparseResidencyTexture3D {
     }
 
     /// Call this after rendering has completed to read back requests & usages
-    pub fn update_cache(&mut self, submission_index: SubmissionIndex) {
-        self.ctx.device.poll(Maintain::WaitForSubmissionIndex(submission_index));
+    pub fn update_cache(&mut self) {
 
         // todo: map buffers
         self.process_requests_pass.map_for_reading();

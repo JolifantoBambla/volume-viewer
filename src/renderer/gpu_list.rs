@@ -1,10 +1,13 @@
+use std::borrow::Borrow;
+use std::cell::RefCell;
 use crate::renderer::context::GPUContext;
 use crate::renderer::pass::AsBindGroupEntries;
 use std::cmp::min;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::process::Command;
-use std::sync::Arc;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages,
@@ -18,6 +21,18 @@ pub struct GpuListMeta {
     fill_pointer: u32,
 }
 
+pub struct State {
+    state: u32,
+}
+impl State {
+    pub fn set(&mut self, state: u32) {
+        self.state = state;
+    }
+    pub fn get(&self) -> u32 {
+        self.state
+    }
+}
+
 pub struct GpuList<T: bytemuck::Pod + bytemuck::Zeroable> {
     ctx: Arc<GPUContext>,
     capacity: u32,
@@ -26,6 +41,9 @@ pub struct GpuList<T: bytemuck::Pod + bytemuck::Zeroable> {
     list_buffer_size: BufferAddress,
     meta_buffer: Buffer,
     meta_read_buffer: Buffer,
+
+    pub(crate) map_state: Arc<Mutex<State>>,
+
     phantom_data: PhantomData<T>,
 }
 
@@ -69,6 +87,7 @@ impl<T: bytemuck::Pod> GpuList<T> {
             list_buffer_size,
             meta_buffer,
             meta_read_buffer,
+            map_state: Arc::new(Mutex::new(State{state: 0})),
             phantom_data: PhantomData,
         }
     }
@@ -91,12 +110,25 @@ impl<T: bytemuck::Pod> GpuList<T> {
     }
 
     pub fn map_for_reading(&self) {
-        self.list_read_buffer
-            .slice(..)
-            .map_async(MapMode::Read, |_| ());
+        let s = self.map_state.clone();
+        if s.lock().unwrap().get() == 0 {
+            s.lock().unwrap().set(2);
+            self.list_read_buffer
+                .slice(..)
+                .map_async(MapMode::Read, move |_| {
+                    s.as_ref()
+                        .lock()
+                        .unwrap()
+                        .set(1);
+                });
+        }
+
+        /*
         self.meta_read_buffer
             .slice(..)
             .map_async(MapMode::Read, |_| ());
+
+         */
         log::info!("mapped buffers");
     }
 
@@ -104,6 +136,11 @@ impl<T: bytemuck::Pod> GpuList<T> {
     /// panics if `GpuList::map_for_reading` has not been called and device has not been polled until
     /// mapping finished
     pub fn read_mapped(&self) -> Vec<T> {
+        if self.map_state.lock().unwrap().get() == 1u32 {
+            self.list_read_buffer.unmap();
+            self.map_state.lock().unwrap().set(0);
+        }
+        /*
         log::info!("getting mapped buffer range of meta");
         let meta_view = self.meta_read_buffer.slice(..).get_mapped_range();
         log::info!("getting mapped buffer range of list");
@@ -121,6 +158,9 @@ impl<T: bytemuck::Pod> GpuList<T> {
         list.shrink_to(min(meta.fill_pointer - 1, self.capacity) as usize);
 
         list
+
+         */
+        Vec::new()
     }
 
     pub fn read(&self) -> Vec<T> {

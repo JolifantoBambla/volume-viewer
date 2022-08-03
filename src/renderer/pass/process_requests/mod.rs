@@ -60,7 +60,7 @@ pub struct ProcessRequests {
     pipeline: wgpu::ComputePipeline,
     bind_group_layout: BindGroupLayout,
     internal_bind_group: BindGroup,
-    request_list: GpuList<u32>,
+    pub request_list: GpuList<u32>,
 }
 
 impl ProcessRequests {

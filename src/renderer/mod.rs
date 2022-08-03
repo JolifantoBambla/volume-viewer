@@ -147,7 +147,10 @@ impl MultiChannelVolumeRenderer {
         );
     }
 
-    pub fn render(&self, surface_view: &wgpu::TextureView, frame_numer: u32) -> SubmissionIndex {
+    pub fn render(&self, surface_view: &wgpu::TextureView, frame_numer: u32) {
+        if self.volume_texture.process_requests_pass.request_list.map_state.lock().unwrap().get() == 1 {
+            return;
+        }
         let mut encoder = self
             .ctx
             .device
@@ -167,10 +170,10 @@ impl MultiChannelVolumeRenderer {
         self.volume_texture
             .encode_cache_management(&mut encoder, frame_numer);
 
-        self.ctx.queue.submit(Some(encoder.finish()))
+        self.ctx.queue.submit(Some(encoder.finish()));
     }
 
-    pub fn post_render(&mut self, submission_index: SubmissionIndex) {
-        self.volume_texture.update_cache(submission_index);
+    pub fn post_render(&mut self) {
+        self.volume_texture.update_cache();
     }
 }
