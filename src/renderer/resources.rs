@@ -1,5 +1,6 @@
 use std::ops::RangeBounds;
 use std::sync::Arc;
+use glam::UVec4;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::util::extent::extent_volume;
 use wgpu::util::DeviceExt;
@@ -44,7 +45,8 @@ impl Texture {
         }
     }
 
-    pub fn create_page_directory(device: &Device, queue: &Queue, extent: Extent3d) -> Self {
+    pub fn create_page_directory(device: &Device, queue: &Queue, extent: Extent3d) -> (Self, Vec<UVec4>) {
+        let data = vec![UVec4::ZERO; extent_volume(extent) as usize];
         let format = TextureFormat::Rgba32Uint;
         let texture = device.create_texture_with_data(
             queue,
@@ -57,19 +59,18 @@ impl Texture {
                 format,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
             },
-            vec![
-                0u8;
-                (extent.width * extent.height * extent.depth_or_array_layers * 4 * 4) as usize
-            ]
-            .as_slice(),
+            bytemuck::cast_slice(data.as_slice())
         );
         let view = texture.create_view(&TextureViewDescriptor::default());
-        Self {
-            texture,
-            view,
-            extent,
-            format,
-        }
+        (
+            Self {
+                texture,
+                view,
+                extent,
+                format,
+            },
+            data
+        )
     }
 
     pub fn create_brick_cache(device: &Device, extent: Extent3d) -> Self {

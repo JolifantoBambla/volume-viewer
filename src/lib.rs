@@ -430,7 +430,7 @@ async fn get_device() {
 async fn expose_device() -> web_sys::GpuDevice {
     // create ctx to capture device from
     let mut ctx =
-        renderer::context::GPUContext::new(&renderer::context::ContextDescriptor::default()).await;
+        GPUContext::new(&renderer::context::ContextDescriptor::default()).await;
 
     // memcopy device
     //let device = transmute_copy!(ctx.device, Device);

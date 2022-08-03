@@ -115,8 +115,6 @@ impl<T: bytemuck::Pod> GpuList<T> {
         self.list_read_buffer.unmap();
         self.meta_read_buffer.unmap();
 
-        log::info!("meta: capacity {} fill_pointer {}", meta.capacity, meta.fill_pointer);
-
         list.truncate(min(meta.fill_pointer, self.capacity) as usize);
 
         list

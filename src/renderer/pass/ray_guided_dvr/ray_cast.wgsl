@@ -90,8 +90,14 @@ fn request_brick(page_address: int3) {
 fn get_page_address(location: float3, level: u32) -> uint3 {
     let resolution = page_table_meta.resolutions[level];
     let offset = resolution.page_table_offset;
-    let extent = resolution.page_table_extent;
-    return offset + uint3(float3(extent) * location);
+    let max_local_subscript = resolution.page_table_extent - uint3(1u);
+    return min(
+        offset + max_local_subscript,
+        max(
+            offset + uint3(ceil(float3(max_local_subscript) * location)),
+            offset
+        )
+    );
 }
 
 fn get_page(page_address: uint3) -> PageTableEntry {
@@ -127,7 +133,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     let object_to_view = uniforms.camera.transform.world_to_object * uniforms.volume_transform.object_to_world;
 
     let start_os = max(ray_at(ray_os, max(0., intersection_record.t_min)), float3());
-    let end_os   = min(ray_at(ray_os, intersection_record.t_max), float3(1.));
+    let end_os   = min(ray_at(ray_os, intersection_record.t_max), float3(1., 1., 1.));
 
     let timestamp = uniforms.timestamp;
 
@@ -155,10 +161,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         // todo: step through brick
         let s = sample_volume(float3());
         if s == 0. {
-            green(pixel);
+            white(pixel);
         }
         if page.flag == MAPPED {
-            green(pixel);
+            white(pixel);
         }
 
         report_usage(int3(page.location / brick_size));
