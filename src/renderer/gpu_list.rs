@@ -6,13 +6,14 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::process::Command;
 use std::sync::Arc;
+use js_sys::Map;
 use wasm_bindgen_futures::spawn_local;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages,
     CommandEncoder, Maintain, MaintainBase, MapMode,
 };
-use crate::renderer::resources::map_buffer;
+use crate::renderer::resources::{map_buffer, MappableBuffer};
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -25,10 +26,10 @@ pub struct GpuList<T: bytemuck::Pod + bytemuck::Zeroable> {
     ctx: Arc<GPUContext>,
     capacity: u32,
     list_buffer: Buffer,
-    list_read_buffer: Buffer,
+    list_read_buffer: MappableBuffer<T>,
     list_buffer_size: BufferAddress,
     meta_buffer: Buffer,
-    meta_read_buffer: Buffer,
+    meta_read_buffer: MappableBuffer<GpuListMeta>,
     phantom_data: PhantomData<T>,
 }
 
@@ -68,61 +69,58 @@ impl<T: bytemuck::Pod> GpuList<T> {
             ctx: ctx.clone(),
             capacity,
             list_buffer,
-            list_read_buffer,
+            list_read_buffer: MappableBuffer::new(list_read_buffer),
             list_buffer_size,
             meta_buffer,
-            meta_read_buffer,
+            meta_read_buffer: MappableBuffer::new(meta_read_buffer),
             phantom_data: PhantomData,
         }
     }
 
     pub fn copy_to_readable(&self, encoder: &mut CommandEncoder) {
-        encoder.copy_buffer_to_buffer(
-            &self.meta_buffer,
-            0,
-            &self.meta_read_buffer,
-            0,
-            size_of::<GpuListMeta>() as BufferAddress,
-        );
-        encoder.copy_buffer_to_buffer(
-            &self.list_buffer,
-            0,
-            &self.list_read_buffer,
-            0,
-            self.list_buffer_size,
-        );
+        if self.list_read_buffer.is_ready() && self.meta_read_buffer.is_ready() {
+            encoder.copy_buffer_to_buffer(
+                &self.meta_buffer,
+                0,
+                self.meta_read_buffer.as_buffer_ref(),
+                0,
+                size_of::<GpuListMeta>() as BufferAddress,
+            );
+            encoder.copy_buffer_to_buffer(
+                &self.list_buffer,
+                0,
+                self.list_read_buffer.as_buffer_ref(),
+                0,
+                self.list_buffer_size,
+            );
+        }
     }
 
-    pub async fn map_for_reading(&self) {
-        let list_buffer_future = map_buffer(&self.list_read_buffer, ..);
-        let meta_buffer_future = map_buffer(&self.meta_read_buffer, ..);
-        join_all([list_buffer_future, meta_buffer_future]).await;
+    pub fn map_for_reading(&self) {
+        if self.list_read_buffer.is_ready() && self.meta_read_buffer.is_ready() {
+            self.list_read_buffer.map_async(MapMode::Read, ..);
+            self.meta_read_buffer.map_async(MapMode::Read, ..);
+        }
     }
 
     /// read and unmaps buffer
     /// panics if `GpuList::map_for_reading` has not been called and device has not been polled until
     /// mapping finished
     pub fn read_mapped(&self) -> Vec<T> {
-        let meta_view = self.meta_read_buffer.slice(..).get_mapped_range();
-        let list_view = self.list_read_buffer.slice(..).get_mapped_range();
+        if self.list_read_buffer.is_mapped() && self.meta_read_buffer.is_mapped() {
+            let meta = self.meta_read_buffer.maybe_read_all()[0];
+            let mut list = self.list_read_buffer.maybe_read_all();
 
-        let meta: GpuListMeta = bytemuck::cast_slice(&meta_view)[0];
-        let mut list: Vec<T> = bytemuck::cast_slice(&list_view).to_vec();
+            list.truncate(min(meta.fill_pointer, self.capacity) as usize);
 
-        drop(meta_view);
-        drop(list_view);
-
-        self.list_read_buffer.unmap();
-        self.meta_read_buffer.unmap();
-
-        list.truncate(min(meta.fill_pointer, self.capacity) as usize);
-
-        list
+            list
+        } else {
+            Vec::new()
+        }
     }
 
-    pub async fn read(&self) -> Vec<T> {
-        self.map_for_reading()
-            .await;
+    pub fn read(&self) -> Vec<T> {
+        self.map_for_reading();
         self.ctx.device.poll(Maintain::Wait);
         self.read_mapped()
     }

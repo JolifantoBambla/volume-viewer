@@ -170,8 +170,7 @@ impl MultiChannelVolumeRenderer {
         self.ctx.queue.submit(Some(encoder.finish()))
     }
 
-    pub async fn post_render(&mut self, submission_index: SubmissionIndex, temp_frame: u32) {
-        self.volume_texture.update_cache(submission_index, temp_frame)
-            .await;
+    pub fn post_render(&mut self, submission_index: SubmissionIndex, temp_frame: u32) {
+        self.volume_texture.update_cache(submission_index, temp_frame);
     }
 }

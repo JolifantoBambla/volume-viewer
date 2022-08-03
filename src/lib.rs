@@ -377,7 +377,7 @@ async fn calling_from_async(mut renderer: Rc<RefCell<MultiChannelVolumeRenderer>
 
     let submission_index = renderer.as_ref().borrow().render(&view, frame_number);
 
-    renderer.as_ref().borrow_mut().post_render(submission_index, frame_number).await;
+    renderer.as_ref().borrow_mut().post_render(submission_index, frame_number);
 
     frame.present();
 

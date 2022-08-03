@@ -13,7 +13,7 @@ use crate::sparse_residency_resource::texture3d::page_table::{PageDirectoryMeta,
 use crate::util::extent::{box_volume, extent_to_uvec, extent_volume, index_to_subscript, subscript_to_index, uvec_to_extent};
 use glam::{UVec3, UVec4, Vec3};
 use std::cmp::min;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -32,6 +32,7 @@ pub struct SparseResidencyTexture3D {
     brick_request_limit: usize,
 
     local_page_directory: Vec<UVec4>,
+    requested_bricks: HashSet<u32>,
 
     // GPU resources
     page_table_meta_buffer: Buffer,
@@ -146,6 +147,7 @@ impl SparseResidencyTexture3D {
             process_requests_pass,
             process_requests_bind_group,
             local_page_directory,
+            requested_bricks: HashSet::new(),
         }
     }
 
@@ -178,10 +180,9 @@ impl SparseResidencyTexture3D {
     }
 
     /// Call this after rendering has completed to read back requests & usages
-    pub async fn update_cache(&mut self, submission_index: SubmissionIndex, temp_frame: u32) {
+    pub fn update_cache(&mut self, submission_index: SubmissionIndex, temp_frame: u32) {
         // todo: map buffers
-        self.process_requests_pass.map_for_reading()
-            .await;
+        self.process_requests_pass.map_for_reading();
 
         // todo: read and unmap buffers
         let requested_ids = self.process_requests_pass.read();
@@ -198,6 +199,9 @@ impl SparseResidencyTexture3D {
                 let extent = self.meta.resolutions[level].extent;
                 let subscript = UVec3::new(address[0] as u32, address[1] as u32, address[2] as u32);
                 let index = subscript_to_index(subscript + offset, uvec_to_extent(extent));
+                if !self.requested_bricks.insert(index) {
+                    log::error!("duplicate in set! {:?}", address)
+                }
                 if self.local_page_directory[index as usize].w == 2 {
                     log::error!("duplicate! {:?}", address);
                 } else {
@@ -205,6 +209,7 @@ impl SparseResidencyTexture3D {
                     self.local_page_directory[index as usize] = UVec4::new(0, 0, 0, 2);
                 }
             }
+            log::info!("requested {} of {} bricks in total", self.requested_bricks.len(), box_volume(self.meta.resolutions[0].extent));
             if changed {
                 self.page_directory.write(self.local_page_directory.as_slice(), &self.ctx);
             }
