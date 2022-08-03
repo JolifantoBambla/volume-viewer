@@ -30,7 +30,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     if timestamp.now == u32(textureLoad(request_buffer, int3(global_id), 0).r) {
         for (var i = 0u; i < arrayLength(&page_table_meta.resolutions); i += 1u) {
             let res = page_table_meta.resolutions[i];
-            if all(global_id > res.page_table_offset) && all(global_id < (res.page_table_offset + res.page_table_extent)) {
+            if all(global_id >= res.page_table_offset) && all(global_id < (res.page_table_offset + res.page_table_extent)) {
                 let index = atomicAdd(&ids_meta.fill_pointer, 1u);
                 if index > ids_meta.capacity {
                     return;
@@ -39,8 +39,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 // this constructs a multi res page table index where the level and each component in the page table are
                 // represented as 8 bit unsigned integers - this enforces a limit on page table dimensions, namely that
                 // they must not contain more than [0,253]^3 bricks
-                //let brick_address = (global_id - res.page_table_offset) / res.page_table_extent;
-                let brick_address = global_id;
+                let brick_address = global_id - res.page_table_offset;
 
                 let brick_id = pack4x8uint(uint4(brick_address, i));
 

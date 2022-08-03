@@ -90,19 +90,20 @@ pub struct PageDirectoryMeta {
 impl PageDirectoryMeta {
     pub fn new(volume_meta: &MultiResolutionVolumeMeta) -> Self {
         let mut resolutions: Vec<PageTableMeta> = Vec::new();
+        let high_res_extent = volume_meta.bricks_per_dimension(0);
+        let packing_axis = if high_res_extent.x == high_res_extent.min_element() {
+            UVec3::X
+        } else if high_res_extent.y == high_res_extent.min_element() {
+            UVec3::Y
+        } else {
+            UVec3::Z
+        };
         for (level, volume_resolution) in volume_meta.resolutions.iter().enumerate() {
             let offset = if level > 0 {
                 let last_offset = resolutions[level - 1].offset;
                 let last_extent = resolutions[level - 1].extent;
 
-                last_offset
-                    + if last_extent.x == last_extent.min_element() {
-                        UVec3::new(last_extent.x, 0, 0)
-                    } else if last_extent.y == last_extent.min_element() {
-                        UVec3::new(0, last_extent.y, 0)
-                    } else {
-                        UVec3::new(0, 0, last_extent.z)
-                    }
+                last_offset + last_extent * packing_axis
             } else {
                 UVec3::ZERO
             };

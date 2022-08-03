@@ -126,17 +126,13 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let object_to_view = uniforms.camera.transform.world_to_object * uniforms.volume_transform.object_to_world;
 
-    let start_os = ray_at(ray_os, max(0., intersection_record.t_min));
-    let end_os   = ray_at(ray_os, intersection_record.t_max);
+    let start_os = max(ray_at(ray_os, max(0., intersection_record.t_min)), float3());
+    let end_os   = min(ray_at(ray_os, intersection_record.t_max), float3(1.));
 
     let timestamp = uniforms.timestamp;
 
-    let s = sample_volume(float3());
-    if s == 0. && page_table_meta.resolutions[0].brick_size.x == 0u {
-        let page = u32(textureLoad(page_directory, int3(), 0).x);
-        textureStore(brick_usage_buffer, int3(), uint4(timestamp));
-        textureStore(request_buffer, int3(), uint4(timestamp));
-    }
+
+
 
     let lowest_lod = arrayLength(&page_table_meta.resolutions);
     let brick_size = page_table_meta.resolutions[0].brick_size;
@@ -149,13 +145,22 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     let page_address = get_page_address(location, lod);
     let page = get_page(page_address);
     if page.flag == UNMAPPED {
-        red(pixel);
+        //red(pixel);
+        debug(pixel, float4(normalize(float3(page_address)), 1.));
         request_brick(int3(page_address));
     } else if page.flag == EMPTY {
         blue(pixel);
+        //debug(pixel, float4(normalize(float3(page_address)), 1.));
     } else {
         // todo: step through brick
-        green(pixel);
+        let s = sample_volume(float3());
+        if s == 0. {
+            green(pixel);
+        }
+        if page.flag == MAPPED {
+            green(pixel);
+        }
+
         report_usage(int3(page.location / brick_size));
     }
 

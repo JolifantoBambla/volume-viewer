@@ -1,4 +1,3 @@
-mod algorithms;
 pub mod data_source;
 pub mod page_table;
 pub mod volume_meta;
@@ -10,17 +9,16 @@ use crate::renderer::resources::Texture;
 use crate::sparse_residency_resource::texture3d::data_source::{
     Brick, SparseResidencyTexture3DSource,
 };
-use crate::sparse_residency_resource::texture3d::page_table::{
-    PageDirectoryMeta, PageTableAddress,
-};
-use crate::util::extent::{extent_to_uvec, uvec_to_extent};
+use crate::sparse_residency_resource::texture3d::page_table::{PageDirectoryMeta, PageTableAddress, PageTableEntry, PageTableEntryFlag};
+use crate::util::extent::{box_volume, extent_to_uvec, extent_volume, index_to_subscript, subscript_to_index, uvec_to_extent};
 use glam::{UVec3, UVec4, Vec3};
 use std::cmp::min;
 use std::collections::HashMap;
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{BindGroup, BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, Device, Extent3d, Maintain, MaintainBase, Queue, SubmissionIndex};
+use wgpu::{BindGroup, BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, Device, Extent3d, ImageCopyTexture, ImageDataLayout, Maintain, MaintainBase, Origin3d, Queue, SubmissionIndex, TextureAspect};
+use wgpu::TextureFormat::Rgba32Uint;
 use wgsl_preprocessor::WGSLPreprocessor;
 
 /// Manages a 3D sparse residency texture.
@@ -32,6 +30,8 @@ pub struct SparseResidencyTexture3D {
     source: Box<dyn SparseResidencyTexture3DSource>,
     brick_transfer_limit: usize,
     brick_request_limit: usize,
+
+    local_page_directory: Vec<UVec4>,
 
     // GPU resources
     page_table_meta_buffer: Buffer,
@@ -112,7 +112,7 @@ impl SparseResidencyTexture3D {
             "Request Buffer".to_string(),
             &ctx.device,
             &ctx.queue,
-            uvec_to_extent(meta.extent),
+            page_directory.extent,
         );
 
         let brick_request_limit = 32;
@@ -130,6 +130,8 @@ impl SparseResidencyTexture3D {
             timestamp: &timestamp_uniform_buffer,
         });
 
+        let local_page_directory = vec![UVec4::ZERO; page_directory.num_pixels()];
+
         Self {
             ctx: ctx.clone(),
             meta,
@@ -145,6 +147,7 @@ impl SparseResidencyTexture3D {
             timestamp_uniform_buffer,
             process_requests_pass,
             process_requests_bind_group,
+            local_page_directory,
         }
     }
 
@@ -177,8 +180,9 @@ impl SparseResidencyTexture3D {
     }
 
     /// Call this after rendering has completed to read back requests & usages
-    pub async fn update_cache(&mut self, submission_index: SubmissionIndex) {
+    pub async fn update_cache(&mut self, submission_index: SubmissionIndex, temp_frame: u32) {
         /*
+        This is a no-op on the web
         self.ctx
             .device
             .poll(Maintain::WaitForSubmissionIndex(submission_index));
@@ -188,23 +192,43 @@ impl SparseResidencyTexture3D {
         self.process_requests_pass.map_for_reading()
             .await;
 
-        // only getconstmappedrange is allowed?
-
-        // buffers are mapped async, but we can't execute futures in synchronous code
-        // so we need to synchronize the CPU and GPU here!
-
-        // this is a no-op on the web...
+        // this is a no-op on the web
         //self.ctx.device.poll(Maintain::Wait);
 
         // todo: read and unmap buffers
         let requested_ids = self.process_requests_pass.read();
-        log::info!("ids: {:?}", requested_ids);
+        let requested_brick_addresses = requested_ids.iter().map(|id| id.to_be_bytes()).collect::<Vec<[u8; 4]>>();
+        log::info!("ids: {:?}", requested_brick_addresses);
+
+        // debug: set requested bricks to MAPPED
+        for address in requested_brick_addresses {
+            let level = address[3] as usize;
+            let offset = self.meta.resolutions[level].offset;
+            let extent = self.meta.resolutions[level].extent;
+            let subscript = UVec3::new(address[0] as u32, address[1] as u32, address[2] as u32);
+            let index = subscript_to_index(subscript + offset, uvec_to_extent(extent));
+            self.local_page_directory.insert(index as usize, UVec4::new(0, 0, 0, 2));
+        }
+
+        // debug: mark one block each frame
+        let mut temp = self.local_page_directory.clone();
+        let off = self.meta.resolutions[0].offset;
+        let ext = self.meta.resolutions[0].extent;
+        let page_index = temp_frame % box_volume(ext);
+        let page_coords_in_table = index_to_subscript(page_index, uvec_to_extent(ext));
+        let page_index_in_directory = subscript_to_index(page_coords_in_table + off, self.page_directory.extent);
+
+        temp.insert(page_index_in_directory as usize, UVec4::new(0, 0, 0, 2));
+
+        //self.page_directory.write(temp.as_slice(), &self.ctx);
+
+        self.page_directory.write(self.local_page_directory.as_slice(), &self.ctx);
 
         // res levels:
         // UVec3(0, 0, 0), UVec3(8, 8, 2)
         // UVec3(0, 0, 2), UVec3(4, 4, 2)
         // UVec3(0, 0, 4), UVec3(2, 2, 2)
-        // UVec3(2, 0, 4), UVec3(1, 1, 2)
+        // UVec3(0, 0, 6), UVec3(1, 1, 2)
         // [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // 84148480,
         // 17039616,
@@ -238,17 +262,6 @@ impl SparseResidencyTexture3D {
         // filter requested not in new_bricks
         // request
         // update cache
-    }
-
-    fn find_unused_bricks(&self) {
-        // go through usage buffer and find where timestamp = now
-        // for all of those which haven't been used in this
-    }
-
-    pub fn add_new_brick(&self) {
-        // find location in brick cache where to add
-        // write brick to brick_cache
-        // write page entry to page_directory
     }
 
     pub fn request_bricks(&mut self) {

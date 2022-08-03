@@ -1,3 +1,5 @@
+extern crate core;
+
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use rayon::prelude::*;
@@ -204,7 +206,7 @@ pub fn run_event_loop(
     let mut renderer = Rc::new(RefCell::new(renderer));
 
     // TODO: refactor these params
-    let distance_from_center = 50.;
+    let distance_from_center = 500.;
 
     let window_size = renderer.as_ref().borrow().window_size;
 
@@ -375,7 +377,7 @@ async fn calling_from_async(mut renderer: Rc<RefCell<MultiChannelVolumeRenderer>
 
     let submission_index = renderer.as_ref().borrow().render(&view, frame_number);
 
-    renderer.as_ref().borrow_mut().post_render(submission_index).await;
+    renderer.as_ref().borrow_mut().post_render(submission_index, frame_number).await;
 
     frame.present();
 
