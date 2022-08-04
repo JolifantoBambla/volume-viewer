@@ -64,7 +64,7 @@ export class BrickLoader {
      * @param channel
      * @returns {Promise<RawVolumeChunk>}
      */
-    async loadBrickAtLevel(brickIndex, level, channel = 0) {
+    async loadBrickAtLevel(brickAddress) {
         throw new Error("not implemented");
     }
 
@@ -192,6 +192,7 @@ export class OmeZarrDataSource extends VolumeDataSource {
     }
 
     async loadBrickAtLevel(brickAddress) {
+        console.log('got brick request', brickAddress);
         const brickSelection = [];
         for (let i = 2; i >= 0; --i) {
             const origin = brickAddress.index[i] * this.brickSize[i];

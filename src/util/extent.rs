@@ -1,5 +1,13 @@
 use glam::UVec3;
-use wgpu::Extent3d;
+use wgpu::{Extent3d, Origin3d};
+
+pub fn uvec_to_origin(uvec: UVec3) -> Origin3d {
+    Origin3d {
+        x: uvec.x,
+        y: uvec.y,
+        z: uvec.z,
+    }
+}
 
 pub fn extent_to_uvec(extent: Extent3d) -> UVec3 {
     UVec3::new(extent.width, extent.height, extent.depth_or_array_layers)

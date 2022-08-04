@@ -10,7 +10,7 @@ use crate::sparse_residency_resource::texture3d::data_source::{
     Brick, SparseResidencyTexture3DSource,
 };
 use crate::sparse_residency_resource::texture3d::page_table::{PageDirectoryMeta, PageTableAddress, PageTableEntry, PageTableEntryFlag};
-use crate::util::extent::{box_volume, extent_to_uvec, extent_volume, index_to_subscript, subscript_to_index, uvec_to_extent};
+use crate::util::extent::{box_volume, extent_to_uvec, extent_volume, index_to_subscript, subscript_to_index, uvec_to_extent, uvec_to_origin};
 use glam::{UVec3, UVec4, Vec3};
 use std::cmp::min;
 use std::collections::{HashMap, HashSet};
@@ -20,6 +20,7 @@ use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{BindGroup, BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, Device, Extent3d, ImageCopyTexture, ImageDataLayout, Maintain, MaintainBase, Origin3d, Queue, SubmissionIndex, TextureAspect};
 use wgpu::TextureFormat::Rgba32Uint;
 use wgsl_preprocessor::WGSLPreprocessor;
+use crate::sparse_residency_resource::texture3d::volume_meta::BrickAddress;
 
 /// Manages a 3D sparse residency texture.
 /// A sparse residency texture is not necessarily present in GPU memory as a whole.
@@ -215,26 +216,59 @@ impl SparseResidencyTexture3D {
             }
         }
 
-        let free_slots: Vec<usize> = Vec::new();
+        self.source
+            .request_bricks(requested_ids.iter().map(|id| BrickAddress::from(*id)).collect::<Vec<BrickAddress>>());
+
+
+        let free_slots: Vec<usize> = vec![0; 32];
 
         // todo: step by step:
-        //  - pass on brick requests
         //  - insert bricks (for now just write them into their actual locations)
         //  - trace them
         //  - manage free slots (and all the rest
 
         let new_bricks = self
             .source
-            .poll_bricks(min(self.brick_transfer_limit, free_slots.len()));
+            .poll_bricks(min(self.brick_transfer_limit, free_slots.len()));;
+        //self.add_bricks(new_bricks);
 
         // filter requested not in new_bricks
         // request
         // update cache
     }
 
-    pub fn request_bricks(&mut self) {
+    fn add_bricks(&mut self, bricks: Vec<(BrickAddress, Brick)>) {
+        log::info!("got bricks {}", bricks.len());
+        if !bricks.is_empty() {
+            // write each brick to the cache
+            for (address, brick) in bricks {
+                // todo: use free locations
+                let level = address.level as usize;
+                let resolution = self.meta.resolutions[level];
+                let offset = resolution.offset;
+                let extent = resolution.extent;
+                let location = UVec3::from_slice(address.index.as_slice());
+                let brick_location = offset + location * extent;
+                self.brick_cache.write_subregion(
+                    brick.data.as_slice(),
+                    uvec_to_origin(brick_location),
+                    uvec_to_extent(self.meta.brick_size),
+                    &self.ctx
+                );
+
+                // mark brick as mapped
+                let brick_index = subscript_to_index(brick_location, self.brick_cache.extent) as usize;
+                self.local_page_directory[brick_index] = brick_location.extend(PageTableEntryFlag::Mapped as u32);
+            }
+
+            // update the page directory
+            self.page_directory.write(self.local_page_directory.as_slice(), &self.ctx);
+        }
+    }
+
+    pub fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>) {
         self.source
-            .request_bricks(vec![PageTableAddress::from([0, 0, 0, 2])])
+            .request_bricks(brick_addresses)
     }
 }
 

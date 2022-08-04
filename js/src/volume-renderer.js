@@ -71,7 +71,23 @@ export class VolumeRenderer {
         });
         this.#loader.worker.addEventListener('message', e => {
             if (e.data.type === BRICK_RESPONSE_EVENT) {
-                console.log('message from loader', e.data);
+                (async () => {
+                    this.#canvas.dispatchEvent(
+                        new CustomEvent(
+                            BRICK_RESPONSE_EVENT,
+                            {
+                                detail: {
+                                    address: e.data.brick.address,
+                                    brick: {
+                                        data: e.data.brick.data.data,
+                                        min: 0,
+                                        max: 0,
+                                    }
+                                }
+                            }
+                        )
+                    );
+                })();
             }
         })
 

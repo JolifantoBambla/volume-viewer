@@ -3,11 +3,25 @@ use glam::{UVec3, Vec3};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]
+#[readonly::make]
 pub struct BrickAddress {
     /// x,y,z
-    pub(crate) index: [u32; 3],
-    pub(crate) level: u32,
-    pub(crate) channel: u32,
+    pub index: [u32; 3],
+    pub level: u32,
+    pub channel: u32,
+}
+
+impl From<u32> for BrickAddress {
+    fn from(id: u32) -> Self {
+        // todo: find out why these are in big endian - my system is little endian AND webgpu ensures little endian
+        let bytes: [u8; 4] = id.to_be_bytes();
+        Self {
+            index: [bytes[0] as u32, bytes[1] as u32, bytes[2] as u32],
+            level: bytes[3] as u32,
+            // todo: figure out how to handle channels
+            channel: 0,
+        }
+    }
 }
 
 #[repr(C)]

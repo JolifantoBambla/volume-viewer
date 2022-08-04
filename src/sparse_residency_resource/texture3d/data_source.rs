@@ -4,6 +4,7 @@ use crate::sparse_residency_resource::texture3d::volume_meta::{
 };
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+use std::cmp::min;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
@@ -11,18 +12,19 @@ use wasm_bindgen::JsCast;
 use web_sys::{CustomEvent, EventTarget};
 
 #[derive(Deserialize, Serialize)]
+#[readonly::make]
 pub struct Brick {
-    data: Vec<u8>,
-    min: u8,
-    max: u8,
+    pub data: Vec<u8>,
+    pub min: u8,
+    pub max: u8,
 }
 
 pub trait SparseResidencyTexture3DSource {
     fn get_meta(&self) -> &MultiResolutionVolumeMeta;
 
-    fn request_bricks(&mut self, brick_addresses: Vec<PageTableAddress>);
+    fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>);
 
-    fn poll_bricks(&mut self, limit: usize) -> Vec<(PageTableAddress, Brick)>;
+    fn poll_bricks(&mut self, limit: usize) -> Vec<(BrickAddress, Brick)>;
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -34,14 +36,19 @@ pub const BRICK_RESPONSE_EVENT: &str = "data-loader:brick-response";
 #[cfg(target_arch = "wasm32")]
 #[derive(Deserialize, Serialize)]
 struct BrickEvent {
-    address: [u32; 4],
+    address: BrickAddress,
     brick: Brick,
 }
 
+
+/// A `SparseResidencyTexture3DSource` that is backed by an `web_sys::EventTarget`.
+/// It uses the `web_sys::EventTarget` to pass on brick requests to and receive brick responses from
+/// it.
+/// It is agnostic of the way the `web_sys::EventTarget` actually acquires bricks.
 #[cfg(target_arch = "wasm32")]
 pub struct HtmlEventTargetTexture3DSource {
     volume_meta: MultiResolutionVolumeMeta,
-    brick_queue: Rc<RefCell<VecDeque<(PageTableAddress, Brick)>>>,
+    brick_queue: Rc<RefCell<VecDeque<(BrickAddress, Brick)>>>,
     event_target: EventTarget,
 }
 
@@ -54,8 +61,9 @@ impl HtmlEventTargetTexture3DSource {
             let custom_event = event.unchecked_into::<CustomEvent>();
             let brick_event: BrickEvent =
                 serde_wasm_bindgen::from_value(custom_event.detail()).expect("Invalid BrickEvent");
+            log::info!("enqueuing brick {:?}", brick_event.address.index);
             receiver.borrow_mut().push_back((
-                PageTableAddress::from(brick_event.address),
+                brick_event.address,
                 brick_event.brick,
             ));
         }) as Box<dyn FnMut(JsValue)>);
@@ -82,19 +90,12 @@ impl SparseResidencyTexture3DSource for HtmlEventTargetTexture3DSource {
         &self.volume_meta
     }
 
-    fn request_bricks(&mut self, brick_addresses: Vec<PageTableAddress>) {
+    fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>) {
         let request_event = web_sys::CustomEvent::new(BRICK_REQUEST_EVENT).ok().unwrap();
         let mut request_data: HashMap<&str, Vec<BrickAddress>> = HashMap::new();
         request_data.insert(
             "addresses",
             brick_addresses
-                .iter()
-                .map(|&a| BrickAddress {
-                    index: a.location.to_array(),
-                    level: a.level,
-                    channel: 0,
-                })
-                .collect(),
         );
         request_event.init_custom_event_with_can_bubble_and_cancelable_and_detail(
             BRICK_REQUEST_EVENT,
@@ -105,7 +106,11 @@ impl SparseResidencyTexture3DSource for HtmlEventTargetTexture3DSource {
         self.event_target.dispatch_event(&request_event).ok();
     }
 
-    fn poll_bricks(&mut self, limit: usize) -> Vec<(PageTableAddress, Brick)> {
-        self.brick_queue.borrow_mut().drain(..limit).collect()
+    fn poll_bricks(&mut self, limit: usize) -> Vec<(BrickAddress, Brick)> {
+        let bricks_in_queue = self.brick_queue.borrow().len();
+        self.brick_queue
+            .borrow_mut()
+            .drain(..min(limit, bricks_in_queue))
+            .collect()
     }
 }
