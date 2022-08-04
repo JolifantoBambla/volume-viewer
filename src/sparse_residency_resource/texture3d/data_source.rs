@@ -61,7 +61,6 @@ impl HtmlEventTargetTexture3DSource {
             let custom_event = event.unchecked_into::<CustomEvent>();
             let brick_event: BrickEvent =
                 serde_wasm_bindgen::from_value(custom_event.detail()).expect("Invalid BrickEvent");
-            log::info!("enqueuing brick {:?}", brick_event.address.index);
             receiver.borrow_mut().push_back((
                 brick_event.address,
                 brick_event.brick,

@@ -34,6 +34,7 @@ pub struct SparseResidencyTexture3D {
 
     local_page_directory: Vec<UVec4>,
     requested_bricks: HashSet<u32>,
+    cached_bricks: HashSet<u32>,
 
     // GPU resources
     page_table_meta_buffer: Buffer,
@@ -149,6 +150,7 @@ impl SparseResidencyTexture3D {
             process_requests_bind_group,
             local_page_directory,
             requested_bricks: HashSet::new(),
+            cached_bricks: HashSet::new(),
         }
     }
 
@@ -187,39 +189,20 @@ impl SparseResidencyTexture3D {
 
         // todo: read and unmap buffers
         let requested_ids = self.process_requests_pass.read();
-        let requested_brick_addresses = requested_ids.iter().map(|id| id.to_be_bytes()).collect::<Vec<[u8; 4]>>();
 
-        // debug: set requested bricks to MAPPED
-        if !requested_brick_addresses.is_empty() {
-            log::info!("ids: {:?}", requested_brick_addresses);
-
-            let mut changed = false;
-            for address in requested_brick_addresses {
-                let level = address[3] as usize;
-                let offset = self.meta.resolutions[level].offset;
-                let extent = self.meta.resolutions[level].extent;
-                let subscript = UVec3::new(address[0] as u32, address[1] as u32, address[2] as u32);
-                let index = subscript_to_index(subscript + offset, uvec_to_extent(extent));
-                if !self.requested_bricks.insert(index) {
-                    log::error!("duplicate in set! {:?}", address)
-                }
-                if self.local_page_directory[index as usize].w == 2 {
-                    log::error!("duplicate! {:?}", address);
-                } else {
-                    changed = true;
-                    self.local_page_directory[index as usize] = UVec4::new(0, 0, 0, 2);
+        if !requested_ids.is_empty() {
+            // let requested_brick_addresses = requested_ids.iter().map(|id| id.to_be_bytes()).collect::<Vec<[u8; 4]>>();
+            // log::info!("ids: {:?}", requested_brick_addresses);
+            let mut brick_addresses = Vec::with_capacity(requested_ids.len());
+            for id in requested_ids {
+                if !self.cached_bricks.contains(&id) && self.requested_bricks.insert(id) {
+                    brick_addresses.push(BrickAddress::from(id));
                 }
             }
-            log::info!("requested {} of {} bricks in total", self.requested_bricks.len(), box_volume(self.meta.resolutions[0].extent));
-            if changed {
-                self.page_directory.write(self.local_page_directory.as_slice(), &self.ctx);
-            }
+            self.source.request_bricks(brick_addresses);
         }
 
-        self.source
-            .request_bricks(requested_ids.iter().map(|id| BrickAddress::from(*id)).collect::<Vec<BrickAddress>>());
-
-
+        // todo: get actual free slots
         let free_slots: Vec<usize> = vec![0; 32];
 
         // todo: step by step:
@@ -229,8 +212,8 @@ impl SparseResidencyTexture3D {
 
         let new_bricks = self
             .source
-            .poll_bricks(min(self.brick_transfer_limit, free_slots.len()));;
-        //self.add_bricks(new_bricks);
+            .poll_bricks(min(self.brick_transfer_limit, free_slots.len()));
+        self.add_bricks(new_bricks);
 
         // filter requested not in new_bricks
         // request
@@ -238,27 +221,34 @@ impl SparseResidencyTexture3D {
     }
 
     fn add_bricks(&mut self, bricks: Vec<(BrickAddress, Brick)>) {
-        log::info!("got bricks {}", bricks.len());
+        //log::info!("got bricks {}", bricks.len());
         if !bricks.is_empty() {
             // write each brick to the cache
             for (address, brick) in bricks {
-                // todo: use free locations
+                // todo: use free locations instead (should be a function param)
                 let level = address.level as usize;
                 let resolution = self.meta.resolutions[level];
                 let offset = resolution.offset;
                 let extent = resolution.extent;
                 let location = UVec3::from_slice(address.index.as_slice());
                 let brick_location = offset + location * extent;
+                let brick_extent = index_to_subscript((brick.data.len() as u32) - 1, uvec_to_extent(self.meta.brick_size)) + UVec3::ONE;
                 self.brick_cache.write_subregion(
                     brick.data.as_slice(),
                     uvec_to_origin(brick_location),
-                    uvec_to_extent(self.meta.brick_size),
+                    uvec_to_extent(brick_extent),
                     &self.ctx
                 );
 
                 // mark brick as mapped
-                let brick_index = subscript_to_index(brick_location, self.brick_cache.extent) as usize;
-                self.local_page_directory[brick_index] = brick_location.extend(PageTableEntryFlag::Mapped as u32);
+                let page_index = subscript_to_index(offset + location, self.page_directory.extent) as usize;
+                self.local_page_directory[page_index] = brick_location.extend(PageTableEntryFlag::Mapped as u32);
+
+                let brick_id = address.into();
+                self.cached_bricks.insert(brick_id);
+                self.requested_bricks.remove(&brick_id);
+
+                log::info!("brick size: {:?}, received size: {:?}", self.meta.brick_size, brick_extent);
             }
 
             // update the page directory
@@ -267,8 +257,9 @@ impl SparseResidencyTexture3D {
     }
 
     pub fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>) {
-        self.source
-            .request_bricks(brick_addresses)
+        if !brick_addresses.is_empty() {
+            self.source.request_bricks(brick_addresses)
+        }
     }
 }
 

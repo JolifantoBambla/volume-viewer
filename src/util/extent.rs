@@ -31,10 +31,9 @@ pub fn extent_volume(extent: Extent3d) -> u32 {
 
 pub fn index_to_subscript(index: u32, extent: Extent3d) -> UVec3 {
     let num_elements = extent_volume(extent);
-    let page_index = index % num_elements;
     let x = index % extent.width;
     let y = (index - x) / extent.width % extent.height;
-    let z =((index - x) / extent.width - y) / extent.height;
+    let z = ((index - x) / extent.width - y) / extent.height;
     UVec3::new(x, y, z)
 }
 

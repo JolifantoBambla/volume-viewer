@@ -201,6 +201,9 @@ impl Texture {
         if origin.x == 0 && origin.y == 0 && origin.z == 0 && extent.width == self.extent.width && extent.height == self.extent.height && extent.depth_or_array_layers == self.extent.depth_or_array_layers {
             self.write(data, ctx);
         } else {
+            // todo: validation from here: https://www.w3.org/TR/webgpu/#dom-gpuqueue-writetexture
+            // todo: check https://www.w3.org/TR/webgpu/#validating-texture-copy-range
+            // todo: check https://www.w3.org/TR/webgpu/#abstract-opdef-validating-linear-texture-data
             ctx.queue.write_texture(
                 ImageCopyTexture {
                     texture: &self.texture,

@@ -24,6 +24,13 @@ impl From<u32> for BrickAddress {
     }
 }
 
+impl Into<u32> for BrickAddress {
+    fn into(self) -> u32 {
+        // todo: figure out how to handle channels
+        (self.index[0] << 24) + (self.index[1] << 16) + (self.index[2] << 8) + self.level
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct VolumeResolutionMeta {

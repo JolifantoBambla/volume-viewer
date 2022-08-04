@@ -64,7 +64,7 @@ export class BrickLoader {
      * @param channel
      * @returns {Promise<RawVolumeChunk>}
      */
-    async loadBrickAtLevel(brickAddress) {
+    async loadBrick(brickAddress) {
         throw new Error("not implemented");
     }
 
@@ -191,8 +191,8 @@ export class OmeZarrDataSource extends VolumeDataSource {
         return this.#volumeMeta;
     }
 
-    async loadBrickAtLevel(brickAddress) {
-        console.log('got brick request', brickAddress);
+    async loadBrick(brickAddress) {
+        //console.log('got brick request', brickAddress);
         const brickSelection = [];
         for (let i = 2; i >= 0; --i) {
             const origin = brickAddress.index[i] * this.brickSize[i];
@@ -314,7 +314,7 @@ export class VolumeLoader {
      * Loads a chunk of the volume at a given resolution level
      * @param brickAddress a `BrickAddress`
      */
-    async loadBrickAtLevel(brickAddress) {
+    async loadBrick(brickAddress) {
         if (!this.#initialized) {
             throw Error("Can't load chunk from uninitialized data source");
         }
@@ -326,7 +326,7 @@ export class VolumeLoader {
             type: BRICK_RESPONSE_EVENT,
             brick: {
                 address: brickAddress,
-                data: await this.#dataSource.loadBrickAtLevel(brickAddress),
+                data: await this.#dataSource.loadBrick(brickAddress),
             }
         });
         this.#currentlyLoading[JSON.stringify(brickAddress)] = false;
@@ -334,7 +334,8 @@ export class VolumeLoader {
 
     async handleExternEvent(e) {
         if (e.type === BRICK_REQUEST_EVENT) {
-            e.addresses.map(a => this.loadBrickAtLevel(a));
+            Promise.all(e.addresses.map(async a => this.loadBrick(a)))
+                .catch(console.err);
         }
     }
 }

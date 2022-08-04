@@ -71,23 +71,24 @@ export class VolumeRenderer {
         });
         this.#loader.worker.addEventListener('message', e => {
             if (e.data.type === BRICK_RESPONSE_EVENT) {
-                (async () => {
-                    this.#canvas.dispatchEvent(
-                        new CustomEvent(
-                            BRICK_RESPONSE_EVENT,
-                            {
-                                detail: {
-                                    address: e.data.brick.address,
-                                    brick: {
-                                        data: e.data.brick.data.data,
-                                        min: 0,
-                                        max: 0,
-                                    }
+                // todo: processing a custom event is really slow, try other approaches:
+                //  - write to texture in JS and pass texture handle to canvas (copyTextureToTexture on wasm side then)
+                //  - call into wasm directly by calling a global event loop proxy or a global reference to the data source
+                this.#canvas.dispatchEvent(
+                    new CustomEvent(
+                        BRICK_RESPONSE_EVENT,
+                        {
+                            detail: {
+                                address: e.data.brick.address,
+                                brick: {
+                                    data: e.data.brick.data.data,
+                                    min: 0,
+                                    max: 0,
                                 }
                             }
-                        )
-                    );
-                })();
+                        }
+                    )
+                );
             }
         })
 
