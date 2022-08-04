@@ -66,6 +66,6 @@ impl MultiResolutionVolumeMeta {
     }
 
     pub fn number_of_bricks(&self, level: usize) -> u32 {
-        box_volume(self.bricks_per_dimension(level))
+        box_volume(&self.bricks_per_dimension(level))
     }
 }

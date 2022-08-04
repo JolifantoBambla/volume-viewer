@@ -87,7 +87,7 @@ impl SparseResidencyTexture3D {
 
         // 1 page table entry per brick
         let (page_directory, local_page_directory) =
-            Texture::create_page_directory(&ctx.device, &ctx.queue, uvec_to_extent(meta.extent));
+            Texture::create_page_directory(&ctx.device, &ctx.queue, uvec_to_extent(&meta.extent));
 
         // todo: make configurable
         let brick_cache = Texture::create_brick_cache(
@@ -99,7 +99,7 @@ impl SparseResidencyTexture3D {
             },
         );
 
-        let brick_cache_size = extent_to_uvec(brick_cache.extent);
+        let brick_cache_size = extent_to_uvec(&brick_cache.extent);
         let bricks_per_dimension = brick_cache_size / meta.brick_size;
 
         // 1:1 mapping, 1 timestamp per brick in cache
@@ -107,7 +107,7 @@ impl SparseResidencyTexture3D {
             "Usage Buffer".to_string(),
             &ctx.device,
             &ctx.queue,
-            uvec_to_extent(bricks_per_dimension),
+            uvec_to_extent(&bricks_per_dimension),
         );
 
         // 1:1 mapping, 1 timestamp per brick in multi-res volume
@@ -232,16 +232,16 @@ impl SparseResidencyTexture3D {
                 let extent = resolution.extent;
                 let location = UVec3::from_slice(address.index.as_slice());
                 let brick_location = offset + location * extent;
-                let brick_extent = index_to_subscript((brick.data.len() as u32) - 1, uvec_to_extent(self.meta.brick_size)) + UVec3::ONE;
+                let brick_extent = index_to_subscript((brick.data.len() as u32) - 1, &uvec_to_extent(&self.meta.brick_size)) + UVec3::ONE;
                 self.brick_cache.write_subregion(
                     brick.data.as_slice(),
-                    uvec_to_origin(brick_location),
-                    uvec_to_extent(brick_extent),
+                    uvec_to_origin(&brick_location),
+                    uvec_to_extent(&brick_extent),
                     &self.ctx
                 );
 
                 // mark brick as mapped
-                let page_index = subscript_to_index(offset + location, self.page_directory.extent) as usize;
+                let page_index = subscript_to_index(&(offset + location), &self.page_directory.extent) as usize;
                 self.local_page_directory[page_index] = brick_location.extend(PageTableEntryFlag::Mapped as u32);
 
                 let brick_id = address.into();
