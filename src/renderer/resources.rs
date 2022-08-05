@@ -2,8 +2,9 @@ use std::marker::PhantomData;
 use std::ops::RangeBounds;
 use std::sync::{Arc, Mutex};
 use glam::UVec4;
+use js_sys::Atomics::or;
 use crate::renderer::volume::RawVolumeBlock;
-use crate::util::extent::{extent_to_uvec, extent_volume, origin_to_uvec};
+use crate::util::extent::{extent_to_uvec, extent_volume, origin_to_uvec, subscript_to_index};
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, BufferAddress, Device, ErrorFilter, Extent3d, ImageCopyTexture, ImageDataLayout, MapMode, Origin3d, Queue, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor};
 use crate::GPUContext;
@@ -176,14 +177,15 @@ impl Texture {
         (self.extent.width * self.extent.height * self.extent.depth_or_array_layers) as usize
     }
 
-    pub fn data_layout(&self) -> ImageDataLayout {
+    pub fn data_layout(&self, extent: &Extent3d) -> ImageDataLayout {
+        let physical_extent = extent.physical_size(self.format);
         let format_info = self.format.describe();
-        let width_blocks = self.extent.width / format_info.block_dimensions.0 as u32;
-        let height_blocks = self.extent.height / format_info.block_dimensions.1 as u32;
-        let byter_per_row = width_blocks * format_info.block_size as u32;
+        let width_blocks = physical_extent.width / format_info.block_dimensions.0 as u32;
+        let height_blocks = physical_extent.height / format_info.block_dimensions.1 as u32;
+        let bytes_per_row = width_blocks * format_info.block_size as u32;
         ImageDataLayout {
             offset: 0,
-            bytes_per_row: std::num::NonZeroU32::new(byter_per_row),
+            bytes_per_row: std::num::NonZeroU32::new(bytes_per_row),
             rows_per_image: std::num::NonZeroU32::new(height_blocks),
         }
     }
@@ -192,7 +194,7 @@ impl Texture {
         ctx.queue.write_texture(
             self.texture.as_image_copy(),
             &bytemuck::cast_slice(data),
-            self.data_layout(),
+            self.data_layout(&self.extent),
             self.extent,
         );
     }
@@ -265,7 +267,7 @@ impl Texture {
         Fail if the following condition is not satisfied:
             The layout fits inside the linear data: layout.offset + requiredBytesInCopy ≤ byteSize.
          */
-        let layout = self.data_layout();
+        let layout = self.data_layout(&copy_extent);
         let format = self.format.describe();
 
         let mut valid = true;
@@ -324,14 +326,9 @@ impl Texture {
 
         log::info!("required bytes in copy {}, {}, {}", required_bytes_in_copy, bytes_per_row, rows_per_image);
         if !(layout.offset as u32 + required_bytes_in_copy <= byte_size) {
-            log::error!("layout doesn't fit inside linear data");
+            log::error!("layout doesn't fit inside linear data required = {}, want to copy = {}", required_bytes_in_copy, byte_size);
             valid = false;
         }
-        /*
-
-        Fail if the following condition is not satisfied:
-            The layout fits inside the linear data: layout.offset + requiredBytesInCopy ≤ byteSize.
-         */
 
         valid
     }
@@ -340,9 +337,6 @@ impl Texture {
         if origin.x == 0 && origin.y == 0 && origin.z == 0 && extent.width == self.extent.width && extent.height == self.extent.height && extent.depth_or_array_layers == self.extent.depth_or_array_layers {
             self.write(data, ctx);
         } else {
-            // todo: validation from here: https://www.w3.org/TR/webgpu/#dom-gpuqueue-writetexture
-            // todo: check https://www.w3.org/TR/webgpu/#validating-texture-copy-range
-            // todo: check https://www.w3.org/TR/webgpu/#abstract-opdef-validating-linear-texture-data
             let image_copy_texture = ImageCopyTexture {
                 texture: &self.texture,
                 mip_level: 0,
@@ -350,18 +344,10 @@ impl Texture {
                 aspect: TextureAspect::All,
             };
 
-            if !(
-                self.validate_texture_copy_range(&image_copy_texture, &extent) &&
-                self.validate_linear_texture_data(data.len() as u32 * 4, &extent)
-            ) {
-                log::error!("texture copy invalid :(");
-            }
-
-
             ctx.queue.write_texture(
                 image_copy_texture,
                 &bytemuck::cast_slice(data),
-                self.data_layout(),
+                self.data_layout(&extent),
                 extent,
             );
         }
