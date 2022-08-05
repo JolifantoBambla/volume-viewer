@@ -26,7 +26,7 @@ pub fn uvec_to_extent(uvec: &UVec3) -> Extent3d {
 }
 
 pub fn box_volume(extent: &UVec3) -> u32 {
-    extent.to_array().iter().fold(1, |a, b| a * b)
+    extent.to_array().iter().product()
 }
 
 pub fn extent_volume(extent: &Extent3d) -> u32 {
@@ -34,7 +34,6 @@ pub fn extent_volume(extent: &Extent3d) -> u32 {
 }
 
 pub fn index_to_subscript(index: u32, extent: &Extent3d) -> UVec3 {
-    let num_elements = extent_volume(extent);
     let x = index % extent.width;
     let y = (index - x) / extent.width % extent.height;
     let z = ((index - x) / extent.width - y) / extent.height;

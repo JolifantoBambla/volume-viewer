@@ -1,14 +1,12 @@
 extern crate core;
 
-use std::borrow::Borrow;
-use std::cell::RefCell;
 use rayon::prelude::*;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 pub use wasm_bindgen_rayon::init_thread_pool;
 
-use glam::{UVec3, Vec2, Vec3};
+use glam::{Vec2, Vec3};
 use wasm_bindgen::{prelude::*, JsCast};
 use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
@@ -30,15 +28,13 @@ use util::window;
 
 use crate::event::handler::register_default_js_event_handlers;
 use crate::renderer::camera::{Camera, CameraView, Projection};
-use crate::renderer::geometry::Bounds3D;
-use crate::renderer::pass::ray_guided_dvr::RayGuidedDVR;
-use crate::renderer::volume::RawVolumeBlock;
-use crate::renderer::{MultiChannelVolumeRenderer, TrivialVolumeRenderer};
 use crate::renderer::context::GPUContext;
+use crate::renderer::geometry::Bounds3D;
+use crate::renderer::volume::RawVolumeBlock;
+use crate::renderer::MultiChannelVolumeRenderer;
 use crate::sparse_residency_resource::texture3d::data_source::{
     HtmlEventTargetTexture3DSource, SparseResidencyTexture3DSource,
 };
-use crate::sparse_residency_resource::texture3d::page_table::PageTableAddress;
 use crate::sparse_residency_resource::texture3d::volume_meta::MultiResolutionVolumeMeta;
 use crate::sparse_residency_resource::texture3d::SparseResidencyTexture3D;
 use crate::window::window_builder_without_size;
@@ -92,25 +88,6 @@ pub fn main(canvas: JsValue, volume_meta: JsValue) {
 }
 
 async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMeta) {
-    let zarr_array = ZarrArray::open(
-        "http://localhost:8005/".to_string(),
-        "ome-zarr/m.ome.zarr/0/2".to_string(),
-    )
-    .await;
-    log::info!("ZarrArray {:?}", zarr_array.shape());
-
-    let selection = vec![
-        DimensionArraySelection::Number(0.),
-        DimensionArraySelection::Number(0.),
-    ];
-    let raw = zarr_array
-        .get_raw_data(Some(selection), GetOptions::default())
-        .await;
-    log::info!("RawArray {:?}", raw.shape());
-    let d = raw.data_uint16();
-
-    let volume = make_raw_volume_block(d, raw.shape());
-
     let html_canvas = canvas
         .clone()
         .unchecked_into::<web_sys::HtmlCanvasElement>();
@@ -199,21 +176,18 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
 }
 
 pub fn run_event_loop(
-    mut renderer: MultiChannelVolumeRenderer,
+    renderer: MultiChannelVolumeRenderer,
     window: Window,
     event_loop: EventLoop<Event<()>>,
 ) {
-    let mut renderer = Rc::new(RefCell::new(renderer));
+    let renderer = Rc::new(RefCell::new(renderer));
 
     // TODO: refactor these params
     let distance_from_center = 500.;
 
     let window_size = renderer.as_ref().borrow().window_size;
 
-    let resolution = Vec2::new(
-        window_size.width as f32,
-        window_size.height as f32,
-    );
+    let resolution = Vec2::new(window_size.width as f32, window_size.height as f32);
 
     const TRANSLATION_SPEED: f32 = 5.0;
 
@@ -236,7 +210,7 @@ pub fn run_event_loop(
             Vec3::new(0., 0., 0.),
             Vec3::new(0., 1., 0.),
         ),
-        perspective.clone(),
+        perspective,
     );
     let mut last_mouse_position = Vec2::new(0., 0.);
     let mut left_mouse_pressed = false;
@@ -287,9 +261,9 @@ pub fn run_event_loop(
                         }
                         VirtualKeyCode::C => {
                             if camera.projection().is_orthographic() {
-                                camera.set_projection(perspective.clone());
+                                camera.set_projection(perspective);
                             } else {
-                                camera.set_projection(orthographic.clone());
+                                camera.set_projection(orthographic);
                             }
                         }
                         _ => {}
@@ -345,21 +319,52 @@ pub fn run_event_loop(
 
                 renderer.as_ref().borrow().update(&camera, frame_number);
 
-                wasm_bindgen_futures::spawn_local(calling_from_async(renderer.clone(), camera.clone(), frame_number, window.clone()));
+                wasm_bindgen_futures::spawn_local(calling_from_async(
+                    renderer.clone(),
+                    camera,
+                    frame_number,
+                    window.clone(),
+                ));
             }
             _ => {}
         }
     });
 }
 
-async fn calling_from_async(mut renderer: Rc<RefCell<MultiChannelVolumeRenderer>>, camera: Camera, frame_number: u32, window: Rc<Window>) {
-    let frame = match renderer.as_ref().borrow().ctx.surface.as_ref().unwrap().get_current_texture() {
+async fn calling_from_async(
+    renderer: Rc<RefCell<MultiChannelVolumeRenderer>>,
+    _camera: Camera,
+    frame_number: u32,
+    window: Rc<Window>,
+) {
+    let frame = match renderer
+        .as_ref()
+        .borrow()
+        .ctx
+        .surface
+        .as_ref()
+        .unwrap()
+        .get_current_texture()
+    {
         Ok(frame) => frame,
         Err(_) => {
-            renderer.as_ref().borrow().ctx.surface.as_ref().unwrap().configure(
-                &renderer.as_ref().borrow().ctx.device,
-                renderer.as_ref().borrow().ctx.surface_configuration.as_ref().unwrap(),
-            );
+            renderer
+                .as_ref()
+                .borrow()
+                .ctx
+                .surface
+                .as_ref()
+                .unwrap()
+                .configure(
+                    &renderer.as_ref().borrow().ctx.device,
+                    renderer
+                        .as_ref()
+                        .borrow()
+                        .ctx
+                        .surface_configuration
+                        .as_ref()
+                        .unwrap(),
+                );
             renderer
                 .as_ref()
                 .borrow()
@@ -377,7 +382,10 @@ async fn calling_from_async(mut renderer: Rc<RefCell<MultiChannelVolumeRenderer>
 
     let submission_index = renderer.as_ref().borrow().render(&view, frame_number);
 
-    renderer.as_ref().borrow_mut().post_render(submission_index, frame_number);
+    renderer
+        .as_ref()
+        .borrow_mut()
+        .post_render(submission_index, frame_number);
 
     frame.present();
 
@@ -429,8 +437,7 @@ async fn get_device() {
 
 async fn expose_device() -> web_sys::GpuDevice {
     // create ctx to capture device from
-    let mut ctx =
-        GPUContext::new(&renderer::context::ContextDescriptor::default()).await;
+    let mut ctx = GPUContext::new(&renderer::context::ContextDescriptor::default()).await;
 
     // memcopy device
     //let device = transmute_copy!(ctx.device, Device);

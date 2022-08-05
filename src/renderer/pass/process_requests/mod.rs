@@ -1,19 +1,15 @@
-use crate::renderer::camera::TransformUniform;
 use crate::renderer::gpu_list::GpuList;
 use crate::renderer::resources::Texture;
 use crate::renderer::{
-    camera::CameraUniform,
     context::GPUContext,
     pass::{AsBindGroupEntries, GPUPass},
 };
-use crate::SparseResidencyTexture3D;
-use glam::UVec4;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Buffer, CommandEncoder};
 use wgsl_preprocessor::WGSLPreprocessor;
 
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Timestamp {
     pub now: u32,
 }
@@ -21,12 +17,6 @@ pub struct Timestamp {
 impl Timestamp {
     pub fn new(now: u32) -> Self {
         Self { now }
-    }
-}
-
-impl Default for Timestamp {
-    fn default() -> Self {
-        Self { now: 0 }
     }
 }
 
@@ -69,7 +59,7 @@ impl ProcessRequests {
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
-        let request_list = GpuList::new(None, max_requests, &ctx);
+        let request_list = GpuList::new(None, max_requests, ctx);
         let shader_module = ctx
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {

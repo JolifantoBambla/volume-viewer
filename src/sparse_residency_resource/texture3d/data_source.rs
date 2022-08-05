@@ -1,4 +1,3 @@
-use crate::sparse_residency_resource::texture3d::page_table::PageTableAddress;
 use crate::sparse_residency_resource::texture3d::volume_meta::{
     BrickAddress, MultiResolutionVolumeMeta,
 };
@@ -40,7 +39,6 @@ struct BrickEvent {
     brick: Brick,
 }
 
-
 /// A `SparseResidencyTexture3DSource` that is backed by an `web_sys::EventTarget`.
 /// It uses the `web_sys::EventTarget` to pass on brick requests to and receive brick responses from
 /// it.
@@ -55,16 +53,15 @@ pub struct HtmlEventTargetTexture3DSource {
 #[cfg(target_arch = "wasm32")]
 impl HtmlEventTargetTexture3DSource {
     pub fn new(volume_meta: MultiResolutionVolumeMeta, event_target: EventTarget) -> Self {
-        let mut brick_queue = Rc::new(RefCell::new(VecDeque::new()));
-        let mut receiver = brick_queue.clone();
+        let brick_queue = Rc::new(RefCell::new(VecDeque::new()));
+        let receiver = brick_queue.clone();
         let event_callback = Closure::wrap(Box::new(move |event: JsValue| {
             let custom_event = event.unchecked_into::<CustomEvent>();
             let brick_event: BrickEvent =
                 serde_wasm_bindgen::from_value(custom_event.detail()).expect("Invalid BrickEvent");
-            receiver.borrow_mut().push_back((
-                brick_event.address,
-                brick_event.brick,
-            ));
+            receiver
+                .borrow_mut()
+                .push_back((brick_event.address, brick_event.brick));
         }) as Box<dyn FnMut(JsValue)>);
 
         event_target
@@ -92,10 +89,7 @@ impl SparseResidencyTexture3DSource for HtmlEventTargetTexture3DSource {
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>) {
         let request_event = web_sys::CustomEvent::new(BRICK_REQUEST_EVENT).ok().unwrap();
         let mut request_data: HashMap<&str, Vec<BrickAddress>> = HashMap::new();
-        request_data.insert(
-            "addresses",
-            brick_addresses
-        );
+        request_data.insert("addresses", brick_addresses);
         request_event.init_custom_event_with_can_bubble_and_cancelable_and_detail(
             BRICK_REQUEST_EVENT,
             false,

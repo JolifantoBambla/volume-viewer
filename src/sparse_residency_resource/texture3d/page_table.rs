@@ -2,10 +2,9 @@ use crate::sparse_residency_resource::texture3d::volume_meta::{
     MultiResolutionVolumeMeta, VolumeResolutionMeta,
 };
 use glam::{UVec3, UVec4};
-use serde::Serialize;
 
 #[repr(u32)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PageTableEntryFlag {
     Unmapped = 0,
     Mapped = 1,
@@ -56,9 +55,11 @@ impl From<UVec4> for PageTableEntry {
     }
 }
 
-impl Into<UVec4> for PageTableEntry {
-    fn into(self) -> UVec4 {
-        self.location.extend(self.flag as u32)
+impl From<PageTableEntry> for UVec4 {
+    fn from(page_table_entry: PageTableEntry) -> Self {
+        page_table_entry
+            .location
+            .extend(page_table_entry.flag as u32)
     }
 }
 
@@ -111,7 +112,7 @@ impl PageDirectoryMeta {
             resolutions.push(PageTableMeta {
                 offset,
                 extent,
-                volume_meta: volume_resolution.clone(),
+                volume_meta: *volume_resolution,
             });
         }
 
@@ -133,13 +134,13 @@ pub struct PageTableAddress {
     pub(crate) level: u32,
 }
 
-impl Into<[u32; 4]> for PageTableAddress {
-    fn into(self) -> [u32; 4] {
+impl From<PageTableAddress> for [u32; 4] {
+    fn from(page_table_address: PageTableAddress) -> Self {
         [
-            self.location.x,
-            self.location.y,
-            self.location.z,
-            self.level,
+            page_table_address.location.x,
+            page_table_address.location.y,
+            page_table_address.location.z,
+            page_table_address.level,
         ]
     }
 }

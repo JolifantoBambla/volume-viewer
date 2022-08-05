@@ -9,25 +9,30 @@ use crate::renderer::resources::Texture;
 use crate::sparse_residency_resource::texture3d::data_source::{
     Brick, SparseResidencyTexture3DSource,
 };
-use crate::sparse_residency_resource::texture3d::page_table::{PageDirectoryMeta, PageTableAddress, PageTableEntry, PageTableEntryFlag};
-use crate::util::extent::{box_volume, extent_to_uvec, extent_volume, index_to_subscript, subscript_to_index, uvec_to_extent, uvec_to_origin};
+use crate::sparse_residency_resource::texture3d::page_table::{
+    PageDirectoryMeta, PageTableEntryFlag,
+};
+use crate::sparse_residency_resource::texture3d::volume_meta::BrickAddress;
+use crate::util::extent::{
+    extent_to_uvec, index_to_subscript, subscript_to_index, uvec_to_extent, uvec_to_origin,
+};
 use glam::{UVec3, UVec4, Vec3};
 use std::cmp::min;
-use std::collections::{HashMap, HashSet};
-use std::sync::mpsc::channel;
+use std::collections::HashSet;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{BindGroup, BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, Device, Extent3d, ImageCopyTexture, ImageDataLayout, Maintain, MaintainBase, Origin3d, Queue, SubmissionIndex, TextureAspect};
-use wgpu::TextureFormat::Rgba32Uint;
+use wgpu::{
+    BindGroup, BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferUsages,
+    CommandEncoder, Extent3d, SubmissionIndex,
+};
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::sparse_residency_resource::texture3d::volume_meta::BrickAddress;
 
 /// Manages a 3D sparse residency texture.
 /// A sparse residency texture is not necessarily present in GPU memory as a whole.
 pub struct SparseResidencyTexture3D {
     ctx: Arc<GPUContext>,
     meta: PageDirectoryMeta,
-    local_brick_cache: HashMap<PageTableAddress, Brick>,
+    //local_brick_cache: HashMap<PageTableAddress, Brick>,
     source: Box<dyn SparseResidencyTexture3DSource>,
     brick_transfer_limit: usize,
     brick_request_limit: usize,
@@ -81,7 +86,7 @@ impl SparseResidencyTexture3D {
 
         let page_table_meta_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Page Table Meta"),
-            contents: &bytemuck::cast_slice(res_meta_data.as_slice()),
+            contents: bytemuck::cast_slice(res_meta_data.as_slice()),
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
@@ -122,11 +127,11 @@ impl SparseResidencyTexture3D {
         let timestamp = Timestamp::default();
         let timestamp_uniform_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
-            contents: &bytemuck::bytes_of(&timestamp),
+            contents: bytemuck::bytes_of(&timestamp),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
         let process_requests_pass =
-            ProcessRequests::new(brick_request_limit as u32, &wgsl_preprocessor, &ctx);
+            ProcessRequests::new(brick_request_limit as u32, wgsl_preprocessor, ctx);
         let process_requests_bind_group = process_requests_pass.create_bind_group(Resources {
             page_table_meta: &page_table_meta_buffer,
             request_buffer: &request_buffer,
@@ -136,7 +141,6 @@ impl SparseResidencyTexture3D {
         Self {
             ctx: ctx.clone(),
             meta,
-            local_brick_cache: HashMap::new(),
             source,
             brick_transfer_limit: 32,
             brick_request_limit,
@@ -167,7 +171,7 @@ impl SparseResidencyTexture3D {
         self.ctx.queue.write_buffer(
             &self.timestamp_uniform_buffer,
             0 as BufferAddress,
-            &bytemuck::bytes_of(&Timestamp::new(timestamp))
+            bytemuck::bytes_of(&Timestamp::new(timestamp)),
         );
 
         // todo: find unused
@@ -183,7 +187,7 @@ impl SparseResidencyTexture3D {
     }
 
     /// Call this after rendering has completed to read back requests & usages
-    pub fn update_cache(&mut self, submission_index: SubmissionIndex, temp_frame: u32) {
+    pub fn update_cache(&mut self, _submission_index: SubmissionIndex, _temp_frame: u32) {
         // todo: map buffers
         self.process_requests_pass.map_for_reading();
 
@@ -193,10 +197,14 @@ impl SparseResidencyTexture3D {
         if !requested_ids.is_empty() {
             // let requested_brick_addresses = requested_ids.iter().map(|id| id.to_be_bytes()).collect::<Vec<[u8; 4]>>();
             // log::info!("ids: {:?}", requested_brick_addresses);
-            let mut brick_addresses = Vec::with_capacity(requested_ids.len());
+            let mut brick_addresses =
+                Vec::with_capacity(min(requested_ids.len(), self.brick_request_limit));
             for id in requested_ids {
                 if !self.cached_bricks.contains(&id) && self.requested_bricks.insert(id) {
                     brick_addresses.push(BrickAddress::from(id));
+                }
+                if brick_addresses.len() >= self.brick_request_limit {
+                    break;
                 }
             }
             self.source.request_bricks(brick_addresses);
@@ -232,27 +240,37 @@ impl SparseResidencyTexture3D {
                 let extent = resolution.extent;
                 let location = UVec3::from_slice(address.index.as_slice());
                 let brick_location = offset + location * extent;
-                let brick_extent = index_to_subscript((brick.data.len() as u32) - 1, &uvec_to_extent(&self.meta.brick_size)) + UVec3::ONE;
+                let brick_extent = index_to_subscript(
+                    (brick.data.len() as u32) - 1,
+                    &uvec_to_extent(&self.meta.brick_size),
+                ) + UVec3::ONE;
                 self.brick_cache.write_subregion(
                     brick.data.as_slice(),
                     uvec_to_origin(&brick_location),
                     uvec_to_extent(&brick_extent),
-                    &self.ctx
+                    &self.ctx,
                 );
 
                 // mark brick as mapped
-                let page_index = subscript_to_index(&(offset + location), &self.page_directory.extent) as usize;
-                self.local_page_directory[page_index] = brick_location.extend(PageTableEntryFlag::Mapped as u32);
+                let page_index =
+                    subscript_to_index(&(offset + location), &self.page_directory.extent) as usize;
+                self.local_page_directory[page_index] =
+                    brick_location.extend(PageTableEntryFlag::Mapped as u32);
 
                 let brick_id = address.into();
                 self.cached_bricks.insert(brick_id);
                 self.requested_bricks.remove(&brick_id);
 
-                log::info!("brick size: {:?}, received size: {:?}", self.meta.brick_size, brick_extent);
+                log::info!(
+                    "brick size: {:?}, received size: {:?}",
+                    self.meta.brick_size,
+                    brick_extent
+                );
             }
 
             // update the page directory
-            self.page_directory.write(self.local_page_directory.as_slice(), &self.ctx);
+            self.page_directory
+                .write(self.local_page_directory.as_slice(), &self.ctx);
         }
     }
 

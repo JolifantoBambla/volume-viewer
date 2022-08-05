@@ -1,13 +1,16 @@
+use crate::renderer::volume::RawVolumeBlock;
+use crate::util::extent::extent_volume;
+use crate::GPUContext;
+use glam::UVec4;
 use std::marker::PhantomData;
 use std::ops::RangeBounds;
 use std::sync::{Arc, Mutex};
-use glam::UVec4;
-use js_sys::Atomics::or;
-use crate::renderer::volume::RawVolumeBlock;
-use crate::util::extent::{extent_to_uvec, extent_volume, origin_to_uvec, subscript_to_index};
 use wgpu::util::DeviceExt;
-use wgpu::{Buffer, BufferAddress, Device, ErrorFilter, Extent3d, ImageCopyTexture, ImageDataLayout, MapMode, Origin3d, Queue, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor};
-use crate::GPUContext;
+use wgpu::{
+    Buffer, BufferAddress, Device, Extent3d, ImageCopyTexture, ImageDataLayout, MapMode, Origin3d,
+    Queue, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+    TextureView, TextureViewDescriptor,
+};
 
 #[readonly::make]
 pub struct Texture {
@@ -47,7 +50,11 @@ impl Texture {
         }
     }
 
-    pub fn create_page_directory(device: &Device, queue: &Queue, extent: Extent3d) -> (Self, Vec<UVec4>) {
+    pub fn create_page_directory(
+        device: &Device,
+        queue: &Queue,
+        extent: Extent3d,
+    ) -> (Self, Vec<UVec4>) {
         let data = vec![UVec4::ZERO; extent_volume(&extent) as usize];
         let format = TextureFormat::Rgba32Uint;
         let texture = device.create_texture_with_data(
@@ -61,7 +68,7 @@ impl Texture {
                 format,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
             },
-            bytemuck::cast_slice(data.as_slice())
+            bytemuck::cast_slice(data.as_slice()),
         );
         let view = texture.create_view(&TextureViewDescriptor::default());
         (
@@ -71,7 +78,7 @@ impl Texture {
                 extent,
                 format,
             },
-            data
+            data,
         )
     }
 
@@ -193,148 +200,26 @@ impl Texture {
     pub fn write<T: bytemuck::Pod>(&self, data: &[T], ctx: &Arc<GPUContext>) {
         ctx.queue.write_texture(
             self.texture.as_image_copy(),
-            &bytemuck::cast_slice(data),
+            bytemuck::cast_slice(data),
             self.data_layout(&self.extent),
             self.extent,
         );
     }
 
-    // this is done by the backend, but I need to figure out what part is invalid, so I implemented it here as well
-    fn validate_texture_copy_range(&self, image_copy_texture: &ImageCopyTexture, copy_size: &Extent3d) -> bool {
-        /*
-            Let blockWidth be the texel block width of imageCopyTexture.texture.format.
-            Let blockHeight be the texel block height of imageCopyTexture.texture.format.
-            Let subresourceSize be the imageCopyTexture subresource size of imageCopyTexture.
-            Return whether all the conditions below are satisfied:
-                (imageCopyTexture.origin.x + copySize.width) ≤ subresourceSize.width
-                (imageCopyTexture.origin.y + copySize.height) ≤ subresourceSize.height
-                (imageCopyTexture.origin.z + copySize.depthOrArrayLayers) ≤ subresourceSize.depthOrArrayLayers
-                copySize.width must be a multiple of blockWidth.
-                copySize.height must be a multiple of blockHeight.
-             */
-        let copy_size = extent_to_uvec(copy_size);
-        let block_width = self.format.describe().block_dimensions.0 as u32;
-        let block_height = self.format.describe().block_dimensions.1 as u32;
-        let image_subresource_origin = origin_to_uvec(&image_copy_texture.origin);
-        let subresource_size = extent_to_uvec(&self.extent);
-        let mut copy_tex_range_valid = true;
-        if !((image_subresource_origin + copy_size).le(&subresource_size)) {
-            copy_tex_range_valid = false;
-            log::error!("copy size larger than subresource size: {} > {}", image_subresource_origin + copy_size, subresource_size);
-        }
-        if !(copy_size.x % block_width == 0 && copy_size.y % block_height == 0) {
-            copy_tex_range_valid = false;
-            log::error!("copy_size not a multiple of block size: {} ({}, {})", copy_size, block_width, block_height);
-        }
-        copy_tex_range_valid
-    }
-
-
-    // this is done by the backend, but I need to figure out what part is invalid, so I implemented it here as well
-    fn validate_linear_texture_data(&self, byte_size: u32, copy_extent: &Extent3d) -> bool {
-        /*
-        validating linear texture data(layout, byteSize, format, copyExtent)
-        Arguments:
-            GPUImageDataLayout layout - Layout of the linear texture data.
-            GPUSize64 byteSize - Total size of the linear data, in bytes.
-            GPUTextureFormat format - Format of the texture.
-            GPUExtent3D copyExtent - Extent of the texture to copy.
-
-        Let:
-            widthInBlocks be copyExtent.width ÷ the texel block width of format. Assert this is an integer.
-            heightInBlocks be copyExtent.height ÷ the texel block height of format. Assert this is an integer.
-            bytesInLastRow be widthInBlocks × the size of format.
-            Fail if the following input validation requirements are not met:
-
-            If heightInBlocks > 1, layout.bytesPerRow must be specified.
-            If copyExtent.depthOrArrayLayers > 1, layout.bytesPerRow and layout.rowsPerImage must be specified.
-            If specified, layout.bytesPerRow must be ≥ bytesInLastRow.
-            If specified, layout.rowsPerImage must be ≥ heightInBlocks.
-
-        Let:
-            bytesPerRow be layout.bytesPerRow ?? 0.
-            rowsPerImage be layout.rowsPerImage ?? 0.
-
-        Note: These default values have no effect, as they’re always multiplied by 0.
-
-            Let requiredBytesInCopy be 0.
-
-        If copyExtent.depthOrArrayLayers > 0:
-            Increment requiredBytesInCopy by bytesPerRow × rowsPerImage × (copyExtent.depthOrArrayLayers − 1).
-        If heightInBlocks > 0:
-            Increment requiredBytesInCopy by bytesPerRow × (heightInBlocks − 1) + bytesInLastRow.
-
-        Fail if the following condition is not satisfied:
-            The layout fits inside the linear data: layout.offset + requiredBytesInCopy ≤ byteSize.
-         */
-        let layout = self.data_layout(&copy_extent);
-        let format = self.format.describe();
-
-        let mut valid = true;
-
-        if !(format.block_dimensions.0 == 1 && format.block_dimensions.1 == 1) {
-            log::info!("block dimensions {} {}", format.block_dimensions.0, format.block_dimensions.1);
-            // if this got printed than I need to assert that width_in_blocks and height_n_blocks is an integer...
-        }
-        let width_in_blocks = copy_extent.width % format.block_dimensions.0 as u32;
-        let height_in_blocks = copy_extent.height % format.block_dimensions.1 as u32;
-        let bytes_in_last_row = width_in_blocks * format.block_size as u32;
-
-        if height_in_blocks > 1 {
-            if layout.bytes_per_row.is_none() {
-                log::error!("bytes per row must be specified");
-                valid = false;
-            }
-        }
-        if copy_extent.depth_or_array_layers > 1 {
-            if layout.bytes_per_row.is_none() || layout.rows_per_image.is_none() {
-                log::error!("bytes per row and rows per image must be specified");
-                valid = false;
-            }
-        }
-        if let Some(bytes_per_row) = layout.bytes_per_row {
-            if u32::from(bytes_per_row) < bytes_in_last_row {
-                log::error!("bytes per row must be >= bytes in last row");
-                valid = false;
-            }
-        }
-        if let Some(rows_per_image) = layout.rows_per_image {
-            if u32::from(rows_per_image) < height_in_blocks {
-                log::error!("rows per image must be >= height in blocks");
-                valid = false;
-            }
-        }
-
-        let bytes_per_row = if let Some(bytes_per_row) = layout.bytes_per_row {
-            u32::from(bytes_per_row)
-        } else {
-            0
-        };
-        let rows_per_image = if let Some(rows_per_image) = layout.rows_per_image {
-            u32::from(rows_per_image)
-        } else {
-            0
-        };
-        let mut required_bytes_in_copy = 0;
-
-        if copy_extent.depth_or_array_layers > 0 {
-            required_bytes_in_copy += bytes_per_row * rows_per_image * (copy_extent.depth_or_array_layers - 1);
-        }
-        if height_in_blocks > 0 {
-            required_bytes_in_copy += bytes_per_row * (height_in_blocks - 1) + bytes_in_last_row;
-        }
-
-        log::info!("required bytes in copy {}, {}, {}", required_bytes_in_copy, bytes_per_row, rows_per_image);
-        if !(layout.offset as u32 + required_bytes_in_copy <= byte_size) {
-            log::error!("layout doesn't fit inside linear data required = {}, want to copy = {}", required_bytes_in_copy, byte_size);
-            valid = false;
-        }
-
-        valid
-    }
-
-    pub fn write_subregion<T: bytemuck::Pod>(&self, data: &[T], origin: Origin3d, extent: Extent3d, ctx: &Arc<GPUContext>) {
-        if origin.x == 0 && origin.y == 0 && origin.z == 0 && extent.width == self.extent.width && extent.height == self.extent.height && extent.depth_or_array_layers == self.extent.depth_or_array_layers {
+    pub fn write_subregion<T: bytemuck::Pod>(
+        &self,
+        data: &[T],
+        origin: Origin3d,
+        extent: Extent3d,
+        ctx: &Arc<GPUContext>,
+    ) {
+        if origin.x == 0
+            && origin.y == 0
+            && origin.z == 0
+            && extent.width == self.extent.width
+            && extent.height == self.extent.height
+            && extent.depth_or_array_layers == self.extent.depth_or_array_layers
+        {
             self.write(data, ctx);
         } else {
             let image_copy_texture = ImageCopyTexture {
@@ -346,7 +231,7 @@ impl Texture {
 
             ctx.queue.write_texture(
                 image_copy_texture,
-                &bytemuck::cast_slice(data),
+                bytemuck::cast_slice(data),
                 self.data_layout(&extent),
                 extent,
             );
@@ -357,14 +242,11 @@ impl Texture {
 pub async fn map_buffer<S: RangeBounds<BufferAddress>>(buffer: &Buffer, bounds: S) {
     let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
 
-    buffer.slice(bounds)
-        .map_async(
-            MapMode::Read,
-            move |v| {
-                sender.send(v)
-                    .expect("Could not report buffer mapping");
-            });
-    receiver.receive()
+    buffer.slice(bounds).map_async(MapMode::Read, move |v| {
+        sender.send(v).expect("Could not report buffer mapping");
+    });
+    receiver
+        .receive()
         .await
         .expect("Could not map buffer")
         .expect("I said: could not map buffer!");
@@ -392,9 +274,9 @@ impl<T: bytemuck::Pod> MappableBuffer<T> {
         Self {
             buffer,
             state: Arc::new(Mutex::new(MappableBufferState {
-                state: BufferState::Ready
+                state: BufferState::Ready,
             })),
-            phantom_data: PhantomData
+            phantom_data: PhantomData,
         }
     }
 
@@ -408,14 +290,9 @@ impl<T: bytemuck::Pod> MappableBuffer<T> {
         let s = self.state.clone();
         if self.is_ready() {
             s.lock().unwrap().state = BufferState::Mapping;
-            self.buffer
-                .slice(bounds)
-                .map_async(
-                    mode,
-                    move |_| {
-                        s.lock().unwrap().state = BufferState::Mapped;
-                    }
-                );
+            self.buffer.slice(bounds).map_async(mode, move |_| {
+                s.lock().unwrap().state = BufferState::Mapped;
+            });
         }
     }
 

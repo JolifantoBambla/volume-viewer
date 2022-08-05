@@ -1,19 +1,15 @@
 use crate::renderer::context::GPUContext;
 use crate::renderer::pass::AsBindGroupEntries;
-use futures::future::join_all;
+use crate::renderer::resources::MappableBuffer;
 use std::cmp::min;
 use std::marker::PhantomData;
 use std::mem::size_of;
-use std::process::Command;
 use std::sync::Arc;
-use js_sys::Map;
-use wasm_bindgen_futures::spawn_local;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages,
-    CommandEncoder, Maintain, MaintainBase, MapMode,
+    CommandEncoder, Maintain, MapMode,
 };
-use crate::renderer::resources::{map_buffer, MappableBuffer};
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -34,7 +30,7 @@ pub struct GpuList<T: bytemuck::Pod + bytemuck::Zeroable> {
 }
 
 impl<T: bytemuck::Pod> GpuList<T> {
-    pub fn new(name: Option<&str>, capacity: u32, ctx: &Arc<GPUContext>) -> Self {
+    pub fn new(_name: Option<&str>, capacity: u32, ctx: &Arc<GPUContext>) -> Self {
         let list_buffer_size = (size_of::<T>() * capacity as usize) as BufferAddress;
         let meta = GpuListMeta {
             capacity,
@@ -48,7 +44,7 @@ impl<T: bytemuck::Pod> GpuList<T> {
         });
         let meta_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
-            contents: &bytemuck::bytes_of(&meta),
+            contents: bytemuck::bytes_of(&meta),
             usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
         });
 

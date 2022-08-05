@@ -12,10 +12,9 @@ use wasm_bindgen::prelude::*;
 
 use crate::renderer::camera::Camera;
 use crate::renderer::context::{ContextDescriptor, GPUContext};
-use crate::renderer::pass::{dvr, present_to_screen};
+use crate::renderer::pass::present_to_screen;
 use crate::renderer::pass::{ray_guided_dvr, GPUPass};
 
-use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::wgsl::create_wgsl_preprocessor;
 use bytemuck;
 use std::sync::Arc;
@@ -23,7 +22,6 @@ use wasm_bindgen::JsCast;
 use web_sys::OffscreenCanvas;
 use wgpu::util::DeviceExt;
 use wgpu::{BindGroup, Buffer, Extent3d, SamplerDescriptor, SubmissionIndex};
-use wgsl_preprocessor::WGSLPreprocessor;
 use winit::dpi::PhysicalSize;
 
 use crate::renderer::pass::present_to_screen::PresentToScreen;
@@ -35,7 +33,6 @@ pub struct MultiChannelVolumeRenderer {
     pub(crate) ctx: Arc<GPUContext>,
     pub(crate) window_size: PhysicalSize<u32>,
     volume_transform: glam::Mat4,
-    wgsl_preprocessor: WGSLPreprocessor,
     volume_texture: SparseResidencyTexture3D,
 
     volume_render_pass: RayGuidedDVR,
@@ -123,7 +120,6 @@ impl MultiChannelVolumeRenderer {
             ctx,
             window_size,
             volume_transform,
-            wgsl_preprocessor,
             volume_texture,
             volume_render_pass,
             volume_render_bind_group,
@@ -171,6 +167,7 @@ impl MultiChannelVolumeRenderer {
     }
 
     pub fn post_render(&mut self, submission_index: SubmissionIndex, temp_frame: u32) {
-        self.volume_texture.update_cache(submission_index, temp_frame);
+        self.volume_texture
+            .update_cache(submission_index, temp_frame);
     }
 }

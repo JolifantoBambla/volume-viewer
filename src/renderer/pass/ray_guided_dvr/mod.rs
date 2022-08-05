@@ -11,7 +11,7 @@ use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use wgsl_preprocessor::WGSLPreprocessor;
 
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniforms {
     pub camera: CameraUniform,
     pub volume_transform: TransformUniform,
@@ -25,16 +25,6 @@ impl Uniforms {
             camera,
             volume_transform,
             timestamp: UVec4::new(timestamp, timestamp, timestamp, timestamp),
-        }
-    }
-}
-
-impl Default for Uniforms {
-    fn default() -> Self {
-        Self {
-            camera: CameraUniform::default(),
-            volume_transform: TransformUniform::default(),
-            timestamp: UVec4::default(),
         }
     }
 }

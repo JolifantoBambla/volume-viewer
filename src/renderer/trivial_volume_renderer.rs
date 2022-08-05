@@ -10,10 +10,8 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::OffscreenCanvas;
 use wgpu::util::DeviceExt;
-use wgsl_preprocessor::WGSLPreprocessor;
 
 pub struct TrivialVolumeRenderer {
-    pub(crate) canvas: OffscreenCanvas,
     pub(crate) ctx: Arc<GPUContext>,
 
     dvr_pass: dvr::DVR,
@@ -26,8 +24,6 @@ pub struct TrivialVolumeRenderer {
 
     volume_transform: glam::Mat4,
     uniform_buffer: wgpu::Buffer,
-
-    wgsl_preprocessor: WGSLPreprocessor,
 }
 
 impl TrivialVolumeRenderer {
@@ -95,7 +91,6 @@ impl TrivialVolumeRenderer {
         };
 
         Self {
-            canvas,
             ctx,
             dvr_pass,
             dvr_bind_group,
@@ -104,7 +99,6 @@ impl TrivialVolumeRenderer {
             dvr_result_extent,
             volume_transform,
             uniform_buffer,
-            wgsl_preprocessor,
         }
     }
 

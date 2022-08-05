@@ -1,5 +1,5 @@
 use crate::util::extent::box_volume;
-use glam::{UVec3, Vec3};
+use glam::UVec3;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]
@@ -24,10 +24,13 @@ impl From<u32> for BrickAddress {
     }
 }
 
-impl Into<u32> for BrickAddress {
-    fn into(self) -> u32 {
+impl From<BrickAddress> for u32 {
+    fn from(brick_address: BrickAddress) -> Self {
         // todo: figure out how to handle channels
-        (self.index[0] << 24) + (self.index[1] << 16) + (self.index[2] << 8) + self.level
+        (brick_address.index[0] << 24)
+            + (brick_address.index[1] << 16)
+            + (brick_address.index[2] << 8)
+            + brick_address.level
     }
 }
 
