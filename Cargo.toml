@@ -53,6 +53,7 @@ ome-zarr = { path = "crates/ome-zarr" }
 numcodecs-wasm = { path = "crates/numcodecs-wasm" }
 wgsl-preprocessor = { path = "crates/wgsl-preprocessor" }
 zarr-wasm = { path = "crates/zarr-wasm" }
+include_preprocessed_wgsl = { path = "crates/include_preprocessed_wgsl" }
 # blosc = "0.1.3" doesn't work out of the box, maybe try this later
 
 # The `console_error_panic_hook` crate provides better debugging of panics by

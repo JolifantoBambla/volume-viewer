@@ -100,6 +100,10 @@ fn get_page_address(location: float3, level: u32) -> uint3 {
     );
 }
 
+fn transform_to_brick(location: float3, level: u32) {
+
+}
+
 fn get_page(page_address: uint3) -> PageTableEntry {
     return to_page_table_entry(textureLoad(page_directory, int3(page_address), 0));
 }
@@ -137,38 +141,54 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let timestamp = uniforms.timestamp;
 
-
-
-
     let lowest_lod = arrayLength(&page_table_meta.resolutions);
     let brick_size = page_table_meta.resolutions[0].brick_size;
 
+    var color = float4();
+
     // todo: this should be in a loop:
-    let location = start_os;
-    let distance_to_camera = abs((object_to_view * float4(location, 1.)).z);
-    let lod = select_level_of_detail(distance_to_camera, lowest_lod);
+    for (var i = 0; i < 1; i += 1) {
+        let location = start_os;
+        let distance_to_camera = abs((object_to_view * float4(location, 1.)).z);
+        let lod = select_level_of_detail(distance_to_camera, lowest_lod);
 
-    let page_address = get_page_address(location, lod);
-    let page = get_page(page_address);
-    if page.flag == UNMAPPED {
-        //red(pixel);
-        debug(pixel, float4(normalize(float3(page_address)), 1.));
-        request_brick(int3(page_address));
-    } else if page.flag == EMPTY {
-        blue(pixel);
-        //debug(pixel, float4(normalize(float3(page_address)), 1.));
-    } else {
-        // todo: step through brick
-        let s = sample_volume(float3());
-        if s == 0. {
-            white(pixel);
-        }
-        if page.flag == MAPPED {
-            white(pixel);
-        }
+        let page_address = get_page_address(location, lod);
+        let page = get_page(page_address);
+        if page.flag == UNMAPPED {
+            // color = RED;
+            color = float4(normalize(float3(page_address)), 1.);
+            request_brick(int3(page_address));
+        } else if page.flag == EMPTY {
+            color = BLUE;
+            //debug(pixel, float4(normalize(float3(page_address)), 1.));
+        } else {
+            // todo: step through brick
+            let s = sample_volume(float3());
+            if s == 0. {
+                color = WHITE;
+            }
+            if page.flag == MAPPED {
+                color = GREEN;
+            }
 
-        report_usage(int3(page.location / brick_size));
+            report_usage(int3(page.location / brick_size));
+
+            /*
+            // todo: this is not true - needs to be translated
+            let start = start_os;
+            // todo: this is not true - needs to be scaled
+            let step = ray.direction;
+            // todo: this is not true - needs to be determined based on brick boundary
+            let num_steps = 5;
+            color = ray_cast(color, start, step, num_steps);
+            */
+
+            if is_saturated(color) {
+                break;
+            }
+        }
     }
+    debug(pixel, color);
 
     /*
     MAYBE GET BRICK:
@@ -180,38 +200,35 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         IF BRICK MAPPED
             STEP THROUGH BRICK
     STORE RESULT
-
-    // initialize to invalid value
-    var current_lod = arrayLength(&page_table_meta.resolutions) + 1u;
-
-    var current_position_os = start_os;
-    var current_depth = length(object_to_view * current_position_os);
-
-    var current_voxel = pt_canonical_to_voxel(page_table_meta, current_step_os, current_lod);
-    let end_voxel = pt_canonical_to_voxel(page_table_meta, end_os, current_lod);
-
-    var current_color = float4();
-    var current_line = Line();
-    while (
-        !is_saturated(current_color) &&
-        aabb_contains(volume_bounds_os, current_position_os)
-    ) {
-        let lod = select_level_of_detail(current_depth);
-        if lod != current_lod {
-            current_line = create_bresenham3d(
-                start: int3,
-                end: int3,
-            );
-            current_lod = lod;
-            // todo: increase step_size
-            // todo: increase depth step size
-        }
-
-        current_depth += current_depth_step;
-        current_step +=
-    }
     */
 }
+
+fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32) -> float4 {
+    var color = in_color;
+
+    var sample_location = start;
+    for (var i = 0; i < num_steps; i += 1) {
+        let value = sample_volume(sample_location);
+
+        // todo: make minimum threshold configurable
+        if value > 0.1 {
+            // todo: compute lighting
+            var lighting = BLUE;
+            lighting.a = value;
+            color += lighting;
+        }
+
+        if is_saturated(color) {
+            break;
+        }
+
+        sample_location += step;
+    }
+
+    return color;
+}
+
+
 
 // page table stuff
 fn select_level_of_detail(distance: f32, lowest_lod: u32) -> u32 {

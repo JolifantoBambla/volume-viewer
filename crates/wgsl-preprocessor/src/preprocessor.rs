@@ -114,8 +114,9 @@ impl WGSLPreprocessor {
         //  - @else()
         //  - @endif()
 
-        // todo: fix attributes for target browser (version)
-        //  - @stage(<stagename>) -> @<stagename>
+        // todo: fix attributes for older target browser (version)
+        //  - @<stagename> -> @stage(<stagename>)
+        //  - const -> let
 
         Ok(resolved_includes.ok().unwrap())
     }

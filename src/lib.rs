@@ -39,6 +39,8 @@ use crate::sparse_residency_resource::texture3d::volume_meta::MultiResolutionVol
 use crate::sparse_residency_resource::texture3d::SparseResidencyTexture3D;
 use crate::window::window_builder_without_size;
 
+use include_preprocessed_wgsl::include_preprocessed;
+
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
 #[cfg(feature = "wee_alloc")]
@@ -79,6 +81,32 @@ pub fn main(canvas: JsValue, volume_meta: JsValue) {
     // todo: make logger configurable
     init::set_panic_hook();
     init::set_logger(None);
+
+    let _shader_str = include_preprocessed!(
+        "renderer/pass/dvr/dvr.wgsl",
+        include_dirs = [
+            "renderer/wgsl",
+            {
+                path: "renderer/wgsl",
+                relative: true,
+            }
+        ]
+        includes = [
+            "renderer/pass/process_requests/process_requests.wgsl",
+            {
+                identifier: "ray",
+                path: "renderer/ray.wgsl"
+            },
+            {
+                identifier: "ray",
+                path: {
+                    path: "/home/foo/wgsl/ray.wgsl",
+                    relative: false,
+                },
+            }
+            ["ray", "renderer/ray.wgsl"]
+        ]
+    );
 
     let volume_meta: MultiResolutionVolumeMeta = volume_meta
         .into_serde()
