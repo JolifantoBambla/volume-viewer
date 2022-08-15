@@ -87,7 +87,7 @@ fn sample_volume(x: float3) -> f32 {
 // - global_invocation_id   : vec3<u32>
 // - workgroup_id           : vec3<u32>
 // - num_workgroups         : vec3<u32>
-@stage(compute)
+@compute
 @workgroup_size(16, 16, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let window_size = uint2(textureDimensions(result));

@@ -15,7 +15,7 @@ struct Timestamp {
 @group(1) @binding(0) var<storage, read_write> ids: ListU32;
 @group(1) @binding(1) var<storage, read_write> ids_meta: ListMeta;
 
-@stage(compute)
+@compute
 @workgroup_size(4, 4, 4)
 fn main(@builtin(global_invocation_id) global_id: uint3) {
     let buffer_size = uint3(textureDimensions(request_buffer));

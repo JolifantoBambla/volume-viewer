@@ -71,7 +71,7 @@ fn sample_volume(x: float3) -> f32 {
     return f32(textureSampleLevel(volume_data, volume_sampler, x, 0.).x);
 }
 
-@stage(compute)
+@compute
 @workgroup_size(16, 16, 1)
 fn main(@builtin(global_invocation_id) global_id: uint3) {
     // terminate thread if it's outside the window bounds

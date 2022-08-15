@@ -108,7 +108,7 @@ fn get_page(page_address: uint3) -> PageTableEntry {
     return to_page_table_entry(textureLoad(page_directory, int3(page_address), 0));
 }
 
-@stage(compute)
+@compute
 @workgroup_size(16, 16, 1)
 fn main(@builtin(global_invocation_id) global_id: uint3) {
     // terminate thread if it's outside the window bounds
