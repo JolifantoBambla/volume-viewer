@@ -322,14 +322,18 @@ export class VolumeLoader {
             return;
         }
         this.#currentlyLoading[JSON.stringify(brickAddress)] = true;
-        this.#postMessage({
-            type: BRICK_RESPONSE_EVENT,
-            brick: {
-                address: brickAddress,
-                data: await this.#dataSource.loadBrick(brickAddress),
-            }
-        });
-        this.#currentlyLoading[JSON.stringify(brickAddress)] = false;
+        setTimeout(() => {
+            (async () => {
+                this.#postMessage({
+                    type: BRICK_RESPONSE_EVENT,
+                    brick: {
+                        address: brickAddress,
+                        data: await this.#dataSource.loadBrick(brickAddress),
+                    }
+                });
+                this.#currentlyLoading[JSON.stringify(brickAddress)] = false;
+            })()
+        }, Math.random() * 10);
     }
 
     async handleExternEvent(e) {
