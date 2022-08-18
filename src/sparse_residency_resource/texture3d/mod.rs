@@ -84,6 +84,10 @@ impl SparseResidencyTexture3D {
             })
             .collect();
 
+        for r in &res_meta_data {
+            log::info!("res scale: {}", r.volume_size);
+        }
+
         let page_table_meta_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Page Table Meta"),
             contents: bytemuck::cast_slice(res_meta_data.as_slice()),

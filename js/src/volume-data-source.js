@@ -25,6 +25,7 @@ export class VolumeResolutionMeta {
             );
         }
         this.scale = scale;
+        console.log("scale:", scale);
     }
 }
 
