@@ -55,7 +55,7 @@ pub struct SparseResidencyTexture3D {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ResMeta {
     // note: brick size is just copied
     brick_size: UVec4,
@@ -85,7 +85,7 @@ impl SparseResidencyTexture3D {
             .collect();
 
         for r in &res_meta_data {
-            log::info!("res scale: {}", r.volume_size);
+            log::info!("resolution meta data: {:?}", r);
         }
 
         let page_table_meta_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
@@ -243,11 +243,15 @@ impl SparseResidencyTexture3D {
                 let offset = resolution.offset;
                 let extent = resolution.extent;
                 let location = UVec3::from_slice(address.index.as_slice());
-                let brick_location = offset + location * extent;
+                let brick_location = (offset + location) * self.meta.brick_size;
                 let brick_extent = index_to_subscript(
                     (brick.data.len() as u32) - 1,
                     &uvec_to_extent(&self.meta.brick_size),
                 ) + UVec3::ONE;
+
+
+                log::info!("writing subregion\n  origin: {:?}, brick_size: {:?},\n  offset: {:?}, extent: {:?},\n  address: {:?}", brick_location, brick_extent, offset, extent, address.index);
+
                 self.brick_cache.write_subregion(
                     brick.data.as_slice(),
                     uvec_to_origin(&brick_location),

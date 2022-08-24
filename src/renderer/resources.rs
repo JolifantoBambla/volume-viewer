@@ -206,6 +206,15 @@ impl Texture {
         );
     }
 
+    fn is_whole_texture(&self, origin: &Origin3d, extent: &Extent3d) -> bool {
+        origin.x == 0
+            && origin.y == 0
+            && origin.z == 0
+            && extent.width == self.extent.width
+            && extent.height == self.extent.height
+            && extent.depth_or_array_layers == self.extent.depth_or_array_layers
+    }
+
     pub fn write_subregion<T: bytemuck::Pod>(
         &self,
         data: &[T],
@@ -213,13 +222,7 @@ impl Texture {
         extent: Extent3d,
         ctx: &Arc<GPUContext>,
     ) {
-        if origin.x == 0
-            && origin.y == 0
-            && origin.z == 0
-            && extent.width == self.extent.width
-            && extent.height == self.extent.height
-            && extent.depth_or_array_layers == self.extent.depth_or_array_layers
-        {
+        if self.is_whole_texture(&origin, &extent) {
             self.write(data, ctx);
         } else {
             let image_copy_texture = ImageCopyTexture {

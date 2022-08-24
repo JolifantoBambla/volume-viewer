@@ -87,7 +87,7 @@ fn request_brick(page_address: int3) {
     textureStore(request_buffer, page_address, uint4(uniforms.timestamp));
 }
 
-fn get_page_address(location: float3, level: u32) -> uint3 {
+fn get_page_address_old(location: float3, level: u32) -> uint3 {
     let resolution = page_table_meta.resolutions[level];
     let offset = resolution.page_table_offset;
     let max_local_subscript = resolution.page_table_extent - uint3(1u);
@@ -100,8 +100,34 @@ fn get_page_address(location: float3, level: u32) -> uint3 {
     );
 }
 
-fn transform_to_brick(location: float3, level: u32) {
+fn get_page_address(location: float3, level: u32) -> uint3 {
+    let resolution = page_table_meta.resolutions[level];
+    let offset = resolution.page_table_offset;
+    let extent = resolution.page_table_extent;
+    let max_local_subscript = extent - uint3(1u);
+    return min(
+        offset + max_local_subscript,
+        offset + uint3(floor(float3(extent) * location))
+    );
+}
 
+fn compute_offset(location: float3, level: u32) -> float3 {
+    let resolution = page_table_meta.resolutions[level];
+    let scale = float3(resolution.volume_size) / float3(resolution.brick_size);
+    return floor(location * scale) / scale;
+}
+
+fn transform_to_brick(location: float3, level: u32, page: PageTableEntry) -> float3 {
+    // todo: check if that's correct
+    return location - compute_offset(location, level) + (float3(page.location) / float3(textureDimensions(brick_cache).xyz));
+}
+
+fn get_brick_exit(location: float3, level: u32, page: PageTableEntry) -> float3 {
+    // todo: check if that's correct
+    // it's not -> assumes rays always go in same direction
+    let resolution = page_table_meta.resolutions[level];
+    let scale = float3(resolution.volume_size) / float3(resolution.brick_size);
+    return ceil(location * scale) / scale + (float3(page.location) / float3(textureDimensions(brick_cache).xyz));
 }
 
 fn get_page(page_address: uint3) -> PageTableEntry {
@@ -136,8 +162,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let object_to_view = uniforms.camera.transform.world_to_object * uniforms.volume_transform.object_to_world;
 
-    let start_os = max(ray_at(ray_os, max(0., intersection_record.t_min)), float3());
-    let end_os   = min(ray_at(ray_os, intersection_record.t_max), float3(1., 1., 1.));
+    let start_os = clamp(ray_at(ray_os, max(0., intersection_record.t_min)), float3(), float3(1.));
+    let end_os   = clamp(ray_at(ray_os, intersection_record.t_max), float3(), float3(1.));
 
     let timestamp = uniforms.timestamp;
 
@@ -146,6 +172,46 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     var color = float4();
 
+    // translate from lod loc to cache loc:
+    //    ((x - brick_offset_lod) * ( (brick_size_lod^2) / (vol_size_lod * brick_size_cache)) + brick_offset_cache)
+    // constant per lod: ( (brick_size_lod^2) / (vol_size_lod * brick_size_cache))
+    // brick_size_lod ... the brick size at that resolution level
+    // brick_size_cache ... the brick size in cache
+    // brick_offset_lod ... the offset of the brick x is in at that resolution level
+    // brick_offset_cache ... the offset of the brick in cache
+    // vol_size_lod ... the volume size at that lod
+    // e.g.
+    // brick_size_cache = 128
+    // vol_size = [1024, 512, 256, 128]
+    // brick_size = vol_size / brick_size_cache
+    //
+    /*
+>>> brick_size_cache = 128
+>>> vol_size = [1024, 512, 256, 128]
+>>> brick_size = [i / brick_size_cache for i in vol_size]
+>>> brick_size
+[8.0, 4.0, 2.0, 1.0]
+>>> c = [pow(brick_size[i], 2) / (vol_size[i] * brick_size_cache) for i in [0,1,2,3]]
+>>> c
+[0.00048828125, 0.000244140625, 0.0001220703125, 6.103515625e-05]
+>>> floor(0.263 * 1024 / brick_size_cache)
+2
+>>> x = 0.263
+>>> def to_lod_offset(x, lod):
+...     return floor(x * brick_size[lod]) / brick_size[lod]
+...
+>>> def to_cache(x, lod):
+...     return (x - to_lod_offset(x, lod)) * c[lod] + to_lod_offset(x, 0)
+
+
+>>> (x-to_lod_offset(x, lod)) / (brick_size[lod] * brick_size_cache / vol_size[lod]) + to_lod_offset(x, 0)
+okay, I think it's just:
+    x - to_lod_offset(x, lod) + page_table_entry.offset
+    to_lod_offset = floor(x * (vol_size[lod]/brick_size_cache)) / (vol_size[lod]/brick_size_cache)
+    */
+
+    // todo: scale needs to take under-full pages into account!
+
     // todo: this should be in a loop:
     for (var i = 0; i < 1; i += 1) {
         let location = start_os;
@@ -153,6 +219,9 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         let lod = select_level_of_detail(distance_to_camera, lowest_lod);
 
         let page_address = get_page_address(location, lod);
+
+        let page_color = float3(page_address) / float3(7., 7., 1.);
+
         let page = get_page(page_address);
         if page.flag == UNMAPPED {
             // color = RED;
@@ -161,22 +230,33 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         } else if page.flag == EMPTY {
             color = BLUE;
             //debug(pixel, float4(normalize(float3(page_address)), 1.));
-        } else {
+        } else if page.flag == MAPPED {
             // todo: step through brick
-            let s = sample_volume(float3());
-            if s == 0. {
-                color = WHITE;
-            }
+
             if page.flag == MAPPED {
-                color = GREEN;
+                //color = GREEN;
+                //color = float4(page_color, 1.);
             }
 
             report_usage(int3(page.location / brick_size));
 
+            let start = transform_to_brick(start_os, lod, page);
+            let stop = get_brick_exit(start_os, lod, page);
+            let brick_distance = distance(start * float3(page_table_meta.resolutions[lod].brick_size), stop * float3(page_table_meta.resolutions[lod].brick_size));
+            let num_steps = i32(brick_distance + 0.5);
+            if num_steps < 1 {
+                color = WHITE;
+                break;
+            }
+
+            let step = (stop - start) / f32(num_steps);
+            //color = ray_cast(color, start, step, num_steps);
+            color = float4(float3(sample_volume(start_os)), 1.);
+
             /*
             // todo: this is not true - needs to be translated
             let start = start_os;
-            // todo: this is not true - needs to be scaled
+            // todo: this is not true - needs to be scaled (does it though)
             let step = ray.direction;
             // todo: this is not true - needs to be determined based on brick boundary
             let num_steps = 5;
@@ -185,6 +265,11 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
             if is_saturated(color) {
                 break;
+            }
+        } else {
+            let s = sample_volume(float3());
+            if s == 0. {
+                color = RED;
             }
         }
     }
