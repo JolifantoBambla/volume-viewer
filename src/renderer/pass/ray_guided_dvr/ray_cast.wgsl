@@ -2,6 +2,7 @@
 
 @include(aabb)
 @include(camera)
+@include(constant)
 @include(page_table)
 @include(ray)
 @include(transform)
@@ -162,7 +163,7 @@ fn get_page(page_address: uint3) -> PageTableEntry {
 fn main(@builtin(global_invocation_id) global_id: uint3) {
     // terminate thread if it's outside the window bounds
     let window_size = uint2(textureDimensions(result));
-    if any(window_size < global_id.xy) {
+    if (any(window_size < global_id.xy)) {
         return;
     }
 
@@ -179,7 +180,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     // terminate thread if the ray isn't within the unit cube
     let volume_bounds_os = AABB(float3(0.), float3(1.));
     let intersection_record = intersect_aabb(ray_os, volume_bounds_os);
-    if !intersection_record.hit {
+    if (!intersection_record.hit) {
         return;
     }
 
@@ -194,70 +195,84 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     let brick_size = page_table_meta.resolutions[0].brick_size;
 
     var color = float4();
+    var current_lod = lowest_lod + 1u;
+    var lod_volume_to_padded = 1.;
 
-    // translate from lod loc to cache loc:
-    //    ((x - brick_offset_lod) * ( (brick_size_lod^2) / (vol_size_lod * brick_size_cache)) + brick_offset_cache)
-    // constant per lod: ( (brick_size_lod^2) / (vol_size_lod * brick_size_cache))
-    // brick_size_lod ... the brick size at that resolution level
-    // brick_size_cache ... the brick size in cache
-    // brick_offset_lod ... the offset of the brick x is in at that resolution level
-    // brick_offset_cache ... the offset of the brick in cache
-    // vol_size_lod ... the volume size at that lod
-    // e.g.
-    // brick_size_cache = 128
-    // vol_size = [1024, 512, 256, 128]
-    // brick_size = vol_size / brick_size_cache
-    //
-    /*
->>> brick_size_cache = 128
->>> vol_size = [1024, 512, 256, 128]
->>> brick_size = [i / brick_size_cache for i in vol_size]
->>> brick_size
-[8.0, 4.0, 2.0, 1.0]
->>> c = [pow(brick_size[i], 2) / (vol_size[i] * brick_size_cache) for i in [0,1,2,3]]
->>> c
-[0.00048828125, 0.000244140625, 0.0001220703125, 6.103515625e-05]
->>> floor(0.263 * 1024 / brick_size_cache)
-2
->>> x = 0.263
->>> def to_lod_offset(x, lod):
-...     return floor(x * brick_size[lod]) / brick_size[lod]
-...
->>> def to_cache(x, lod):
-...     return (x - to_lod_offset(x, lod)) * c[lod] + to_lod_offset(x, 0)
-
-
->>> (x-to_lod_offset(x, lod)) / (brick_size[lod] * brick_size_cache / vol_size[lod]) + to_lod_offset(x, 0)
-okay, I think it's just:
-    x - to_lod_offset(x, lod) + page_table_entry.offset
-    to_lod_offset = floor(x * (vol_size[lod]/brick_size_cache)) / (vol_size[lod]/brick_size_cache)
-    */
-
-    // todo: scale needs to take under-full pages into account!
+    // initialize line traversal (lod independent stuff)
+    // if d[i] = 0, i = 0,1,2, brick_step[i] = 0, but this should not matter since we then only multiply 0 by 0 anyway
+    let brick_step = sign(ray.direction);
+    var current_position = start_os;
+    var current_brick = uint3();
+    var last_brick = uint3(1u);
+    var t_delta = float3();
+    var t_min = max(0., intersection_record.t_min);
+    var t_max = float3();
 
     // todo: this should be in a loop:
     for (var i = 0; i < 1; i += 1) {
-        let position = start_os;
+        let position = current_position;
         let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
         let lod = select_level_of_detail(distance_to_camera, lowest_lod);
 
+        // todo: scale needs to take under-full pages into account!
         let adjusted_position = position * volume_to_padded(lod);
+
+        if (lod != current_lod) {
+            current_lod = lod;
+            lod_volume_to_padded = volume_to_padded(lod);
+
+            current_brick = compute_page_address(adjusted_position, lod);
+
+            let adjusted_end = stop_os * lod_volume_to_padded;
+            last_brick = compute_page_address(adjusted_end, lod);
+
+            let lod_meta = page_table_meta.resolutions[lod];
+            let brick_size_spatial = 1. / float3(lod_meta.page_table_extent);
+            t_delta = brick_size_spatial / ray.direction * brick_step;
+
+            let previous_brick = current_brick - uint3(clamp(int3(brick_step), int3(-1), int3(0)) * -1);
+            // todo: what is grid.minBound() ?
+            t_max = t_min + (grid.minBound() + previous_brick * brick_size_spatial - current_position) / ray.direction;
+        }
+
+        // condition and update is then
+        /*
+            while (current_X_index != end_X_index || current_Y_index != end_Y_index || current_Z_index != end_Z_index) {
+                if (tMaxX < tMaxY && tMaxX < tMaxZ) {
+                    // X-axis traversal.
+                    current_X_index += stepX;
+                    tMaxX += tDeltaX;
+                    // also update t_min and stuff
+                } else if (tMaxY < tMaxZ) {
+                    // Y-axis traversal.
+                    current_Y_index += stepY;
+                    tMaxY += tDeltaY;
+                } else {
+                    // Z-axis traversal.
+                    current_Z_index += stepZ;
+                    tMaxZ += tDeltaZ;
+                }
+            }
+        */
+
         let page_address = compute_page_address(adjusted_position, lod);
+
+
 
         let page_color = float3(page_address) / float3(7., 7., 1.);
 
         let page = get_page(page_address);
-        if page.flag == UNMAPPED {
+        if (page.flag == UNMAPPED) {
             // color = RED;
             color = float4(page_color, 1.);
             request_brick(int3(page_address));
-        } else if page.flag == EMPTY {
+        } else if (page.flag == EMPTY) {
             color = BLUE;
             //debug(pixel, float4(normalize(float3(page_address)), 1.));
-        } else if page.flag == MAPPED {
+        } else if (page.flag == MAPPED) {
             // todo: step through brick
 
-            if page.flag == MAPPED {
+            if (page.flag == MAPPED) {
                 //color = GREEN;
                 color = float4(page_color, 1.);
             }
@@ -268,7 +283,7 @@ okay, I think it's just:
             let stop = get_brick_exit(start_os, lod, page);
             let brick_distance = distance(start * float3(page_table_meta.resolutions[lod].brick_size), stop * float3(page_table_meta.resolutions[lod].brick_size));
             let num_steps = i32(brick_distance + 0.5);
-            if num_steps < 1 {
+            if (num_steps < 1) {
                 color = WHITE;
                 break;
             }
@@ -287,12 +302,12 @@ okay, I think it's just:
             color = ray_cast(color, start, step, num_steps);
             */
 
-            if is_saturated(color) {
+            if (is_saturated(color)) {
                 break;
             }
         } else {
             let s = sample_volume(float3());
-            if s == 0. {
+            if (s == 0.) {
                 color = RED;
             }
         }
@@ -320,14 +335,14 @@ fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32) -> fl
         let value = sample_volume(sample_location);
 
         // todo: make minimum threshold configurable
-        if value > 0.1 {
+        if (value > 0.1) {
             // todo: compute lighting
             var lighting = BLUE;
             lighting.a = value;
             color += lighting;
         }
 
-        if is_saturated(color) {
+        if (is_saturated(color)) {
             break;
         }
 
