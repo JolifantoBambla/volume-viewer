@@ -87,27 +87,42 @@ fn request_brick(page_address: int3) {
     textureStore(request_buffer, page_address, uint4(uniforms.timestamp));
 }
 
-fn get_page_address_old(location: float3, level: u32) -> uint3 {
+// todo: this could be a per-resolution constant
+fn volume_to_padded(level: u32) -> float3 {
     let resolution = page_table_meta.resolutions[level];
-    let offset = resolution.page_table_offset;
-    let max_local_subscript = resolution.page_table_extent - uint3(1u);
-    return min(
-        offset + max_local_subscript,
-        max(
-            offset + uint3(ceil(float3(max_local_subscript) * location)),
-            offset
-        )
-    );
+
+    let volume_size = float3(resolution.volume_size);
+
+    let extent = resolution.page_table_extent;
+    let brick_size = resolution.brick_size;
+    let padded_size = float3(brick_size * extent);
+
+    return volume_size / padded_size;
 }
 
-fn get_page_address(location: float3, level: u32) -> uint3 {
+fn compute_page_address(position: float3, level: u32) -> uint3 {
     let resolution = page_table_meta.resolutions[level];
     let offset = resolution.page_table_offset;
     let extent = resolution.page_table_extent;
-    let max_local_subscript = extent - uint3(1u);
     return min(
-        offset + max_local_subscript,
-        offset + uint3(floor(float3(extent) * location))
+        offset + uint3(floor(float3(extent) * position)),
+        offset + extent - uint3(1u)
+    );
+}
+
+fn compute_cache_address(position: float3, level: u32, brick_address: uint3) -> uint3 {
+    let resolution = page_table_meta.resolutions[level];
+    let brick_size = resolution.brick_size;
+    let volume_size = resolution.volume_size;
+    return brick_address + max(uint3(ceil(position * float3(volume_size))), uint3(1u)) % brick_size;
+}
+
+fn normalize_cache_address(cache_address: uint3) -> float3 {
+    let cache_size = float3(textureDimensions(brick_cache));
+    return clamp(
+        float3(cache_address) / cache_size,
+        float3(),
+        float3(1.)
     );
 }
 
@@ -115,6 +130,13 @@ fn compute_offset(location: float3, level: u32) -> float3 {
     let resolution = page_table_meta.resolutions[level];
     let scale = float3(resolution.volume_size) / float3(resolution.brick_size);
     return floor(location * scale) / scale;
+}
+
+fn compute_brick_entry_and_exit(location: float3, level:u32, direction: float3, page: PageTableEntry) {
+    let page_offset = compute_offset(location, level);
+    let brick_offset = (float3(page.location) / float3(textureDimensions(brick_cache).xyz));
+    let entry = location - page_offset + brick_offset;
+
 }
 
 fn transform_to_brick(location: float3, level: u32, page: PageTableEntry) -> float3 {
@@ -130,6 +152,7 @@ fn get_brick_exit(location: float3, level: u32, page: PageTableEntry) -> float3 
     return ceil(location * scale) / scale + (float3(page.location) / float3(textureDimensions(brick_cache).xyz));
 }
 
+// todo: add mutliple virtualization levels
 fn get_page(page_address: uint3) -> PageTableEntry {
     return to_page_table_entry(textureLoad(page_directory, int3(page_address), 0));
 }
@@ -214,18 +237,19 @@ okay, I think it's just:
 
     // todo: this should be in a loop:
     for (var i = 0; i < 1; i += 1) {
-        let location = start_os;
-        let distance_to_camera = abs((object_to_view * float4(location, 1.)).z);
+        let position = start_os;
+        let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
         let lod = select_level_of_detail(distance_to_camera, lowest_lod);
 
-        let page_address = get_page_address(location, lod);
+        let adjusted_position = position * volume_to_padded(lod);
+        let page_address = compute_page_address(adjusted_position, lod);
 
         let page_color = float3(page_address) / float3(7., 7., 1.);
 
         let page = get_page(page_address);
         if page.flag == UNMAPPED {
             // color = RED;
-            color = float4(normalize(float3(page_address)), 1.);
+            color = float4(page_color, 1.);
             request_brick(int3(page_address));
         } else if page.flag == EMPTY {
             color = BLUE;
@@ -235,7 +259,7 @@ okay, I think it's just:
 
             if page.flag == MAPPED {
                 //color = GREEN;
-                //color = float4(page_color, 1.);
+                color = float4(page_color, 1.);
             }
 
             report_usage(int3(page.location / brick_size));
@@ -251,7 +275,7 @@ okay, I think it's just:
 
             let step = (stop - start) / f32(num_steps);
             //color = ray_cast(color, start, step, num_steps);
-            color = float4(float3(sample_volume(start_os)), 1.);
+            color = float4(float3(sample_volume(adjusted_position)), 1.);
 
             /*
             // todo: this is not true - needs to be translated
