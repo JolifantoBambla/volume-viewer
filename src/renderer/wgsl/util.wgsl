@@ -20,3 +20,13 @@ fn sum_components_uint4(v: uint4) -> u32 {
 fn pack4x8uint(e: uint4) -> u32 {
     return sum_components_uint4(e << uint4(24u, 16u, 8u, 0u));
 }
+
+fn min_dimension(v: float3) -> u32 {
+    if (v.x < v.y && v.x < v.z) {
+        return 0u;
+    } else if (v.y < v.z) {
+        return 1u;
+    } else {
+        return 2u;
+    }
+}

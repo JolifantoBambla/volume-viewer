@@ -201,12 +201,109 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     // initialize line traversal (lod independent stuff)
     // if d[i] = 0, i = 0,1,2, brick_step[i] = 0, but this should not matter since we then only multiply 0 by 0 anyway
     let brick_step = sign(ray.direction);
-    var current_position = start_os;
-    var current_brick = uint3();
+    // updated on lod change
     var last_brick = uint3(1u);
     var t_delta = float3();
+
+    // updated every step
+    var current_position = start_os;
+    var current_brick = uint3();
     var t_min = max(0., intersection_record.t_min);
-    var t_max = float3();
+    var t_max = float3(intersection_record.t_max);
+
+    while (t_min < 0. || t_min > 1.) {
+        let position = current_position;
+        let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
+        let lod = select_level_of_detail(distance_to_camera, lowest_lod);
+
+        if (lod != current_lod) {
+            current_lod = lod;
+            lod_volume_to_padded = volume_to_padded(lod);
+
+            current_brick = compute_page_address(position * lod_volume_to_padded, lod);
+
+            let adjusted_end = stop_os * lod_volume_to_padded;
+            last_brick = compute_page_address(adjusted_end, lod);
+
+            let lod_meta = page_table_meta.resolutions[lod];
+            let brick_size_spatial = 1. / float3(lod_meta.page_table_extent);
+            t_delta = brick_size_spatial / ray.direction * brick_step;
+
+            let previous_brick = current_brick - uint3(clamp(int3(brick_step), int3(-1), int3(0)) * -1);
+            t_max = t_min + (float3(previous_brick) * brick_size_spatial - current_position) / ray.direction;
+        }
+
+        let page_address = compute_page_address(adjusted_position, lod);
+        let page_color = float3(page_address) / float3(7., 7., 1.);
+
+        let page = get_page(page_address);
+        if (page.flag == UNMAPPED) {
+            // color = RED;
+            color = float4(page_color, 1.);
+            request_brick(int3(page_address));
+            break;
+        } else if (page.flag == EMPTY) {
+            color = BLUE;
+        } else if (page.flag == MAPPED) {
+            // todo: step through brick
+
+            if (page.flag == MAPPED) {
+                //color = GREEN;
+                color = float4(page_color, 1.);
+            }
+
+            report_usage(int3(page.location / brick_size));
+
+            let start = transform_to_brick(start_os, lod, page);
+            let stop = get_brick_exit(start_os, lod, page);
+            let brick_distance = distance(start * float3(page_table_meta.resolutions[lod].brick_size), stop * float3(page_table_meta.resolutions[lod].brick_size));
+            let num_steps = i32(brick_distance + 0.5);
+            if (num_steps < 1) {
+                color = WHITE;
+                break;
+            }
+
+            let step = (stop - start) / f32(num_steps);
+            //color = ray_cast(color, start, step, num_steps);
+            color = float4(float3(sample_volume(adjusted_position)), 1.);
+
+            /*
+            // todo: this is not true - needs to be translated
+            let start = start_os;
+            // todo: this is not true - needs to be scaled (does it though)
+            let step = ray.direction;
+            // todo: this is not true - needs to be determined based on brick boundary
+            let num_steps = 5;
+            color = ray_cast(color, start, step, num_steps);
+            */
+
+            if (is_saturated(color)) {
+                break;
+            }
+        } else {
+            let s = sample_volume(float3());
+            if (s == 0.) {
+                color = RED;
+            }
+        }
+
+
+        // todo: float operations should be = tmaxOriginal + n * tDelta
+        if (t_max.x < t_max.y && t_max.x < t_max.z) {
+            current_brick += brick_step.x;
+            t_min = t_max.x;
+            t_max.x += t_delta.x;
+        } else if (t_max.y < t_max.z) {
+            current_brick += brick_step.y;
+            t_min = t_max.y;
+            t_max.y += t_delta.y;
+        } else {
+            current_brick += brick_step.z;
+            t_min = t_max.z;
+            t_max.z += t_delta.z;
+        }
+        current_position = clamp(ray_at(ray_os, t_min), float3(), float3(1.));
+    }
 
     // todo: this should be in a loop:
     for (var i = 0; i < 1; i += 1) {
@@ -217,6 +314,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         // todo: scale needs to take under-full pages into account!
         let adjusted_position = position * volume_to_padded(lod);
 
+        // todo: this all works in floats, because it's faster but doing it in ints would be safer
         if (lod != current_lod) {
             current_lod = lod;
             lod_volume_to_padded = volume_to_padded(lod);
@@ -231,34 +329,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             t_delta = brick_size_spatial / ray.direction * brick_step;
 
             let previous_brick = current_brick - uint3(clamp(int3(brick_step), int3(-1), int3(0)) * -1);
-            // todo: what is grid.minBound() ?
-            t_max = t_min + (grid.minBound() + previous_brick * brick_size_spatial - current_position) / ray.direction;
+            t_max = t_min + (float3(previous_brick) * brick_size_spatial - current_position) / ray.direction;
         }
 
-        // condition and update is then
-        /*
-            while (current_X_index != end_X_index || current_Y_index != end_Y_index || current_Z_index != end_Z_index) {
-                if (tMaxX < tMaxY && tMaxX < tMaxZ) {
-                    // X-axis traversal.
-                    current_X_index += stepX;
-                    tMaxX += tDeltaX;
-                    // also update t_min and stuff
-                } else if (tMaxY < tMaxZ) {
-                    // Y-axis traversal.
-                    current_Y_index += stepY;
-                    tMaxY += tDeltaY;
-                } else {
-                    // Z-axis traversal.
-                    current_Z_index += stepZ;
-                    tMaxZ += tDeltaZ;
-                }
-            }
-        */
-
         let page_address = compute_page_address(adjusted_position, lod);
-
-
-
         let page_color = float3(page_address) / float3(7., 7., 1.);
 
         let page = get_page(page_address);

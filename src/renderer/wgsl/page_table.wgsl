@@ -23,47 +23,41 @@ fn to_page_table_entry(v: uint4) -> PageTableEntry {
     return PageTableEntry(v.xyz, v.w);
 }
 
-// todo: fix all these alignment issues here and on cpu side!
-// todo: I probably won't need all this stuff -> find out what is needed and kick out the rest
-
-struct VolumeResolutionMeta {
-    @size(16) volume_size: uint3,
-    @size(16) padded_volume_size: uint3,
-    @size(16) scale: float3,
-}
-
 struct PageTableMeta {
-    @size(16) offset: uint3,
-    @size(16) extent: uint3,
-    volume_meta: VolumeResolutionMeta,
+    // size of a brick in voxels
+    @size(16) brick_size: uint3,
+
+    // the page table's offset from the origin
+    @size(16) page_table_offset: uint3,
+
+    // number of bricks per dimension
+    @size(16) page_table_extent: uint3,
+
+    // number of filled voxels per dimension
+    @size(16) volume_size: uint3,
+
+    // todo: store volume_to_padded ratio?
 }
 
-/*
+type ReadOnlyPageTableMeta = ptr<function, PageTableMeta, read>;
+
+fn compute_page_address(page_table: ReadOnlyPageTableMeta, position: float3) -> uint3 {
+    return min(
+        page_table.offset + uint3(floor(float3(page_table.page_table_extent) * position)),
+        page_table.offset + page_table.page_table_extent - uint3(1u)
+    );
+}
+
+fn compute_volume_to_padded(page_table: ReadOnlyPageTableMeta) -> float3 {
+    let volume_size = float3(page_table.volume_size);
+
+    let extent = page_table.page_table_extent;
+    let brick_size = page_table.brick_size;
+    let padded_size = float3(brick_size * extent);
+
+    return volume_size / padded_size;
+}
+
 struct PageDirectoryMeta {
-    @size(16) brick_size: uint3,
-    @size(16) extent: uint3,
     resolutions: array<PageTableMeta>,
 }
-*/
-
-struct ResolutionMeta {
-    @size(16) brick_size: uint3,
-    @size(16) page_table_offset: uint3,
-    @size(16) page_table_extent: uint3,
-    @size(16) volume_size: uint3,
-}
-
-struct PageDirectoryMeta {
-    resolutions: array<ResolutionMeta>,
-}
-
-/*
-fn pt_canonical_to_voxel(page_table_meta: PageDirectoryMeta, p: float3, level: u32) -> int32 {
-    return int3(p * page_directory_meta.resolutions[level].volume_meta.volume_size);
-}
-
-fn pt_compute_lod(page_table_meta: PageDirectoryMeta, distance_to_camera: f32) -> u32 {
-    // todo: select based on distance to camera
-    return min(arrayLength(page_table_meta.resolutions), 0u);
-}
-*/
