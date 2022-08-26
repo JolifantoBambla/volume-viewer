@@ -84,23 +84,6 @@ fn create_voxel_line(start: float3, stop: float3, t_min: f32, ray: ptr<function,
 }
 
 fn advance(voxel_line: ptr<function, VoxelLine, read_write>, ray: ptr<function, Ray, read>) {
-    if (voxel_line.state.t_max.x < voxel_line.state.t_max.y && voxel_line.state.t_max.x < voxel_line.state.t_max.z) {
-        *voxel_line.state.steps.x += 1u;
-        *voxel_line.state.brick.x += voxel_line.brick_step.x;
-        *voxel_line.state.t_min = voxel_line.state.t_max.x;
-        *voxel_line.state.t_max.x = voxel_line.first_t_max.x + f32(voxel_line.state.steps.x) * voxel_line.t_delta.x;
-    } else if (voxel_line.state.t_max.y < voxel_line.state.t_max.z) {
-        *voxel_line.state.steps.y += 1u;
-        *voxel_line.state.brick.y += voxel_line.brick_step.y;
-        *voxel_line.state.t_min = voxel_line.state.t_max.y;
-        *voxel_line.state.t_max.y = voxel_line.first_t_max.y + f32(voxel_line.state.steps.y) * voxel_line.t_delta.y;
-    } else {
-        *voxel_line.state.steps.z += 1u;
-        *voxel_line.state.brick.z += voxel_line.brick_step.z;
-        *voxel_line.state.t_min = voxel_line.state.t_max.z;
-        *voxel_line.state.t_max.z = voxel_line.first_t_max.z + f32(voxel_line.state.steps.z) * voxel_line.t_delta.z;
-    }
-
     let d = voxel_line.state.next_step_dimension;
 
     *voxel_line.state.steps[d] += 1u;

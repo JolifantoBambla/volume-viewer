@@ -14,7 +14,8 @@ pub fn create_wgsl_preprocessor() -> WGSLPreprocessor {
         .include("sphere", include_str!("sphere.wgsl"))
         .include("transform", include_str!("transform.wgsl"))
         .include("type_alias", include_str!("type_alias.wgsl"))
-        .include("util", include_str!("util.wgsl"));
+        .include("util", include_str!("util.wgsl"))
+        .include("voxel_line_f32", include_str!("voxel_line_f32.wgsl"));
 
     wgsl_preprocessor
 }
