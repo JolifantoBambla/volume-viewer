@@ -140,22 +140,15 @@ fn normalize_cache_address(cache_address: uint3) -> float3 {
     );
 }
 
-fn compute_offset(location: float3, level: u32) -> float3 {
+fn compute_offset(position: float3, level: u32) -> float3 {
     let resolution = page_table_meta.resolutions[level];
     let scale = float3(resolution.volume_size) / float3(resolution.brick_size);
-    return floor(location * scale) / scale;
+    return floor(position * scale) / scale;
 }
 
-fn compute_brick_entry_and_exit(location: float3, level:u32, direction: float3, page: PageTableEntry) {
-    let page_offset = compute_offset(location, level);
-    let brick_offset = (float3(page.location) / float3(textureDimensions(brick_cache).xyz));
-    let entry = location - page_offset + brick_offset;
-
-}
-
-fn transform_to_brick(location: float3, level: u32, page: PageTableEntry) -> float3 {
+fn transform_to_brick(position: float3, level: u32, page: PageTableEntry) -> float3 {
     // todo: check if that's correct
-    return location - compute_offset(location, level) + (float3(page.location) / float3(textureDimensions(brick_cache).xyz));
+    return position - compute_offset(position, level) + (float3(page.location) / float3(textureDimensions(brick_cache).xyz));
 }
 
 // todo: add mutliple virtualization levels
@@ -200,62 +193,103 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     let brick_size = page_table_meta.resolutions[0].brick_size;
 
     var color = float4();
+    var requested_brick = false;
     var current_lod = 0u;
     var current_page_table = clone_page_table_meta(0u);
-    var voxel_line = create_voxel_line(
-        start_os,
-        end_os,
-        max(0., intersection_record.t_min),
-        &ray_os,
-        &current_page_table
-    );
 
-    while (voxel_line.state.t_min < intersection_record.t_max) {
+    for (var voxel_line = create_voxel_line(
+            start_os,
+            end_os,
+            max(0., intersection_record.t_min),
+            ray_os,
+            &current_page_table
+         );
+         in_grid(&voxel_line);
+         advance(&voxel_line, ray_os)
+    ) {
         let position = voxel_line.state.entry;
         let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
         let lod = select_level_of_detail(distance_to_camera, lowest_lod);
         if (lod != current_lod) {
             current_lod = lod;
+            current_page_table = clone_page_table_meta(lod);
             voxel_line = create_voxel_line(
                 position,
                 end_os,
-                t_min,
-                &ray_os,
+                voxel_line.state.t_min,
+                ray_os,
                 &current_page_table
             );
         }
 
-        let page_address = voxel_line.state.brick;
+        let page_address = uint3(voxel_line.state.brick);
         let page_color = float3(page_address) / float3(7., 7., 1.);
 
         let page = get_page(page_address);
         if (page.flag == UNMAPPED) {
-            // color = RED;
+            // todo: remove this (debug)
             color = float4(page_color, 1.);
-            request_brick(int3(page_address));
-            break;
+
+            if (!requested_brick) {
+                // todo: maybe request lower res as well?
+                request_brick(int3(page_address));
+                requested_brick = true;
+            }
         } else if (page.flag == EMPTY) {
+            // todo: remove this (debug)
             color = BLUE;
         } else if (page.flag == MAPPED) {
             if (page.flag == MAPPED) {
-                color = float4(page_color, 1.);
+                //color = float4(page_color, 1.);
             }
 
             report_usage(int3(page.location / brick_size));
 
-            let start = transform_to_brick(voxel_line.state.entry, lod, page);
-            let stop = transform_to_brick(voxel_line.state.exit, lod, page);
-            let brick_distance = distance(start * float3(page_table_meta.resolutions[lod].brick_size), stop * float3(page_table_meta.resolutions[lod].brick_size));
-            let num_steps = i32(brick_distance + 0.5);
-            if (num_steps < 1) {
-                color = WHITE;
-                break;
+            let start = normalize_cache_address(compute_cache_address(voxel_line.state.entry, lod, page.location));
+            let stop = normalize_cache_address(compute_cache_address(voxel_line.state.exit, lod, page.location));
+
+
+            let brick_step = int3(sign(voxel_line.state.exit - voxel_line.state.entry));
+            var correct = true;
+            for (var i = 0; i < 3; i += 1) {
+                if brick_step[i] > 0 {
+                    if voxel_line.brick_step[i] <= 0 {
+                        correct = false;
+                    }
+                } else if brick_step[i] == 0 {
+                    if voxel_line.brick_step[i] != 0 {
+                        correct = false;
+                    }
+                } else {
+                    if voxel_line.brick_step[i] >= 0 {
+                        correct = false;
+                    }
+                }
             }
+            if !correct {
+                color = RED;
+                //break;
+            }
+            if all(brick_step == voxel_line.brick_step) {
+                //color = GREEN;
+                //break;
+            }
+
+
+            let brick_distance = distance(start * float3(page_table_meta.resolutions[lod].brick_size), stop * float3(page_table_meta.resolutions[lod].brick_size));
+            let num_steps = 10;//i32(brick_distance + 0.5);
+
+
+            if (num_steps < 1) {
+                //color = RED;
+                //break;
+            }
+
 
             // todo: step through brick
             let step = (stop - start) / f32(num_steps);
-            //color = ray_cast(color, start, step, num_steps);
-            color = float4(float3(sample_volume(start)), 1.);
+            color = ray_cast(color, start, step, num_steps);
+            //color = float4(float3(sample_volume(start)), 1.);
 
             /*
             // todo: this is not true - needs to be translated
@@ -271,7 +305,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 break;
             }
         }
-        advance(&voxel_line, &ray_os);
     }
 
     debug(pixel, color);

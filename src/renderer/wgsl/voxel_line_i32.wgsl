@@ -5,10 +5,10 @@
 
 struct VoxelLineState {
     // the position along the ray where it enters the current brick
-    entry: float3,
+    entry: int3,
 
     // the position along the ray where it exits the current brick
-    exit: float3,
+    exit: int3,
 
     // the current brick address along a VoxelLine's line
     brick: int3,
@@ -30,9 +30,6 @@ struct VoxelLineState {
 struct VoxelLine {
     // never changes
 
-    grid_min: uint3,
-    grid_max: uint3,
-
     // the step direction in each dimension in bricks (x in [-1, 0, 1])
     brick_step: int3,
 
@@ -52,8 +49,6 @@ struct VoxelLine {
 
 fn create_voxel_line(start: float3, stop: float3, t_min: f32, ray: Ray, page_table: ptr<function, PageTableMeta, read_write>) -> VoxelLine {
     let pt = *page_table;
-    let grid_min = pt.page_table_offset;
-    let grid_max = grid_min + pt.page_table_extent;
 
     let brick_step = int3(sign(ray.direction));
     let current_position = start;
@@ -82,8 +77,6 @@ fn create_voxel_line(start: float3, stop: float3, t_min: f32, ray: Ray, page_tab
     );
 
     return VoxelLine(
-        grid_min,
-        grid_max,
         brick_step,
         last_brick,
         t_delta,
@@ -105,10 +98,4 @@ fn advance(voxel_line: ptr<function, VoxelLine, read_write>, ray: Ray) {
 
     (*voxel_line).state.entry = clamp(ray_at(ray, vl.state.t_min + EPSILON), float3(), float3(1.));
     (*voxel_line).state.exit  = clamp(ray_at(ray, vl.state.t_max[vl.state.next_step_dimension] - EPSILON), float3(), float3(1.));
-}
-
-fn in_grid(voxel_line: ptr<function, VoxelLine, read_write>) -> bool {
-    let vl = *voxel_line;
-    let brick = uint3(vl.state.brick);
-    return all(brick >= vl.grid_min) && all(brick <= vl.grid_max);
 }

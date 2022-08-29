@@ -39,20 +39,21 @@ struct PageTableMeta {
     // todo: store volume_to_padded ratio?
 }
 
-type ReadOnlyPageTableMeta = ptr<function, PageTableMeta, read>;
-
-fn compute_page_address(page_table: ReadOnlyPageTableMeta, position: float3) -> uint3 {
+fn compute_page_address(page_table: ptr<function, PageTableMeta, read_write>, position: float3) -> uint3 {
+    let pt = *page_table;
     return min(
-        page_table.offset + uint3(floor(float3(page_table.page_table_extent) * position)),
-        page_table.offset + page_table.page_table_extent - uint3(1u)
+        pt.page_table_offset + uint3(floor(float3(pt.page_table_extent) * position)),
+        pt.page_table_offset + pt.page_table_extent - uint3(1u)
     );
 }
 
-fn compute_volume_to_padded(page_table: ReadOnlyPageTableMeta) -> float3 {
-    let volume_size = float3(page_table.volume_size);
+fn compute_volume_to_padded(page_table: ptr<function, PageTableMeta, read_write>) -> float3 {
+    let pt = *page_table;
 
-    let extent = page_table.page_table_extent;
-    let brick_size = page_table.brick_size;
+    let volume_size = float3(pt.volume_size);
+
+    let extent = pt.page_table_extent;
+    let brick_size = pt.brick_size;
     let padded_size = float3(brick_size * extent);
 
     return volume_size / padded_size;
