@@ -9,6 +9,9 @@
 @include(type_alias)
 @include(voxel_line_f32)
 
+// includes that require the shader to define certain functions
+@include(volume_util)
+
 // constant values
 // todo: maybe just remove this
 let relative_step_size: f32 = 1.;
@@ -220,12 +223,13 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             // todo: remove this (debug)
             color = float4(page_color, 1.);
 
-            if (!requested_brick && false) {
+            if (!requested_brick) {
                 // todo: maybe request lower res as well?
                 request_brick(int3(page_address));
                 requested_brick = true;
             }
 
+            /*
             if (any(voxel_line.state.t_max < float3(0.0))) {
                 color = BLUE;
                 break;
@@ -244,6 +248,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 color = RED;
                 break;
             }
+            */
         } else if (page.flag == EMPTY) {
             // todo: remove this (debug)
             color = BLUE;
@@ -285,30 +290,24 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             }
 
 
-            let brick_distance = distance(start * float3(page_table_meta.resolutions[lod].brick_size), stop * float3(page_table_meta.resolutions[lod].brick_size));
-            let num_steps = 10;//i32(brick_distance + 0.5);
+            let brick_distance = distance(
+                start * float3(page_table_meta.resolutions[lod].brick_size),
+                stop * float3(page_table_meta.resolutions[lod].brick_size)
+            );
+            let num_steps = i32(brick_distance + 0.5);
 
 
             if (num_steps < 1) {
                 //color = RED;
-                //break;
+                break;
             }
 
 
             // todo: step through brick
             let step = (stop - start) / f32(num_steps);
             color = ray_cast(color, start, step, num_steps);
+            break;
             //color = float4(float3(sample_volume(start)), 1.);
-
-            /*
-            // todo: this is not true - needs to be translated
-            let start = start_os;
-            // todo: this is not true - needs to be scaled (does it though)
-            let step = ray.direction;
-            // todo: this is not true - needs to be determined based on brick boundary
-            let num_steps = 5;
-            color = ray_cast(color, start, step, num_steps);
-            */
 
             if (is_saturated(color)) {
                 break;
@@ -332,6 +331,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 }
 
 fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32) -> float4 {
+    let view_direction = normalize(step);
     var color = in_color;
 
     var sample_location = start;
@@ -341,7 +341,7 @@ fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32) -> fl
         // todo: make minimum threshold configurable
         if (value > 0.1) {
             // todo: compute lighting
-            var lighting = BLUE;
+            var lighting = compute_lighting(value, sample_location, step, view_direction);
             lighting.a = value;
             color += lighting;
         }
@@ -356,7 +356,32 @@ fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32) -> fl
     return color;
 }
 
+fn compute_lighting(value: f32, x: float3, step: float3, view_direction: float3) -> float4 {
+    let view = normalize(view_direction);
 
+    var light_direction = view;//float3(1.);
+
+    let normal = compute_volume_normal(x, step, view);
+
+    let ambient = 0.2;
+
+    let diffuse = clamp(dot(normal, light_direction), 0., 1.);
+
+    let halfway = normalize(light_direction + view);
+    let shininess = 40.;
+    let specular = pow(max(dot(halfway, normal), 0.), shininess);
+
+    // Calculate final color by componing different components
+    return float4(
+        apply_colormap(value) * (ambient + diffuse) + specular,
+        value
+    );
+}
+
+fn apply_colormap(value: f32) -> float3{
+    let u_clim = float2(0., 0.5);
+    return BLUE.rgb * (value - u_clim[0]) / (u_clim[1] - u_clim[0]);
+}
 
 // page table stuff
 fn select_level_of_detail(distance: f32, lowest_lod: u32) -> u32 {
