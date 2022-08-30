@@ -50,33 +50,56 @@ struct VoxelLine {
     state: VoxelLineState,
 }
 
-fn create_voxel_line(start: float3, stop: float3, t_min: f32, ray: Ray, page_table: ptr<function, PageTableMeta, read_write>) -> VoxelLine {
+fn create_voxel_line(ray: Ray, t_min: f32, t_max: f32, page_table: ptr<function, PageTableMeta, read_write>) -> VoxelLine {
     let pt = *page_table;
+    let volume_to_padded = compute_volume_to_padded(page_table);
+    let r = Ray(ray.origin * volume_to_padded, ray.direction * volume_to_padded, t_max);
+
     let grid_min = pt.page_table_offset;
     let grid_max = grid_min + pt.page_table_extent;
 
-    let brick_step = int3(sign(ray.direction));
+    let scaled_ray = Ray(ray.origin * volume_to_padded, ray.direction * volume_to_padded, 0.);
+
+    let start = clamp(ray_at(ray, t_min), float3(), float3(1.));
+    let stop  = clamp(ray_at(ray, t_max), float3(), float3(1.));
+
+    let brick_step = int3(sign(scaled_ray.direction));
     let current_position = start;
 
-    let volume_to_padded = compute_volume_to_padded(page_table);
     let current_brick = int3(compute_page_address(page_table, start * volume_to_padded));
     let last_brick = int3(compute_page_address(page_table, stop * volume_to_padded));
 
+    let t_max_no_padding = ((stop.x * volume_to_padded) - ray.origin.x) / ray.direction.x;
+
     let normalized_brick_size = 1. / float3(pt.page_table_extent);
-    let t_delta = normalized_brick_size / (ray.direction * float3(brick_step));
+    let t_delta = normalized_brick_size / abs(ray.direction);
 
-    let previous_brick = current_brick - clamp(brick_step, int3(-1), int3(0)) * -1;
-    let t_max = t_min + (float3(previous_brick) * normalized_brick_size - current_position) / ray.direction;
+    let current_index = max(int3(1), int3(ceil(scaled_ray.origin - float3(grid_min) / normalized_brick_size)));
 
-    let next_step_dimension = min_dimension(t_max);
-    let current_exit = clamp(ray_at(ray, t_max[next_step_dimension] - EPSILON), float3(), float3(1.));
+    var current_t_max = float3(t_max_no_padding);
+    for (var i: u32 = 0u; i < 3u; i += 1u) {
+        if (ray.direction[i] < 0. - EPSILON) {
+            let previous_brick = current_index[i] - 1;
+            current_t_max[i] = t_min + (f32(grid_min[i]) + f32(previous_brick) * normalized_brick_size[i] - scaled_ray.origin[i]) / scaled_ray.direction[i];
+        } else if (ray.direction[i] > 0. + EPSILON) {
+            current_t_max[i] = t_min + (f32(grid_min[i]) + f32(current_index[i]) * normalized_brick_size[i] - scaled_ray.origin[i]) / scaled_ray.direction[i];
+        }
+    }
+
+    /*
+    let previous_brick = current_brick + clamp(brick_step, int3(-1), int3()) - int3(grid_min);
+    let current_t_max = t_min + (float3(grid_min) + float3(previous_brick) * normalized_brick_size - ray.origin) / ray.direction;
+    */
+
+    let next_step_dimension = min_dimension(current_t_max);
+    let current_exit = clamp(ray_at(ray, current_t_max[next_step_dimension] - EPSILON), float3(), float3(1.));
 
     let state = VoxelLineState(
         current_position,
         current_exit,
         current_brick,
         t_min,
-        t_max,
+        current_t_max,
         next_step_dimension,
         uint3()
     );
@@ -87,7 +110,7 @@ fn create_voxel_line(start: float3, stop: float3, t_min: f32, ray: Ray, page_tab
         brick_step,
         last_brick,
         t_delta,
-        t_max,
+        current_t_max,
         state
     );
 }

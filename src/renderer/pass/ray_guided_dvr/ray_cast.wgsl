@@ -184,8 +184,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let object_to_view = uniforms.camera.transform.world_to_object * uniforms.volume_transform.object_to_world;
 
-    let start_os = clamp(ray_at(ray_os, max(0., intersection_record.t_min)), float3(), float3(1.));
-    let end_os   = clamp(ray_at(ray_os, intersection_record.t_max), float3(), float3(1.));
+    let t_min = max(0., intersection_record.t_min);
+    let t_max = intersection_record.t_max;
 
     let timestamp = uniforms.timestamp;
 
@@ -194,32 +194,22 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     var color = float4();
     var requested_brick = false;
-    var current_lod = 0u;
-    var current_page_table = clone_page_table_meta(0u);
+    var last_lod = 0u;
+    var page_table = clone_page_table_meta(0u);
 
-    for (var voxel_line = create_voxel_line(
-            start_os,
-            end_os,
-            max(0., intersection_record.t_min),
-            ray_os,
-            &current_page_table
-         );
-         in_grid(&voxel_line);
-         advance(&voxel_line, ray_os)
+    for (
+        var voxel_line = create_voxel_line(ray_os, t_min, t_max, &page_table);
+        in_grid(&voxel_line);
+        advance(&voxel_line, ray_os)
     ) {
         let position = voxel_line.state.entry;
         let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
         let lod = select_level_of_detail(distance_to_camera, lowest_lod);
-        if (lod != current_lod) {
-            current_lod = lod;
-            current_page_table = clone_page_table_meta(lod);
-            voxel_line = create_voxel_line(
-                position,
-                end_os,
-                voxel_line.state.t_min,
-                ray_os,
-                &current_page_table
-            );
+        if (lod != last_lod) {
+            last_lod = lod;
+            page_table = clone_page_table_meta(lod);
+            // todo: this could lead to problems if the line creation assumes that t_min is either 0 (in the grid) or x (at the grid boundary) while it might actually actually be y > 0 (somewhere in the grid)
+            voxel_line = create_voxel_line(ray_os, voxel_line.state.t_min, t_max, &page_table);
         }
 
         let page_address = uint3(voxel_line.state.brick);
@@ -230,10 +220,29 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             // todo: remove this (debug)
             color = float4(page_color, 1.);
 
-            if (!requested_brick) {
+            if (!requested_brick && false) {
                 // todo: maybe request lower res as well?
                 request_brick(int3(page_address));
                 requested_brick = true;
+            }
+
+            if (any(voxel_line.state.t_max < float3(0.0))) {
+                color = BLUE;
+                break;
+            }
+
+            if (any(voxel_line.state.t_max < float3(voxel_line.state.t_min))) {
+                color = WHITE;
+                break;
+            }
+
+            let brick_step = int3(sign(voxel_line.state.exit - voxel_line.state.entry));
+            if (all(brick_step == voxel_line.brick_step)) {
+                color = GREEN;
+                break;
+            } else {
+                color = RED;
+                break;
             }
         } else if (page.flag == EMPTY) {
             // todo: remove this (debug)
@@ -252,25 +261,25 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             let brick_step = int3(sign(voxel_line.state.exit - voxel_line.state.entry));
             var correct = true;
             for (var i = 0; i < 3; i += 1) {
-                if brick_step[i] > 0 {
-                    if voxel_line.brick_step[i] <= 0 {
+                if (brick_step[i] > 0) {
+                    if (voxel_line.brick_step[i] <= 0) {
                         correct = false;
                     }
-                } else if brick_step[i] == 0 {
-                    if voxel_line.brick_step[i] != 0 {
+                } else if (brick_step[i] == 0) {
+                    if (voxel_line.brick_step[i] != 0) {
                         correct = false;
                     }
                 } else {
-                    if voxel_line.brick_step[i] >= 0 {
+                    if (voxel_line.brick_step[i] >= 0) {
                         correct = false;
                     }
                 }
             }
-            if !correct {
+            if (!correct) {
                 color = RED;
-                //break;
+                break;
             }
-            if all(brick_step == voxel_line.brick_step) {
+            if (all(brick_step == voxel_line.brick_step)) {
                 //color = GREEN;
                 //break;
             }
