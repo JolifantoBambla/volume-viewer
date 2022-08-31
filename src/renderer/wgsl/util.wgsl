@@ -30,3 +30,17 @@ fn min_dimension(v: float3) -> u32 {
         return 2u;
     }
 }
+
+fn max_dimension(v: float3) -> u32 {
+    if (v.x > v.y && v.x > v.z) {
+        return 0u;
+    } else if (v.y > v.z) {
+        return 1u;
+    } else {
+        return 2u;
+    }
+}
+
+fn clamp_to_one(v: float3) -> float3 {
+    return clamp(v, float3(), float3(1.));
+}

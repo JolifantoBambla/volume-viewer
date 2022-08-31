@@ -200,6 +200,9 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var last_lod = 0u;
     var page_table = clone_page_table_meta(0u);
 
+    // todo: remove (debug)
+    var it = 0;
+
     for (
         var voxel_line = create_voxel_line(ray_os, t_min, t_max, &page_table);
         in_grid(&voxel_line);
@@ -216,6 +219,37 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
 
         let page_address = uint3(voxel_line.state.brick);
+
+        let page_address_entry = compute_page_address(&page_table, voxel_line.state.entry);
+        let page_address_exit  = compute_page_address(&page_table, voxel_line.state.exit);
+
+        let wrong_entry = any(page_address != page_address_entry);
+        let wrong_exit = any(page_address != page_address_exit);
+        let just_wrong = any(page_address_entry != page_address_exit);
+        if (wrong_entry || wrong_exit || just_wrong) {
+            if (wrong_entry) {
+                color = RED;
+            } else if (wrong_exit && just_wrong) {
+                color = MAGENTA;
+                var next_page_address = int3(page_address);
+                next_page_address[voxel_line.state.next_step_dimension] += voxel_line.brick_step[voxel_line.state.next_step_dimension];
+                if (any(uint3(next_page_address) != page_address_exit)) {
+                    color = float4(0.5, 0.5, 0.5, 1.);
+                }
+            } else if (wrong_exit) {
+                color = BLACK;
+            } else {
+                color = WHITE;
+            }
+
+
+        } else {
+            color = GREEN;
+        }
+        if (it == 0) {
+            break;
+        }
+
         let page_color = float3(page_address) / float3(7., 7., 1.);
 
         let page = get_page(page_address);
@@ -228,94 +262,47 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 request_brick(int3(page_address));
                 requested_brick = true;
             }
-
-            /*
-            if (any(voxel_line.state.t_max < float3(0.0))) {
-                color = BLUE;
-                break;
-            }
-
-            if (any(voxel_line.state.t_max < float3(voxel_line.state.t_min))) {
-                color = WHITE;
-                break;
-            }
-
-            let brick_step = int3(sign(voxel_line.state.exit - voxel_line.state.entry));
-            if (all(brick_step == voxel_line.brick_step)) {
-                color = GREEN;
-                break;
-            } else {
-                color = RED;
-                break;
-            }
-            */
-        } else if (page.flag == EMPTY) {
-            // todo: remove this (debug)
-            color = BLUE;
         } else if (page.flag == MAPPED) {
-            if (page.flag == MAPPED) {
-                //color = float4(page_color, 1.);
-            }
-
             report_usage(int3(page.location / brick_size));
 
             let start = normalize_cache_address(compute_cache_address(voxel_line.state.entry, lod, page.location));
             let stop = normalize_cache_address(compute_cache_address(voxel_line.state.exit, lod, page.location));
 
-
             let brick_step = int3(sign(voxel_line.state.exit - voxel_line.state.entry));
-            var correct = true;
-            for (var i = 0; i < 3; i += 1) {
-                if (brick_step[i] > 0) {
-                    if (voxel_line.brick_step[i] <= 0) {
-                        correct = false;
-                    }
-                } else if (brick_step[i] == 0) {
-                    if (voxel_line.brick_step[i] != 0) {
-                        correct = false;
-                    }
-                } else {
-                    if (voxel_line.brick_step[i] >= 0) {
-                        correct = false;
-                    }
-                }
-            }
-            if (!correct) {
-                color = RED;
-                break;
-            }
-            if (all(brick_step == voxel_line.brick_step)) {
+            if (any(brick_step != voxel_line.brick_step)) {
                 //color = GREEN;
                 //break;
             }
 
-
             let brick_distance = distance(
-                start * float3(page_table_meta.resolutions[lod].brick_size),
-                stop * float3(page_table_meta.resolutions[lod].brick_size)
+                start * float3(page_table.brick_size),
+                stop * float3(page_table.brick_size)
             );
             let num_steps = i32(brick_distance + 0.5);
 
 
             if (num_steps < 1) {
                 //color = RED;
-                break;
+                //break;
             }
 
 
             // todo: step through brick
             let step = (stop - start) / f32(num_steps);
             color = ray_cast(color, start, step, num_steps);
-            break;
-            //color = float4(float3(sample_volume(start)), 1.);
+            //break;
 
             if (is_saturated(color)) {
                 break;
             }
         }
+
+        // todo: remove (debug)
+        it += 1;
     }
 
     debug(pixel, color);
+
 
     /*
     MAYBE GET BRICK:

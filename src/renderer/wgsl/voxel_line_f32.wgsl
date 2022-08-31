@@ -61,8 +61,8 @@ fn create_voxel_line(ray: Ray, t_min: f32, t_max: f32, page_table: ptr<function,
     let normalized_brick_size = 1. / float3(pt.page_table_extent);
 
     // compute the entry and exit points for the grid
-    let entry = clamp(ray_at(ray, t_min) * volume_to_padded, float3(), float3(1.));
-    let exit  = clamp(ray_at(ray, t_max) * volume_to_padded, float3(), float3(1.));
+    let entry = clamp_to_one(ray_at(ray, t_min + EPSILON) * volume_to_padded);
+    let exit  = clamp_to_one(ray_at(ray, t_max - EPSILON) * volume_to_padded);
 
     // compute first and last brick coordinates on the line
     let current_brick = int3(compute_page_address(page_table, entry));
@@ -81,17 +81,18 @@ fn create_voxel_line(ray: Ray, t_min: f32, t_max: f32, page_table: ptr<function,
     let current_local_brick_index = current_brick - int3(grid_min);
     var current_t_max = float3(t_max);
     for (var i: u32 = 0u; i < 3u; i += 1u) {
-        if (r.direction[i] > 0. - EPSILON && r.direction[i] < 0. + EPSILON) {
+        if (brick_step[i] != 0) {
             var next_axis_crossing = current_local_brick_index[i];
-            if (r.direction[i] > 0.) {
+            if (brick_step[i] == -1) {
                 next_axis_crossing += brick_step[i];
             }
-            current_t_max[i] = t_min + (f32(next_axis_crossing) * normalized_brick_size[i] - r.origin[i]) / r.direction[i];
+            let normalized_axis_crossing = f32(next_axis_crossing) / f32(pt.page_table_extent[i] - 1u) * normalized_brick_size[i];
+            current_t_max[i] = t_min + (normalized_axis_crossing - r.origin[i]) / r.direction[i];
         }
     }
 
     let next_step_dimension = min_dimension(current_t_max);
-    let current_exit = clamp(ray_at(ray, current_t_max[next_step_dimension] - EPSILON) * volume_to_padded, float3(), float3(1.));
+    let current_exit = clamp_to_one(ray_at(ray, current_t_max[next_step_dimension] - EPSILON));
 
     let state = VoxelLineState(
         entry,
