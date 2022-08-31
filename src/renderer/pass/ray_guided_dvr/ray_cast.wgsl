@@ -215,7 +215,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             last_lod = lod;
             page_table = clone_page_table_meta(lod);
             // todo: this could lead to problems if the line creation assumes that t_min is either 0 (in the grid) or x (at the grid boundary) while it might actually actually be y > 0 (somewhere in the grid)
-            voxel_line = create_voxel_line(ray_os, voxel_line.state.t_min, t_max, &page_table);
+            voxel_line = create_voxel_line(ray_os, voxel_line.state.t_entry, t_max, &page_table);
         }
 
         let page_address = uint3(voxel_line.state.brick);
