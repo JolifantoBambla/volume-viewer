@@ -223,11 +223,29 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         let page_address_entry = compute_page_address(&page_table, voxel_line.state.entry);
         let page_address_exit  = compute_page_address(&page_table, voxel_line.state.exit);
 
+        if (voxel_line.grid_max.x == 100u) {
+            color = BLUE;
+            break;
+        }
+        if (voxel_line.grid_max.x == 300u) {
+            color = YELLOW;
+            break;
+        }
+        if (voxel_line.grid_max.x == 200u) {
+            color = BLACK;
+            break;
+        }
+
+        if (voxel_line.state.t_entry < 0.) {
+            //color = YELLOW;
+            //break;
+        }
+
         let wrong_entry = any(page_address != page_address_entry);
         let wrong_exit = any(page_address != page_address_exit);
         let just_wrong = any(page_address_entry != page_address_exit);
         if (wrong_entry || wrong_exit || just_wrong) {
-            if (wrong_entry) {
+            if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[voxel_line.state.next_step_dimension]) {
                 color = RED;
             } else if (wrong_exit && just_wrong) {
                 color = MAGENTA;
@@ -237,7 +255,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     color = float4(0.5, 0.5, 0.5, 1.);
                 }
             } else if (wrong_exit) {
-                color = BLACK;
+                color = CYAN;
             } else {
                 color = WHITE;
             }

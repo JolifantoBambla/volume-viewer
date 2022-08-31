@@ -63,7 +63,7 @@ fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<functi
     let grid_max_index = pt.page_table_extent - uint3(1u);
     let grid_max = grid_min + grid_max_index;
     let volume_to_padded = compute_volume_to_padded(page_table);
-    let normalized_brick_size = 1. / float3(grid_max_index);
+    let normalized_brick_size = 1. / float3(pt.page_table_extent);
 
     // compute the entry and exit points for the grid
     let entry = clamp_to_one(ray_at(ray, t_entry + EPSILON) * volume_to_padded);
@@ -86,10 +86,32 @@ fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<functi
     // compute step size to next axis crossing per dimension
     let next_axis_crossing_index = current_local_brick_index + clamp(brick_step, int3(), int3(1));
     let next_axis_crossing = float3(next_axis_crossing_index) * normalized_brick_size;
-    var t_next_crossing = float3(t_exit);
+    var t_next_crossing = float3(positive_infinity());
     for (var i: u32 = 0u; i < 3u; i += 1u) {
         if (brick_step[i] != 0) {
+            // todo: remove this
+            if ((next_axis_crossing[i] - r.origin[i]) < 0. && r.direction[i] > 0) {
+                var v = VoxelLine();
+                v.grid_max = uint3(100);
+                return v;
+            }
+            // that's what's happening... why?
+            if ((next_axis_crossing[i] - r.origin[i]) > 0. && r.direction[i] < 0) {
+                var v = VoxelLine();
+                v.grid_max = uint3(300);
+                return v;
+            }
+            // todo: this is wrong somehow... how can this be < 0?
+            // (a-b) / c is < 0 if...
+            //  a-b < 0 && c > 0
+            //  a-b > 0 && c < 0
             t_next_crossing[i] = t_entry + (next_axis_crossing[i] - r.origin[i]) / r.direction[i];
+
+            if (t_next_crossing[i] < t_entry) {
+                var v = VoxelLine();
+                v.grid_max = uint3(200);
+                return v;
+            }
         }
     }
 
@@ -113,8 +135,13 @@ fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<functi
     */
 
     let current_brick_coords = float3(current_local_brick_index) * normalized_brick_size;
-    var current_exit = clamp(
+    let current_exit = clamp(
         (ray_at(ray, t_next_crossing[next_step_dimension]) * volume_to_padded) - current_brick_coords,
+        float3(EPSILON),
+        float3(normalized_brick_size - EPSILON)
+    ) + current_brick_coords;
+    let current_entry = clamp(
+        (ray_at(ray, t_entry) * volume_to_padded) - current_brick_coords,
         float3(EPSILON),
         float3(normalized_brick_size - EPSILON)
     ) + current_brick_coords;
@@ -123,7 +150,7 @@ fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<functi
     // todo: maybe instead of figuring out how to make the float arithmetic to stay within bounds, clamp the int coordinates to brick bounds and then convert back to float
 
     let state = VoxelLineState(
-        entry,
+        current_entry, //entry,
         current_exit,
         current_brick,
         t_entry,
