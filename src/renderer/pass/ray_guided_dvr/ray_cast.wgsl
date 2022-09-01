@@ -223,26 +223,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         color = float4();
 
         /*
-        // if green: all initial t_next_crossing > t_entry
-        if (voxel_line.valid == 1u) {
-            color = BLUE;
-            break;
-        } else if (voxel_line.valid == 2u) {
-            color = MAGENTA;
-            break;
-        } else if (voxel_line.valid == 3u) {
-            color = RED;
-            break;
-        } else if (voxel_line.valid == 4u) {
-            color = GREEN;
-            break;
-        } else if (voxel_line.valid == 0u) {
-            color = float4(0.5, 0.5, 0.5, 1.);
-            break;
-        }
-        */
-
-        /*
         // if RGB, or BLACK: corresponding t_entry > t_next_crossing in first iteration
         // if CMY, or WHITE: corresponding t_entry > t_next_crossing in second iteration
         // if grey: all good

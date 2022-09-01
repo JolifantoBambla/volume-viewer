@@ -47,8 +47,6 @@ struct VoxelLine {
     // the ray coordinate t at which the ray left the first voxel along the line
     first_t_next_crossing: float3,
 
-    valid: u32,
-
     // the current state during line traversal
     // it starts at the first voxel along the line and is updated every time `advance` is called
     state: VoxelLineState,
@@ -60,10 +58,6 @@ struct VoxelLine {
 /// This shouln't matter...
 fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<function, PageTableMeta, read_write>) -> VoxelLine {
     let pt = *page_table;
-
-    // todo: remove (debug)
-    var valid = 0u;
-
 
     // compute basic page table properties
     let grid_min = pt.page_table_offset;
@@ -96,30 +90,9 @@ fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<functi
     var t_next_crossing = float3(t_exit + EPSILON);
     for (var i: u32 = 0u; i < 3u; i += 1u) {
         if (brick_step[i] != 0) {
-            // todo: this is wrong somehow... how can this be < 0?
-            // (a-b) / c is < 0 if...
-            //  a-b < 0 && c > 0
-            //  a-b > 0 && c < 0
             t_next_crossing[i] = t_entry + (next_axis_crossing[i] - r.origin[i]) / r.direction[i];
-
-            if ((next_axis_crossing[i] - r.origin[i]) < 0. && r.direction[i] > 0.) {
-                valid = 1u;
-                break;
-            } else if ((next_axis_crossing[i] - r.origin[i]) > 0. && r.direction[i] < 0.) {
-                valid = 2u;
-                break;
-            }
-            if (t_next_crossing[i] < t_entry) {
-                valid = 3u;
-                break;
-            }
         }
     }
-
-    if (all(t_next_crossing > float3(t_entry))) {
-        valid = 4u;
-    }
-
     let next_step_dimension = min_dimension(t_next_crossing);
 
     let current_brick_coords = float3(current_local_brick_index) * normalized_brick_size;
@@ -153,7 +126,6 @@ fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<functi
         last_brick,
         t_delta,
         t_next_crossing,
-        valid,
         state
     );
 }
