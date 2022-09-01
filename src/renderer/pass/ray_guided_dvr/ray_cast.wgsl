@@ -208,9 +208,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         in_grid(&voxel_line);
         advance(&voxel_line, ray_os)
     ) {
-
-
-
         let position = voxel_line.state.entry;
         let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
         let lod = select_level_of_detail(distance_to_camera, lowest_lod);
@@ -221,8 +218,12 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             voxel_line = create_voxel_line(ray_os, voxel_line.state.t_entry, t_max, &page_table);
         }
 
-        /*
+        // todo: remove (debug)
+        // init debug color
         color = float4();
+
+        /*
+        // if green: all initial t_next_crossing > t_entry
         if (voxel_line.valid == 1u) {
             color = BLUE;
             break;
@@ -231,94 +232,101 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             break;
         } else if (voxel_line.valid == 3u) {
             color = RED;
-        } else {
-            color = float4(0.5, 0.5, 0.5, 1.);
-        }
-        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[0]) {
-            color = CYAN;
-        } else if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[1]) {
-            color = YELLOW;
-        } else if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[2]) {
-            color = WHITE;
-        }
-        if (any(float3(voxel_line.state.t_entry) > voxel_line.state.t_next_crossing)) {
-            color = BLACK;
-        }
-        if (voxel_line.valid == 4u) {
+            break;
+        } else if (voxel_line.valid == 4u) {
             color = GREEN;
             break;
-        }
-        var asdf = false;
-        for (var i: u32 = 0; i < 3; i++) {
-            if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[i]) {
-                color = CYAN;
-                asdf = true;
-                break;
-            }
-        }
-        if (asdf) {
+        } else if (voxel_line.valid == 0u) {
+            color = float4(0.5, 0.5, 0.5, 1.);
             break;
         }
+        */
 
-        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing.x) {
-            color = RED;
-            break;
-        }
-        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing.y) {
-            color = RED;
-            break;
-        }
-        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing.z) {
-            color = RED;
-            break;
-        }
-
-        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[0]) {
-            color = BLUE;
-            break;
-        }
-        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[1]) {
-            color = BLUE;
-            break;
-        }
-        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[2]) {
-            color = BLUE;
-            break;
-        }
-
-        if (any(float3(voxel_line.state.t_entry) > voxel_line.state.t_next_crossing)) {
-
-            color = WHITE;
-            if (any(voxel_line.brick_step == int3(0))) {
-                color = WHITE;
-            }
-            if (all(float3(voxel_line.state.t_entry) > voxel_line.state.t_next_crossing)) {
-                color = BLACK;
-            }
-            break;
-        }
-
-
+        /*
+        // if RGB, or BLACK: corresponding t_entry > t_next_crossing in first iteration
+        // if CMY, or WHITE: corresponding t_entry > t_next_crossing in second iteration
+        // if grey: all good
         if (it == 0) {
-            let entry = voxel_line.state.entry;
-            let exit  = voxel_line.state.exit;
-
-            if (any(voxel_line.brick_step != int3(sign(exit - entry)))) {
-                color = YELLOW;
+            if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[0]) {
+                color = RED;
                 break;
+            } else if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[1]) {
+                color = GREEN;
+                break;
+            } else if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[2]) {
+                color = BLUE;
+                break;
+            } else if (any(float3(voxel_line.state.t_entry) > voxel_line.state.t_next_crossing)) {
+                color = BLACK;
+                break;
+            } else {
+                color = float4(0.5, 0.5, 0.5, 1.0);
             }
+            it += 1;
             continue;
         } else if (it == 1) {
-            let entry = voxel_line.state.entry;
-            let exit  = voxel_line.state.exit;
-
-            if (any(voxel_line.brick_step != int3(sign(exit - entry)))) {
+            if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[0]) {
+                color = CYAN;
+                break;
+            } else if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[1]) {
+                color = MAGENTA;
+                break;
+            } else if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[2]) {
                 color = YELLOW;
                 break;
+            } else if (any(float3(voxel_line.state.t_entry) > voxel_line.state.t_next_crossing)) {
+                color = WHITE;
+                break;
+            } else {
+                color = float4(0.5, 0.5, 0.5, 1.0);
             }
             break;
         }
         */
+
+        // if RG: sign(r.direction) != sign(entry - exit) in first iteration
+        // if CM: sign(r.direction) != sign(entry - exit) in second iteration
+        // if green: all good
+        if (it == 0) {
+            let entry = voxel_line.state.entry;
+            let exit  = voxel_line.state.exit;
+            if (any(voxel_line.brick_step != int3(sign(exit - entry)))) {
+                color = RED;
+                break;
+            } else {
+                color = GREEN;
+            }
+            it += 1;
+            continue;
+        } else if (it == 1) {
+            let entry = voxel_line.state.entry;
+            let exit  = voxel_line.state.exit;
+            if (any(voxel_line.brick_step != int3(sign(exit - entry)))) {
+               color = CYAN;
+               break;
+            } else {
+               color = GREEN;
+            }
+            break;
+        }
+
+        if (it == 2) {
+            color = RED;
+            break;
+        }
+
+        if (is_broken(&voxel_line)) {
+            color = BLACK;
+            break;
+        }
+
+        let entry1 = voxel_line.state.entry;
+        let exit1  = voxel_line.state.exit;
+
+        if (any(voxel_line.brick_step != int3(sign(exit1 - entry1)))) {
+            color = YELLOW;
+            break;
+        }
 
 
         let page_address = uint3(voxel_line.state.brick);

@@ -177,13 +177,13 @@ fn advance(voxel_line: ptr<function, VoxelLine, read_write>, ray: Ray) {
     let voxel_coords = compute_current_voxel_coords(voxel_line);
     (*voxel_line).state.entry = clamp(
         (ray_at(ray, vl.state.t_entry) * vl.volume_to_padded) - voxel_coords,
-        float3(EPSILON),
-        float3(vl.inverse_brick_size - EPSILON)
+        float3(),
+        float3(vl.inverse_brick_size)
     ) + voxel_coords;
     (*voxel_line).state.exit = clamp(
         (ray_at(ray, vl.state.t_next_crossing[vl.state.next_step_dimension]) * vl.volume_to_padded) - voxel_coords,
-        float3(EPSILON),
-        float3(vl.inverse_brick_size - EPSILON)
+        float3(),
+        float3(vl.inverse_brick_size)
     ) + voxel_coords;
 }
 
@@ -191,4 +191,9 @@ fn in_grid(voxel_line: ptr<function, VoxelLine, read_write>) -> bool {
     let vl = *voxel_line;
     let brick = uint3(vl.state.brick);
     return all(brick >= vl.grid_min) && all(brick <= vl.grid_max);
+}
+
+fn is_broken(voxel_line: ptr<function, VoxelLine, read_write>) -> bool {
+    let vl = *voxel_line;
+    return any(vl.brick_step != int3(sign(vl.state.exit - vl.state.entry)));
 }
