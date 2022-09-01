@@ -98,13 +98,13 @@ fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<functi
     let current_brick_coords = float3(current_local_brick_index) * normalized_brick_size;
     let current_entry = clamp(
         (ray_at(ray, t_entry) * volume_to_padded) - current_brick_coords,
-        float3(EPSILON),
-        float3(normalized_brick_size - EPSILON)
+        float3(),
+        float3(normalized_brick_size)
     ) + current_brick_coords;
     let current_exit = clamp(
         (ray_at(ray, t_next_crossing[next_step_dimension]) * volume_to_padded) - current_brick_coords,
-        float3(EPSILON),
-        float3(normalized_brick_size - EPSILON)
+        float3(),
+        float3(normalized_brick_size)
     ) + current_brick_coords;
 
     let state = VoxelLineState(
@@ -135,25 +135,26 @@ fn compute_current_voxel_coords(voxel_line: ptr<function, VoxelLine, read_write>
     return float3(vl.state.brick - int3(vl.grid_min)) * vl.inverse_brick_size;
 }
 
+
 fn advance(voxel_line: ptr<function, VoxelLine, read_write>, ray: Ray) {
     let vl = *voxel_line;
     let d = vl.state.next_step_dimension;
 
+    // update parameters
     (*voxel_line).state.steps[d] += 1u;
     (*voxel_line).state.brick[d] += vl.brick_step[d];
     (*voxel_line).state.t_entry = vl.state.t_next_crossing[d];
-    (*voxel_line).state.t_next_crossing[d] = vl.first_t_next_crossing[d] + f32(vl.state.steps[d]) * vl.t_delta[d];
-
-    (*voxel_line).state.next_step_dimension = min_dimension(vl.state.t_next_crossing);
+    (*voxel_line).state.t_next_crossing[d] = vl.first_t_next_crossing[d] + f32((*voxel_line).state.steps[d]) * vl.t_delta[d];
+    (*voxel_line).state.next_step_dimension = min_dimension((*voxel_line).state.t_next_crossing);
 
     let voxel_coords = compute_current_voxel_coords(voxel_line);
     (*voxel_line).state.entry = clamp(
-        (ray_at(ray, vl.state.t_entry) * vl.volume_to_padded) - voxel_coords,
+        (ray_at(ray, (*voxel_line).state.t_entry) * vl.volume_to_padded) - voxel_coords,
         float3(),
         float3(vl.inverse_brick_size)
     ) + voxel_coords;
     (*voxel_line).state.exit = clamp(
-        (ray_at(ray, vl.state.t_next_crossing[vl.state.next_step_dimension]) * vl.volume_to_padded) - voxel_coords,
+        (ray_at(ray, (*voxel_line).state.t_next_crossing[(*voxel_line).state.next_step_dimension]) * vl.volume_to_padded) - voxel_coords,
         float3(),
         float3(vl.inverse_brick_size)
     ) + voxel_coords;

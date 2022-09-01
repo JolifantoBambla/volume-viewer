@@ -283,7 +283,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             let exit  = voxel_line.state.exit;
             if (any(voxel_line.brick_step != int3(sign(exit - entry)))) {
                color = CYAN;
-               break;
             } else {
                color = GREEN;
             }
