@@ -33,6 +33,7 @@ struct VoxelLine {
     grid_min: uint3,
     grid_max: uint3,
     volume_to_padded: float3,
+    inverse_brick_size: float3,
 
     // the step direction in each dimension in bricks (x in [-1, 0, 1])
     brick_step: int3,
@@ -46,6 +47,8 @@ struct VoxelLine {
     // the ray coordinate t at which the ray left the first voxel along the line
     first_t_next_crossing: float3,
 
+    valid: u32,
+
     // the current state during line traversal
     // it starts at the first voxel along the line and is updated every time `advance` is called
     state: VoxelLineState,
@@ -58,6 +61,10 @@ struct VoxelLine {
 fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<function, PageTableMeta, read_write>) -> VoxelLine {
     let pt = *page_table;
 
+    // todo: remove (debug)
+    var valid = 0u;
+
+
     // compute basic page table properties
     let grid_min = pt.page_table_offset;
     let grid_max_index = pt.page_table_extent - uint3(1u);
@@ -66,8 +73,8 @@ fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<functi
     let normalized_brick_size = 1. / float3(pt.page_table_extent);
 
     // compute the entry and exit points for the grid
-    let entry = clamp_to_one(ray_at(ray, t_entry + EPSILON) * volume_to_padded);
-    let exit  = clamp_to_one(ray_at(ray, t_exit - EPSILON) * volume_to_padded);
+    let entry = clamp_to_one(ray_at(ray, t_entry) * volume_to_padded);
+    let exit  = clamp_to_one(ray_at(ray, t_exit) * volume_to_padded);
 
     // compute first and last brick coordinates on the line
     let current_brick = int3(compute_page_address(page_table, entry));
@@ -86,68 +93,46 @@ fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<functi
     // compute step size to next axis crossing per dimension
     let next_axis_crossing_index = current_local_brick_index + clamp(brick_step, int3(), int3(1));
     let next_axis_crossing = float3(next_axis_crossing_index) * normalized_brick_size;
-    var t_next_crossing = float3(positive_infinity());
+    var t_next_crossing = float3(t_exit + EPSILON);
     for (var i: u32 = 0u; i < 3u; i += 1u) {
         if (brick_step[i] != 0) {
-            // todo: remove this
-            if ((next_axis_crossing[i] - r.origin[i]) < 0. && r.direction[i] > 0) {
-                var v = VoxelLine();
-                v.grid_max = uint3(100);
-                return v;
-            }
-            // that's what's happening... why?
-            if ((next_axis_crossing[i] - r.origin[i]) > 0. && r.direction[i] < 0) {
-                var v = VoxelLine();
-                v.grid_max = uint3(300);
-                return v;
-            }
             // todo: this is wrong somehow... how can this be < 0?
             // (a-b) / c is < 0 if...
             //  a-b < 0 && c > 0
             //  a-b > 0 && c < 0
             t_next_crossing[i] = t_entry + (next_axis_crossing[i] - r.origin[i]) / r.direction[i];
 
+            if ((next_axis_crossing[i] - r.origin[i]) < 0. && r.direction[i] > 0.) {
+                valid = 1u;
+                break;
+            } else if ((next_axis_crossing[i] - r.origin[i]) > 0. && r.direction[i] < 0.) {
+                valid = 2u;
+                break;
+            }
             if (t_next_crossing[i] < t_entry) {
-                var v = VoxelLine();
-                v.grid_max = uint3(200);
-                return v;
+                valid = 3u;
+                break;
             }
         }
     }
 
-    let next_step_dimension = min_dimension(t_next_crossing);
-
-    var next_local_brick_index = current_local_brick_index;
-    if (brick_step[next_step_dimension] == -1) {
-        next_local_brick_index[next_step_dimension] -= brick_step[next_step_dimension];
-    } else {
-        next_local_brick_index[next_step_dimension] += brick_step[next_step_dimension];
+    if (all(t_next_crossing > float3(t_entry))) {
+        valid = 4u;
     }
 
-    let min_foo = clamp_to_one(float3(current_local_brick_index) * normalized_brick_size);
-    let max_foo = clamp_to_one(float3(next_local_brick_index) * normalized_brick_size);
-    /*
-    let current_exit = clamp(
-            ray_at(ray, t_next_crossing[next_step_dimension] - EPSILON) * volume_to_padded,
-            min(min_foo, max_foo),
-            max(min_foo, max_foo)
-        );
-    */
+    let next_step_dimension = min_dimension(t_next_crossing);
 
     let current_brick_coords = float3(current_local_brick_index) * normalized_brick_size;
-    let current_exit = clamp(
-        (ray_at(ray, t_next_crossing[next_step_dimension]) * volume_to_padded) - current_brick_coords,
-        float3(EPSILON),
-        float3(normalized_brick_size - EPSILON)
-    ) + current_brick_coords;
     let current_entry = clamp(
         (ray_at(ray, t_entry) * volume_to_padded) - current_brick_coords,
         float3(EPSILON),
         float3(normalized_brick_size - EPSILON)
     ) + current_brick_coords;
-
-
-    // todo: maybe instead of figuring out how to make the float arithmetic to stay within bounds, clamp the int coordinates to brick bounds and then convert back to float
+    let current_exit = clamp(
+        (ray_at(ray, t_next_crossing[next_step_dimension]) * volume_to_padded) - current_brick_coords,
+        float3(EPSILON),
+        float3(normalized_brick_size - EPSILON)
+    ) + current_brick_coords;
 
     let state = VoxelLineState(
         current_entry, //entry,
@@ -163,12 +148,19 @@ fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<functi
         grid_min,
         grid_max,
         volume_to_padded,
+        normalized_brick_size,
         brick_step,
         last_brick,
         t_delta,
         t_next_crossing,
+        valid,
         state
     );
+}
+
+fn compute_current_voxel_coords(voxel_line: ptr<function, VoxelLine, read_write>) -> float3 {
+    let vl = *voxel_line;
+    return float3(vl.state.brick - int3(vl.grid_min)) * vl.inverse_brick_size;
 }
 
 fn advance(voxel_line: ptr<function, VoxelLine, read_write>, ray: Ray) {
@@ -182,8 +174,17 @@ fn advance(voxel_line: ptr<function, VoxelLine, read_write>, ray: Ray) {
 
     (*voxel_line).state.next_step_dimension = min_dimension(vl.state.t_next_crossing);
 
-    (*voxel_line).state.entry = clamp(ray_at(ray, vl.state.t_entry + EPSILON) * vl.volume_to_padded, float3(), float3(1.));
-    (*voxel_line).state.exit  = clamp(ray_at(ray, vl.state.t_next_crossing[vl.state.next_step_dimension] - EPSILON) * vl.volume_to_padded, float3(), float3(1.));
+    let voxel_coords = compute_current_voxel_coords(voxel_line);
+    (*voxel_line).state.entry = clamp(
+        (ray_at(ray, vl.state.t_entry) * vl.volume_to_padded) - voxel_coords,
+        float3(EPSILON),
+        float3(vl.inverse_brick_size - EPSILON)
+    ) + voxel_coords;
+    (*voxel_line).state.exit = clamp(
+        (ray_at(ray, vl.state.t_next_crossing[vl.state.next_step_dimension]) * vl.volume_to_padded) - voxel_coords,
+        float3(EPSILON),
+        float3(vl.inverse_brick_size - EPSILON)
+    ) + voxel_coords;
 }
 
 fn in_grid(voxel_line: ptr<function, VoxelLine, read_write>) -> bool {

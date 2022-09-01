@@ -208,6 +208,9 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         in_grid(&voxel_line);
         advance(&voxel_line, ray_os)
     ) {
+
+
+
         let position = voxel_line.state.entry;
         let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
         let lod = select_level_of_detail(distance_to_camera, lowest_lod);
@@ -218,33 +221,118 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             voxel_line = create_voxel_line(ray_os, voxel_line.state.t_entry, t_max, &page_table);
         }
 
+        /*
+        color = float4();
+        if (voxel_line.valid == 1u) {
+            color = BLUE;
+            break;
+        } else if (voxel_line.valid == 2u) {
+            color = MAGENTA;
+            break;
+        } else if (voxel_line.valid == 3u) {
+            color = RED;
+        } else {
+            color = float4(0.5, 0.5, 0.5, 1.);
+        }
+        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[0]) {
+            color = CYAN;
+        } else if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[1]) {
+            color = YELLOW;
+        } else if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[2]) {
+            color = WHITE;
+        }
+        if (any(float3(voxel_line.state.t_entry) > voxel_line.state.t_next_crossing)) {
+            color = BLACK;
+        }
+        if (voxel_line.valid == 4u) {
+            color = GREEN;
+            break;
+        }
+        var asdf = false;
+        for (var i: u32 = 0; i < 3; i++) {
+            if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[i]) {
+                color = CYAN;
+                asdf = true;
+                break;
+            }
+        }
+        if (asdf) {
+            break;
+        }
+
+        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing.x) {
+            color = RED;
+            break;
+        }
+        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing.y) {
+            color = RED;
+            break;
+        }
+        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing.z) {
+            color = RED;
+            break;
+        }
+
+        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[0]) {
+            color = BLUE;
+            break;
+        }
+        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[1]) {
+            color = BLUE;
+            break;
+        }
+        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[2]) {
+            color = BLUE;
+            break;
+        }
+
+        if (any(float3(voxel_line.state.t_entry) > voxel_line.state.t_next_crossing)) {
+
+            color = WHITE;
+            if (any(voxel_line.brick_step == int3(0))) {
+                color = WHITE;
+            }
+            if (all(float3(voxel_line.state.t_entry) > voxel_line.state.t_next_crossing)) {
+                color = BLACK;
+            }
+            break;
+        }
+
+
+        if (it == 0) {
+            let entry = voxel_line.state.entry;
+            let exit  = voxel_line.state.exit;
+
+            if (any(voxel_line.brick_step != int3(sign(exit - entry)))) {
+                color = YELLOW;
+                break;
+            }
+            continue;
+        } else if (it == 1) {
+            let entry = voxel_line.state.entry;
+            let exit  = voxel_line.state.exit;
+
+            if (any(voxel_line.brick_step != int3(sign(exit - entry)))) {
+                color = YELLOW;
+                break;
+            }
+            break;
+        }
+        */
+
+
         let page_address = uint3(voxel_line.state.brick);
 
         let page_address_entry = compute_page_address(&page_table, voxel_line.state.entry);
         let page_address_exit  = compute_page_address(&page_table, voxel_line.state.exit);
 
-        if (voxel_line.grid_max.x == 100u) {
-            color = BLUE;
-            break;
-        }
-        if (voxel_line.grid_max.x == 300u) {
-            color = YELLOW;
-            break;
-        }
-        if (voxel_line.grid_max.x == 200u) {
-            color = BLACK;
-            break;
-        }
-
-        if (voxel_line.state.t_entry < 0.) {
-            //color = YELLOW;
-            //break;
-        }
-
+        /*
         let wrong_entry = any(page_address != page_address_entry);
         let wrong_exit = any(page_address != page_address_exit);
         let just_wrong = any(page_address_entry != page_address_exit);
         if (wrong_entry || wrong_exit || just_wrong) {
+            color = BLACK;
+
             if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[voxel_line.state.next_step_dimension]) {
                 color = RED;
             } else if (wrong_exit && just_wrong) {
@@ -259,14 +347,31 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             } else {
                 color = WHITE;
             }
-
-
         } else {
             color = GREEN;
+            let entry = voxel_line.state.entry;
+            let exit  = voxel_line.state.exit;
+
+            if (any(voxel_line.brick_step != int3(sign(exit - entry)))) {
+                color = YELLOW;
+            }
         }
+
+        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[voxel_line.state.next_step_dimension]) {
+            color = RED;
+            //break;
+        }
+
         if (it == 0) {
+            if (any(float3(voxel_line.state.t_entry) > voxel_line.state.t_next_crossing)) {
+                color = MAGENTA;
+                break;
+            }
+            continue;
+        } else if (it == 1) {
             break;
         }
+        */
 
         let page_color = float3(page_address) / float3(7., 7., 1.);
 
