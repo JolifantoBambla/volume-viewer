@@ -7,7 +7,7 @@
 fn positive_infinity() -> f32 { return  1. / 0.; }
 fn negative_infinity() -> f32 { return -1. / 0.; }
 
-let EPSILON = 0.00001;
+let EPSILON = 1.0e-5;//0.00001;
 
 let RED = float4(1., 0., 0., 1.);
 let GREEN = float4(0., 1., 0., 1.);

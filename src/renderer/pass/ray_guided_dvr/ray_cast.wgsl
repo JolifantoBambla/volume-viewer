@@ -218,14 +218,17 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             voxel_line = create_voxel_line(ray_os, voxel_line.state.t_entry, t_max, &page_table);
         }
 
-        // todo: remove (debug)
-        // init debug color
-        color = float4();
+        let page_address = uint3(voxel_line.state.brick);
 
+        // todo: remove (debug)
+        let page_color = float3(page_address) / float3(7., 7., 1.);
+
+        // ------------------------ DEBUG STUFF ----------------------------
         /*
         // if RGB, or BLACK: corresponding t_entry > t_next_crossing in first iteration
         // if CMY, or WHITE: corresponding t_entry > t_next_crossing in second iteration
         // if grey: all good
+        color = float4();
         if (it == 0) {
             if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[0]) {
                 color = RED;
@@ -264,9 +267,11 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
         */
 
+        /*
         // if RG: sign(r.direction) != sign(entry - exit) in first iteration
         // if CM: sign(r.direction) != sign(entry - exit) in second iteration
         // if green: all good
+        color = float4();
         if (it == 0) {
             let entry = voxel_line.state.entry;
             let exit  = voxel_line.state.exit;
@@ -288,30 +293,88 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             }
             break;
         }
+        */
 
-        if (it == 2) {
-            color = RED;
-            break;
-        }
-
-        if (is_broken(&voxel_line)) {
-            color = BLACK;
-            break;
-        }
-
-        let entry1 = voxel_line.state.entry;
-        let exit1  = voxel_line.state.exit;
-
-        if (any(voxel_line.brick_step != int3(sign(exit1 - entry1)))) {
-            color = YELLOW;
-            break;
-        }
-
-
-        let page_address = uint3(voxel_line.state.brick);
-
+        // note: this description is outdated!
+        // first iteration:
+        // - red: entry and exit are not in the current brick
+        // - green: entry is not in the current brick
+        // - blue: exit is not the current brick
+        // - white: entry and exit are in different blocks
+        // second iteration:
+        // - cyan: entry and exit are not in the current brick
+        // - magenta: entry is not in the current brick
+        // - yellow: exit is not the current brick
+        // - black: entry and exit are in different blocks
+        // grey: all good
+        color = float4();
         let page_address_entry = compute_page_address(&page_table, voxel_line.state.entry);
         let page_address_exit  = compute_page_address(&page_table, voxel_line.state.exit);
+
+        let wrong_entry = any(page_address != page_address_entry);
+        let wrong_exit = any(page_address != page_address_exit);
+        let not_in_same_block = any(page_address_entry != page_address_exit);
+        let exit_in_next_block = all(page_address_exit == next_voxel_index(&voxel_line));
+
+        // what I found out so far:
+        // - wrong exits are always in the next block
+        // - wrong entries never occur in the first iteration
+        // so the next questions are:
+        // - are wrong entries also in the next block? or are they in the previous block?
+        // - how can wrong exits in the second iteration even be in the next block?
+        // - are exits only just on the other side of the block boundary or are they way off?
+        if (it == 0) {
+            if (wrong_entry && wrong_exit) {
+                color = RED;
+                break;
+            } else if (wrong_entry) {
+                color = GREEN;
+                break;
+            } else if (wrong_exit) {
+                // -> wrong exit is always in next block!
+                if (exit_in_next_block) {
+                    color = float4(0.5, 0.5, 0.5, 1.);
+                } else {
+                    color = BLUE;
+                }
+                break;
+            } else if (not_in_same_block) {
+                color = WHITE;
+                break;
+            } else {
+                color = float4(0.5, 0.5, 0.5, 1.);
+            }
+            it += 1;
+            continue;
+        } else if (it == 1) {
+            if (wrong_entry && wrong_exit) {
+                // -> wrong exit is always in next block!
+                if (exit_in_next_block) {
+                    color = float4(0.5, 0.5, 0.5, 1.);
+                } else {
+                    color = MAGENTA;
+                }
+                break;
+            } else if (wrong_entry) {
+                color = MAGENTA;
+                break;
+            } else if (wrong_exit) {
+                // -> wrong exit is always in next block!
+                if (exit_in_next_block) {
+                    color = float4(0.5, 0.5, 0.5, 1.);
+                } else {
+                    color = YELLOW;
+                }
+                break;
+            } else if (not_in_same_block) {
+                color = BLACK;
+                break;
+            } else {
+                color = float4(0.5, 0.5, 0.5, 1.);
+            }
+            break;
+        }
+
 
         /*
         let wrong_entry = any(page_address != page_address_entry);
@@ -360,7 +423,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
         */
 
-        let page_color = float3(page_address) / float3(7., 7., 1.);
 
         let page = get_page(page_address);
         if (page.flag == UNMAPPED) {
@@ -380,10 +442,11 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
             let brick_step = int3(sign(voxel_line.state.exit - voxel_line.state.entry));
             if (any(brick_step != voxel_line.brick_step)) {
-                //color = GREEN;
-                //break;
+                color = GREEN;
+                break;
             }
 
+            // todo: fix num_steps, find out why boundaries are visible
             let brick_distance = distance(
                 start * float3(page_table.brick_size),
                 stop * float3(page_table.brick_size)
@@ -392,6 +455,9 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
 
             if (num_steps < 1) {
+                // todo: remove (debug)
+                it += 1;
+                continue;
                 //color = RED;
                 //break;
             }
