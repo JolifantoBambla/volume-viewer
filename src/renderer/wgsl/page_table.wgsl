@@ -67,7 +67,8 @@ fn compute_volume_to_padded(page_table: ptr<function, PageTableMeta, read_write>
     let brick_size = pt.brick_size;
     let padded_size = float3(brick_size * extent);
 
-    return volume_size / padded_size;
+    // todo: return true ratio
+    return float3(1.);//volume_size / padded_size;
 }
 
 struct PageDirectoryMeta {

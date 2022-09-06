@@ -56,7 +56,7 @@ fn generate_camera_ray(camera: Camera, pixel: float2, resolution: float2) -> Ray
     }
 
     return transform_ray(
-        Ray (origin, direction, positive_infinity()),
+        Ray (origin, direction, 100000.),//positive_infinity()),
         camera.transform.object_to_world
     );
 }

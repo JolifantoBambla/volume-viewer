@@ -206,7 +206,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     for (
         var voxel_line = create_voxel_line(ray_os, t_min, t_max, &page_table);
         in_grid(&voxel_line);
-        advance(&voxel_line, ray_os)
+        advance(&voxel_line)
     ) {
         let position = voxel_line.state.entry;
         let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
@@ -295,6 +295,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
         */
 
+        /*
         // note: this description is outdated!
         // first iteration:
         // - red: entry and exit are not in the current brick
@@ -310,18 +311,25 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         color = float4();
         let page_address_entry = compute_page_address(&page_table, voxel_line.state.entry);
         let page_address_exit  = compute_page_address(&page_table, voxel_line.state.exit);
+        let next_voxel = next_voxel_index(&voxel_line);
+        let last_voxel = last_voxel_index(&voxel_line);
 
         let wrong_entry = any(page_address != page_address_entry);
         let wrong_exit = any(page_address != page_address_exit);
         let not_in_same_block = any(page_address_entry != page_address_exit);
-        let exit_in_next_block = all(page_address_exit == next_voxel_index(&voxel_line));
+        let exit_in_next_block = all(page_address_exit == next_voxel);
+        let entry_in_next_block = all(page_address_entry == next_voxel);
+        let entry_in_last_block = all(page_address_entry == last_voxel);
+        let next_block_is_last = all(int3(next_voxel) == voxel_line.last_brick);
 
         // what I found out so far:
         // - wrong exits are always in the next block
-        // - wrong entries never occur in the first iteration
+        // - wrong exits happen almost exclusively when goint in the positive direction
+        // - wrong entries never occur in the first iteration (duh)
+        // - wrong entries happen almost exclusively when going in the negative direction
+        // - wrong entries are always in the previous block
+        // - a Python implementation (numpy on jupyter) works fine
         // so the next questions are:
-        // - are wrong entries also in the next block? or are they in the previous block?
-        // - how can wrong exits in the second iteration even be in the next block?
         // - are exits only just on the other side of the block boundary or are they way off?
         if (it == 0) {
             if (wrong_entry && wrong_exit) {
@@ -333,7 +341,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             } else if (wrong_exit) {
                 // -> wrong exit is always in next block!
                 if (exit_in_next_block) {
-                    color = float4(0.5, 0.5, 0.5, 1.);
+                    color = BLUE;//float4(0.5, 0.5, 0.5, 1.);
                 } else {
                     color = BLUE;
                 }
@@ -348,22 +356,33 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             continue;
         } else if (it == 1) {
             if (wrong_entry && wrong_exit) {
-                // -> wrong exit is always in next block!
-                if (exit_in_next_block) {
-                    color = float4(0.5, 0.5, 0.5, 1.);
+                // this never happens
+                if (!exit_in_next_block) {
+                    color = CYAN;
+                    break;
+                }
+                if (entry_in_next_block) {
+                    color = RED;
+                } else if (entry_in_last_block) {
+                    color = YELLOW;
                 } else {
                     color = MAGENTA;
                 }
                 break;
             } else if (wrong_entry) {
                 color = MAGENTA;
+                if (entry_in_next_block) {
+                    color = RED;
+                } else if (entry_in_last_block) {
+                    color = YELLOW;
+                }
                 break;
             } else if (wrong_exit) {
                 // -> wrong exit is always in next block!
                 if (exit_in_next_block) {
-                    color = float4(0.5, 0.5, 0.5, 1.);
+                    color = BLUE;//float4(0.5, 0.5, 0.5, 1.);
                 } else {
-                    color = YELLOW;
+                    color = BLUE;//YELLOW;
                 }
                 break;
             } else if (not_in_same_block) {
@@ -374,6 +393,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             }
             break;
         }
+        */
 
 
         /*

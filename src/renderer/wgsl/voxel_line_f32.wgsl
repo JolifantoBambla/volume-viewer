@@ -25,6 +25,8 @@ struct TraversalState {
 
     // the number of steps that where taken along the VoxelLine's line per dimension
     steps: uint3,
+
+    last_step_dimension: u32,
 }
 
 /// A line voxelization for a ray intersecting a grid in the unit cube (x in [0.0, 1.0]^3)
@@ -107,7 +109,8 @@ fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<functi
         0., // t_entry
         t_next_crossing,
         next_step_dimension,
-        uint3()
+        uint3(),
+        0 // todo: remove
     );
 
     var voxel_line = VoxelLine(
@@ -122,8 +125,13 @@ fn create_voxel_line(ray: Ray, t_entry: f32, t_exit: f32, page_table: ptr<functi
         t_next_crossing,
         state
     );
-    _update_entry_and_exit(&voxel_line, ray);
+    _update_entry_and_exit(&voxel_line);
     return voxel_line;
+}
+
+fn compute_voxel_coords(voxel_line: ptr<function, VoxelLine, read_write>, voxel: int3) -> float3 {
+    let vl = *voxel_line;
+    return float3(voxel - int3(vl.grid_min)) * vl.inverse_brick_scale;
 }
 
 fn compute_current_voxel_coords(voxel_line: ptr<function, VoxelLine, read_write>) -> float3 {
@@ -131,28 +139,81 @@ fn compute_current_voxel_coords(voxel_line: ptr<function, VoxelLine, read_write>
     return float3(vl.state.brick - int3(vl.grid_min)) * vl.inverse_brick_scale;
 }
 
-fn _update_entry_and_exit(voxel_line: ptr<function, VoxelLine, read_write>, ray: Ray) {
+fn next_voxel_index(voxel_line: ptr<function, VoxelLine, read_write>) -> uint3 {
+    let vl = *voxel_line;
+    let d = vl.state.next_step_dimension;
+    var brick = vl.state.brick;
+    brick[d] += vl.brick_step[d];
+    return uint3(brick);
+}
+
+fn last_voxel_index(voxel_line: ptr<function, VoxelLine, read_write>) -> uint3 {
+    let vl = *voxel_line;
+    let d = vl.state.last_step_dimension;
+    var brick = vl.state.brick;
+    brick[d] -= vl.brick_step[d];
+    return uint3(brick);
+}
+
+fn _t_for_dimension(vl: VoxelLine, voxel: int3, dimension: u32) -> f32 {
+    let coords = f32(voxel[dimension] - i32(vl.grid_min[dimension])) * vl.inverse_brick_scale[dimension];
+    return clamp((coords - vl.ray.origin[dimension]) / vl.ray.direction[dimension], 0., vl.ray.tmax);
+}
+
+fn _t_entry(vl: VoxelLine) -> f32 {
+    let d = vl.state.last_step_dimension;
+    var voxel = vl.state.brick;
+    if (vl.brick_step[d] < 0) {
+        var voxel = vl.state.brick[d] - vl.brick_step[d];
+    }
+    return _t_for_dimension(vl, voxel, d) + EPSILON;
+}
+
+fn _t_exit(vl: VoxelLine) -> f32 {
+    let d = vl.state.next_step_dimension;
+    var voxel = vl.state.brick;
+    if (vl.brick_step[d] > 0) {
+        var voxel = vl.state.brick[d] + vl.brick_step[d];
+    }
+    return _t_for_dimension(vl, voxel, d);
+}
+
+fn _update_entry_and_exit(voxel_line: ptr<function, VoxelLine, read_write>) {
     let vl = *voxel_line;
     let voxel_coords = compute_current_voxel_coords(voxel_line);
+
+    /*
+    let d = vl.state.next_step_dimension;
+    var entry_voxel = voxel_coords;
+    if (vl.brick_step[vl.state.last_step_dimension] > 0) {
+        let last_voxel = int3(last_voxel_index(voxel_line));
+        entry_voxel = compute_voxel_coords(voxel_line, last_voxel);
+    }
+    let t_entry = ((entry_voxel[d] - vl.ray.origin[d]) / vl.ray.direction[d]) + EPSILON;
+    */
+
     // note: clamping to these bounds changes the ray direction a bit. using epsilon only on t would be more correct but
     //   more difficult to control
     let brick_bounds = AABB(
         float3(),// float3(EPSILON),
         float3(vl.inverse_brick_scale) //float3(vl.inverse_brick_scale - EPSILON)
     );
+    let t_entry = vl.state.t_entry + EPSILON * 10.;
+    // ensure t_exit is larger than t_entry
+    let t_exit = max(t_entry, vl.state.t_next_crossing[vl.state.next_step_dimension] - EPSILON * 10.);
     (*voxel_line).state.entry = clamp(
-        (ray_at(vl.ray, vl.state.t_entry + EPSILON)) - voxel_coords,
+        (ray_at(vl.ray, t_entry)) - voxel_coords,
         brick_bounds.min,
         brick_bounds.max
     ) + voxel_coords;
     (*voxel_line).state.exit = clamp(
-        (ray_at(vl.ray, vl.state.t_next_crossing[vl.state.next_step_dimension] - EPSILON)) - voxel_coords,
+        (ray_at(vl.ray, t_exit)) - voxel_coords,
         brick_bounds.min,
         brick_bounds.max
     ) + voxel_coords;
 }
 
-fn advance(voxel_line: ptr<function, VoxelLine, read_write>, ray: Ray) {
+fn advance(voxel_line: ptr<function, VoxelLine, read_write>) {
     let vl = *voxel_line;
     let d = vl.state.next_step_dimension;
 
@@ -160,10 +221,15 @@ fn advance(voxel_line: ptr<function, VoxelLine, read_write>, ray: Ray) {
     (*voxel_line).state.steps[d] += 1u;
     (*voxel_line).state.brick[d] += vl.brick_step[d];
     (*voxel_line).state.t_entry = vl.state.t_next_crossing[d];
-    (*voxel_line).state.t_next_crossing[d] = vl.first_t_next_crossing[d] + f32((*voxel_line).state.steps[d]) * vl.t_delta[d];
+    (*voxel_line).state.t_next_crossing[d] += vl.t_delta[d]; //vl.first_t_next_crossing[d] + f32((*voxel_line).state.steps[d]) * vl.t_delta[d];
     (*voxel_line).state.next_step_dimension = min_dimension((*voxel_line).state.t_next_crossing);
 
-    _update_entry_and_exit(voxel_line, ray);
+    // todo: remove (debug)
+    (*voxel_line).state.last_step_dimension = d;
+
+    //(*voxel_line).state.t_entry = _t_entry(vl);
+
+    _update_entry_and_exit(voxel_line);
 }
 
 fn in_grid(voxel_line: ptr<function, VoxelLine, read_write>) -> bool {
@@ -175,12 +241,4 @@ fn in_grid(voxel_line: ptr<function, VoxelLine, read_write>) -> bool {
 fn is_broken(voxel_line: ptr<function, VoxelLine, read_write>) -> bool {
     let vl = *voxel_line;
     return any(vl.brick_step != int3(sign(vl.state.exit - vl.state.entry)));
-}
-
-fn next_voxel_index(voxel_line: ptr<function, VoxelLine, read_write>) -> uint3 {
-    let vl = *voxel_line;
-    let d = vl.state.next_step_dimension;
-    var brick = vl.state.brick;
-    brick[d] += vl.brick_step[d];
-    return uint3(brick);
 }
