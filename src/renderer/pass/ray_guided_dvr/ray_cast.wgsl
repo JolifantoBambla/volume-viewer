@@ -7,7 +7,7 @@
 @include(ray)
 @include(transform)
 @include(type_alias)
-@include(voxel_line_f32)
+@include(grid_traversal)
 
 // includes that require the shader to define certain functions
 @include(volume_util)
@@ -195,254 +195,33 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     let lowest_lod = arrayLength(&page_table_meta.resolutions);
     let brick_size = page_table_meta.resolutions[0].brick_size;
 
+    // Set up state tracking
     var color = float4();
     var requested_brick = false;
     var last_lod = 0u;
     var page_table = clone_page_table_meta(0u);
 
-    // todo: remove (debug)
-    var it = 0;
-
     for (
-        var voxel_line = create_voxel_line(ray_os, t_min, t_max, &page_table);
-        in_grid(&voxel_line);
-        advance(&voxel_line)
+        var grid_traversal = create_grid_traversal(ray_os, t_min, t_max, page_table);
+        in_grid(grid_traversal);
+        next_voxel(&grid_traversal)
     ) {
-        let position = voxel_line.state.entry;
+        let brick_endpoints = compute_voxel_endpoints(grid_traversal);
+
+        let position = brick_endpoints.entry;
         let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
         let lod = select_level_of_detail(distance_to_camera, lowest_lod);
         if (lod != last_lod) {
             last_lod = lod;
             page_table = clone_page_table_meta(lod);
-            // todo: this could lead to problems if the line creation assumes that t_min is either 0 (in the grid) or x (at the grid boundary) while it might actually actually be y > 0 (somewhere in the grid)
-            voxel_line = create_voxel_line(ray_os, voxel_line.state.t_entry, t_max, &page_table);
+            // todo: t_entry is w.r.t. grid_traversal.ray not ray_os!
+            grid_traversal = create_grid_traversal(ray_os, grid_traversal.state.t_entry, t_max, page_table);
         }
 
-        let page_address = uint3(voxel_line.state.brick);
+        let page_address = uint3(grid_traversal.state.voxel);
 
         // todo: remove (debug)
         let page_color = float3(page_address) / float3(7., 7., 1.);
-
-        // ------------------------ DEBUG STUFF ----------------------------
-        /*
-        // if RGB, or BLACK: corresponding t_entry > t_next_crossing in first iteration
-        // if CMY, or WHITE: corresponding t_entry > t_next_crossing in second iteration
-        // if grey: all good
-        color = float4();
-        if (it == 0) {
-            if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[0]) {
-                color = RED;
-                break;
-            } else if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[1]) {
-                color = GREEN;
-                break;
-            } else if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[2]) {
-                color = BLUE;
-                break;
-            } else if (any(float3(voxel_line.state.t_entry) > voxel_line.state.t_next_crossing)) {
-                color = BLACK;
-                break;
-            } else {
-                color = float4(0.5, 0.5, 0.5, 1.0);
-            }
-            it += 1;
-            continue;
-        } else if (it == 1) {
-            if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[0]) {
-                color = CYAN;
-                break;
-            } else if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[1]) {
-                color = MAGENTA;
-                break;
-            } else if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[2]) {
-                color = YELLOW;
-                break;
-            } else if (any(float3(voxel_line.state.t_entry) > voxel_line.state.t_next_crossing)) {
-                color = WHITE;
-                break;
-            } else {
-                color = float4(0.5, 0.5, 0.5, 1.0);
-            }
-            break;
-        }
-        */
-
-        /*
-        // if RG: sign(r.direction) != sign(entry - exit) in first iteration
-        // if CM: sign(r.direction) != sign(entry - exit) in second iteration
-        // if green: all good
-        color = float4();
-        if (it == 0) {
-            let entry = voxel_line.state.entry;
-            let exit  = voxel_line.state.exit;
-            if (any(voxel_line.brick_step != int3(sign(exit - entry)))) {
-                color = RED;
-                break;
-            } else {
-                color = GREEN;
-            }
-            it += 1;
-            continue;
-        } else if (it == 1) {
-            let entry = voxel_line.state.entry;
-            let exit  = voxel_line.state.exit;
-            if (any(voxel_line.brick_step != int3(sign(exit - entry)))) {
-               color = CYAN;
-            } else {
-               color = GREEN;
-            }
-            break;
-        }
-        */
-
-        /*
-        // note: this description is outdated!
-        // first iteration:
-        // - red: entry and exit are not in the current brick
-        // - green: entry is not in the current brick
-        // - blue: exit is not the current brick
-        // - white: entry and exit are in different blocks
-        // second iteration:
-        // - cyan: entry and exit are not in the current brick
-        // - magenta: entry is not in the current brick
-        // - yellow: exit is not the current brick
-        // - black: entry and exit are in different blocks
-        // grey: all good
-        color = float4();
-        let page_address_entry = compute_page_address(&page_table, voxel_line.state.entry);
-        let page_address_exit  = compute_page_address(&page_table, voxel_line.state.exit);
-        let next_voxel = next_voxel_index(&voxel_line);
-        let last_voxel = last_voxel_index(&voxel_line);
-
-        let wrong_entry = any(page_address != page_address_entry);
-        let wrong_exit = any(page_address != page_address_exit);
-        let not_in_same_block = any(page_address_entry != page_address_exit);
-        let exit_in_next_block = all(page_address_exit == next_voxel);
-        let entry_in_next_block = all(page_address_entry == next_voxel);
-        let entry_in_last_block = all(page_address_entry == last_voxel);
-        let next_block_is_last = all(int3(next_voxel) == voxel_line.last_brick);
-
-        // what I found out so far:
-        // - wrong exits are always in the next block
-        // - wrong exits happen almost exclusively when goint in the positive direction
-        // - wrong entries never occur in the first iteration (duh)
-        // - wrong entries happen almost exclusively when going in the negative direction
-        // - wrong entries are always in the previous block
-        // - a Python implementation (numpy on jupyter) works fine
-        // so the next questions are:
-        // - are exits only just on the other side of the block boundary or are they way off?
-        if (it == 0) {
-            if (wrong_entry && wrong_exit) {
-                color = RED;
-                break;
-            } else if (wrong_entry) {
-                color = GREEN;
-                break;
-            } else if (wrong_exit) {
-                // -> wrong exit is always in next block!
-                if (exit_in_next_block) {
-                    color = BLUE;//float4(0.5, 0.5, 0.5, 1.);
-                } else {
-                    color = BLUE;
-                }
-                break;
-            } else if (not_in_same_block) {
-                color = WHITE;
-                break;
-            } else {
-                color = float4(0.5, 0.5, 0.5, 1.);
-            }
-            it += 1;
-            continue;
-        } else if (it == 1) {
-            if (wrong_entry && wrong_exit) {
-                // this never happens
-                if (!exit_in_next_block) {
-                    color = CYAN;
-                    break;
-                }
-                if (entry_in_next_block) {
-                    color = RED;
-                } else if (entry_in_last_block) {
-                    color = YELLOW;
-                } else {
-                    color = MAGENTA;
-                }
-                break;
-            } else if (wrong_entry) {
-                color = MAGENTA;
-                if (entry_in_next_block) {
-                    color = RED;
-                } else if (entry_in_last_block) {
-                    color = YELLOW;
-                }
-                break;
-            } else if (wrong_exit) {
-                // -> wrong exit is always in next block!
-                if (exit_in_next_block) {
-                    color = BLUE;//float4(0.5, 0.5, 0.5, 1.);
-                } else {
-                    color = BLUE;//YELLOW;
-                }
-                break;
-            } else if (not_in_same_block) {
-                color = BLACK;
-                break;
-            } else {
-                color = float4(0.5, 0.5, 0.5, 1.);
-            }
-            break;
-        }
-        */
-
-
-        /*
-        let wrong_entry = any(page_address != page_address_entry);
-        let wrong_exit = any(page_address != page_address_exit);
-        let just_wrong = any(page_address_entry != page_address_exit);
-        if (wrong_entry || wrong_exit || just_wrong) {
-            color = BLACK;
-
-            if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[voxel_line.state.next_step_dimension]) {
-                color = RED;
-            } else if (wrong_exit && just_wrong) {
-                color = MAGENTA;
-                var next_page_address = int3(page_address);
-                next_page_address[voxel_line.state.next_step_dimension] += voxel_line.brick_step[voxel_line.state.next_step_dimension];
-                if (any(uint3(next_page_address) != page_address_exit)) {
-                    color = float4(0.5, 0.5, 0.5, 1.);
-                }
-            } else if (wrong_exit) {
-                color = CYAN;
-            } else {
-                color = WHITE;
-            }
-        } else {
-            color = GREEN;
-            let entry = voxel_line.state.entry;
-            let exit  = voxel_line.state.exit;
-
-            if (any(voxel_line.brick_step != int3(sign(exit - entry)))) {
-                color = YELLOW;
-            }
-        }
-
-        if (voxel_line.state.t_entry > voxel_line.state.t_next_crossing[voxel_line.state.next_step_dimension]) {
-            color = RED;
-            //break;
-        }
-
-        if (it == 0) {
-            if (any(float3(voxel_line.state.t_entry) > voxel_line.state.t_next_crossing)) {
-                color = MAGENTA;
-                break;
-            }
-            continue;
-        } else if (it == 1) {
-            break;
-        }
-        */
-
 
         let page = get_page(page_address);
         if (page.flag == UNMAPPED) {
@@ -457,60 +236,36 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         } else if (page.flag == MAPPED) {
             report_usage(int3(page.location / brick_size));
 
-            let start = normalize_cache_address(compute_cache_address(voxel_line.state.entry, lod, page.location));
-            let stop = normalize_cache_address(compute_cache_address(voxel_line.state.exit, lod, page.location));
+            let padded_size = float3(page_table.brick_size * page_table.page_table_extent);
+            let entry = max(uint3(ceil(brick_endpoints.entry * float3(padded_size))), uint3(1u)) % brick_size;
+            let exit  = max(uint3(ceil(brick_endpoints.exit  * float3(padded_size))), uint3(1u)) % brick_size;
 
-            let brick_step = int3(sign(voxel_line.state.exit - voxel_line.state.entry));
-            if (any(brick_step != voxel_line.brick_step)) {
-                color = GREEN;
-                break;
-            }
+
+            let start = normalize_cache_address(page.location + entry);
+            let stop  = normalize_cache_address(page.location + exit);
 
             // todo: fix num_steps, find out why boundaries are visible
             let brick_distance = distance(
                 start * float3(page_table.brick_size),
-                stop * float3(page_table.brick_size)
+                stop  * float3(page_table.brick_size)
             );
             let num_steps = i32(brick_distance + 0.5);
-
-
             if (num_steps < 1) {
-                // todo: remove (debug)
-                it += 1;
-                continue;
-                //color = RED;
+                //color += RED;
                 //break;
+                continue;
             }
 
-
-            // todo: step through brick
             let step = (stop - start) / f32(num_steps);
             color = ray_cast(color, start, step, num_steps);
-            //break;
 
             if (is_saturated(color)) {
                 break;
             }
         }
-
-        // todo: remove (debug)
-        it += 1;
     }
 
     debug(pixel, color);
-
-
-    /*
-    MAYBE GET BRICK:
-        GET BRICK AND REPORT USAGE OR REQUEST
-
-    ENTER LOOP UNTIL EXIT OR SATURATED
-        DETERMINE LOD
-        MAYBE GET BRICK
-        IF BRICK MAPPED
-            STEP THROUGH BRICK
-    STORE RESULT
-    */
 }
 
 fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32) -> float4 {

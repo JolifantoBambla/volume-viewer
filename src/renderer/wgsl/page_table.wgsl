@@ -41,34 +41,29 @@ struct PageTableMeta {
 
 /// Computes the address of a page w.r.t. the page table table's offset for a given position in the unit cube ([0,1]^3)
 /// The result is in range [0, page_table.extent[i] - 1], i = 0,1,2.
-fn compute_local_page_address(page_table: ptr<function, PageTableMeta, read_write>, position: float3) -> uint3 {
-    let pt = *page_table;
+fn compute_local_page_address(page_table: PageTableMeta, position: float3) -> uint3 {
     return min(
-        uint3(floor(float3(pt.page_table_extent) * position)),
-        pt.page_table_extent - uint3(1u)
+        uint3(floor(float3(page_table.page_table_extent) * position)),
+        page_table.page_table_extent - uint3(1u)
     );
 }
 
 /// Computes the address of a page in a page directory for a given position in the unit cube ([0,1]^3).
 /// The result is in range [page_table.offset[i], page_table.offset[i] + page_table.extent[i] - 1], i = 0,1,2.
-fn compute_page_address(page_table: ptr<function, PageTableMeta, read_write>, position: float3) -> uint3 {
-    let pt = *page_table;
-    return pt.page_table_offset + compute_local_page_address(page_table, position);
+fn compute_page_address(page_table: PageTableMeta, position: float3) -> uint3 {
+    return page_table.page_table_offset + compute_local_page_address(page_table, position);
 }
 
 /// Computes the ratio of filled voxels to total voxels in the page table.
 // The result is in range [0, 1]^3.
-fn compute_volume_to_padded(page_table: ptr<function, PageTableMeta, read_write>) -> float3 {
-    let pt = *page_table;
+fn compute_volume_to_padded(page_table: PageTableMeta) -> float3 {
+    let volume_size = float3(page_table.volume_size);
 
-    let volume_size = float3(pt.volume_size);
-
-    let extent = pt.page_table_extent;
-    let brick_size = pt.brick_size;
+    let extent = page_table.page_table_extent;
+    let brick_size = page_table.brick_size;
     let padded_size = float3(brick_size * extent);
 
-    // todo: return true ratio
-    return float3(1.);//volume_size / padded_size;
+    return volume_size / padded_size;
 }
 
 struct PageDirectoryMeta {

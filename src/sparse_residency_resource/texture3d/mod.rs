@@ -15,6 +15,7 @@ use crate::sparse_residency_resource::texture3d::page_table::{
 use crate::sparse_residency_resource::texture3d::volume_meta::BrickAddress;
 use crate::util::extent::{
     extent_to_uvec, index_to_subscript, subscript_to_index, uvec_to_extent, uvec_to_origin,
+    box_volume,
 };
 use glam::{UVec3, UVec4, Vec3};
 use std::cmp::min;
@@ -251,6 +252,8 @@ impl SparseResidencyTexture3D {
 
 
                 log::info!("writing subregion\n  origin: {:?}, brick_size: {:?},\n  offset: {:?}, extent: {:?},\n  address: {:?}", brick_location, brick_extent, offset, extent, address.index);
+
+                log::info!("brick data size {:?}, expected: {:?}", brick.data.len(), box_volume(&brick_extent));
 
                 self.brick_cache.write_subregion(
                     brick.data.as_slice(),
