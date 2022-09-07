@@ -11,14 +11,67 @@
 <!-- Adds COOP and COEP headers, see: https://github.com/gzuidhof/coi-serviceworker -->
 <script src="coi-serviceworker.min.js"></script>
 
-<!-- <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.0/dist/tweakpane.min.js"></script> -->
+<script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.0/dist/tweakpane.min.js"></script>
 <script type="module">
     import { createOffscreenRenderer, Config } from './js/src/offscreen_renderer.js';
     import { VolumeDataSourceConfig } from "./js/src/volume-data-source.js";
 
+    // TODO: clean this up
     // can it do transfer functions?
     // maybe: https://github.com/tweakpane/plugin-essentials
-    // const pane = new Tweakpane.Pane();
+    const settings = new Tweakpane.Pane({
+        title: 'Settings',
+        expanded: true,
+    });
+
+    // DATA SETTINGS
+    const dataParams = {
+        channel: 0,
+    };
+    const dataSettings = settings.addFolder({
+        title: 'Data',
+        expanded: true,
+    });
+    dataSettings
+        .addInput(dataParams, 'channel', {min: 0, max: 0, step: 1})
+        .on('change', console.log);
+
+    // RENDER SETTINGS
+    const renderParams = {
+        steps: 1,
+        renderMode: 'grid_traversal'
+    };
+
+    const renderSettings = settings.addFolder({
+        title: 'Rendering',
+        expanded: true,
+    });
+    const stepsSlider = renderSettings.addInput(
+        renderParams, 'steps',
+        {min: 1, max: 100, step: 1}
+    );
+    const renderModeSelector = renderSettings.addInput(
+        renderParams, 'renderMode',
+        {
+            options: {
+                'Grid Traversal': 'grid_traversal',
+                Direct: 'direct',
+            }
+        }
+    );
+
+    stepsSlider.on('change', console.log);
+    renderModeSelector.on('change', console.log);
+
+    // EXPORT SETTINGS
+    const exportSettingsButton = settings.addButton({
+        title: 'Export Settings',
+    });
+    exportSettingsButton.on('click', function() {
+        const preset = settings.exportPreset();
+        console.log(preset);
+    })
+
 
     async function start() {
         try {
