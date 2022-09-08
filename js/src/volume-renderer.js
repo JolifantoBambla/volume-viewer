@@ -105,4 +105,13 @@ export class VolumeRenderer {
             this.#canvas.dispatchEvent(toWrappedEvent(JSON.parse(eventString)));
         }
     }
+
+    dispatchUIEvent(eventString) {
+        if (this.#canvas) {
+            const event = JSON.parse(eventString);
+            const detail = {};
+            detail[`${event.setting}`] = event.value;
+            this.#canvas.dispatchEvent(new CustomEvent(event.type, { detail }));
+        }
+    }
 }
