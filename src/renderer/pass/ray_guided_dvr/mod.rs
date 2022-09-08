@@ -10,21 +10,33 @@ use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use wgsl_preprocessor::WGSLPreprocessor;
 
+
+#[repr(C)]
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Settings {
+    pub render_mode: u32,
+    pub step_size: f32,
+    pub threshold: f32,
+    pub padding2: u32,
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniforms {
     pub camera: CameraUniform,
     pub volume_transform: TransformUniform,
     pub timestamp: UVec4,
+    pub settings: Settings,
 }
 
 impl Uniforms {
-    pub fn new(camera: CameraUniform, object_to_world: glam::Mat4, timestamp: u32) -> Self {
+    pub fn new(camera: CameraUniform, object_to_world: glam::Mat4, timestamp: u32, settings: Settings) -> Self {
         let volume_transform = TransformUniform::from_object_to_world(object_to_world);
         Self {
             camera,
             volume_transform,
             timestamp: UVec4::new(timestamp, timestamp, timestamp, timestamp),
+            settings,
         }
     }
 }

@@ -1,3 +1,5 @@
+mod shared_constants;
+
 use wgsl_preprocessor::WGSLPreprocessor;
 
 pub fn create_wgsl_preprocessor() -> WGSLPreprocessor {

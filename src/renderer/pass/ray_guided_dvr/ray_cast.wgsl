@@ -38,12 +38,24 @@ fn black(pixel: int2) {
     textureStore(result, pixel, BLACK);
 }
 
+// RENDER MODES
+let GRID_TRAVERSAL = 0u;
+let DIRECT = 1u;
+
+struct Settings {
+    render_mode: u32,
+    step_size: f32,
+    threshold: f32,
+    padding2: u32,
+}
+
 // todo: come up with a better name...
 // todo: clean up those uniforms - find out what i really need and throw away the rest
 struct Uniforms {
     camera: Camera,
     volume_transform: Transform,
     @size(16) timestamp: u32,
+    settings: Settings,
 }
 
 // Bindings
@@ -100,38 +112,6 @@ fn clone_page_table_meta(level: u32) -> PageTableMeta {
         page_table_meta.page_table_extent,
         page_table_meta.volume_size
     );
-}
-
-// todo: this could be a per-resolution constant
-fn volume_to_padded(level: u32) -> float3 {
-    let resolution = page_table_meta.resolutions[level];
-
-    let volume_size = float3(resolution.volume_size);
-
-    let extent = resolution.page_table_extent;
-    let brick_size = resolution.brick_size;
-    let padded_size = float3(brick_size * extent);
-
-    return volume_size / padded_size;
-}
-
-/*
-fn compute_page_address(position: float3, level: u32) -> uint3 {
-    let resolution = page_table_meta.resolutions[level];
-    let offset = resolution.page_table_offset;
-    let extent = resolution.page_table_extent;
-    return min(
-        offset + uint3(floor(float3(extent) * position)),
-        offset + extent - uint3(1u)
-    );
-}
-*/
-
-fn compute_cache_address(position: float3, level: u32, brick_address: uint3) -> uint3 {
-    let resolution = page_table_meta.resolutions[level];
-    let brick_size = resolution.brick_size;
-    let volume_size = resolution.volume_size;
-    return brick_address + max(uint3(ceil(position * float3(volume_size))), uint3(1u)) % brick_size;
 }
 
 fn normalize_cache_address(cache_address: uint3) -> float3 {
@@ -201,65 +181,126 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var last_lod = 0u;
     var page_table = clone_page_table_meta(0u);
 
-    for (
-        var grid_traversal = create_grid_traversal(ray_os, t_min, t_max, page_table);
-        in_grid(grid_traversal);
-        next_voxel(&grid_traversal)
-    ) {
-        let brick_endpoints = compute_voxel_endpoints(grid_traversal);
+    if (uniforms.settings.render_mode == GRID_TRAVERSAL) {
+        for (
+            var grid_traversal = create_grid_traversal(ray_os, t_min, t_max, page_table);
+            in_grid(grid_traversal);
+            next_voxel(&grid_traversal)
+        ) {
+            let brick_endpoints = compute_voxel_endpoints(grid_traversal);
 
-        let position = brick_endpoints.entry;
-        let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
-        let lod = select_level_of_detail(distance_to_camera, lowest_lod);
-        if (lod != last_lod) {
-            last_lod = lod;
-            page_table = clone_page_table_meta(lod);
-            // todo: t_entry is w.r.t. grid_traversal.ray not ray_os!
-            grid_traversal = create_grid_traversal(ray_os, grid_traversal.state.t_entry, t_max, page_table);
+            let position = brick_endpoints.entry;
+            let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
+            let lod = select_level_of_detail(distance_to_camera, lowest_lod);
+            if (lod != last_lod) {
+                last_lod = lod;
+                page_table = clone_page_table_meta(lod);
+                // todo: t_entry is w.r.t. grid_traversal.ray not ray_os!
+                grid_traversal = create_grid_traversal(ray_os, grid_traversal.state.t_entry, t_max, page_table);
+            }
+
+            let page_address = uint3(grid_traversal.state.voxel);
+
+            // todo: remove (debug)
+            let page_color = float3(page_address) / float3(7., 7., 1.);
+
+            let page = get_page(page_address);
+            if (page.flag == UNMAPPED) {
+                // todo: remove this (debug)
+                color = float4(page_color, 1.);
+
+                if (!requested_brick) {
+                    // todo: maybe request lower res as well?
+                    request_brick(int3(page_address));
+                    requested_brick = true;
+                }
+            } else if (page.flag == MAPPED) {
+                report_usage(int3(page.location / brick_size));
+
+                let padded_size = float3(page_table.brick_size * page_table.page_table_extent);
+                let entry = max(uint3(ceil(brick_endpoints.entry * float3(padded_size))), uint3(1u)) % brick_size;
+                let exit  = max(uint3(ceil(brick_endpoints.exit  * float3(padded_size))), uint3(1u)) % brick_size;
+
+
+                let start = normalize_cache_address(page.location + entry);
+                let stop  = normalize_cache_address(page.location + exit);
+
+                // todo: fix num_steps, find out why boundaries are visible
+                let brick_distance = distance(
+                    start * float3(page_table.brick_size),
+                    stop  * float3(page_table.brick_size)
+                );
+                let num_steps = i32(brick_distance + 0.5);
+                if (num_steps < 1) {
+                    //color += RED;
+                    //break;
+                    continue;
+                }
+
+                let step = (stop - start) / f32(num_steps);
+                color = ray_cast(color, start, step, num_steps);
+
+                if (is_saturated(color)) {
+                    break;
+                }
+            }
         }
-
-        let page_address = uint3(grid_traversal.state.voxel);
-
-        // todo: remove (debug)
-        let page_color = float3(page_address) / float3(7., 7., 1.);
-
-        let page = get_page(page_address);
-        if (page.flag == UNMAPPED) {
-            // todo: remove this (debug)
-            color = float4(page_color, 1.);
-
-            if (!requested_brick) {
-                // todo: maybe request lower res as well?
-                request_brick(int3(page_address));
-                requested_brick = true;
-            }
-        } else if (page.flag == MAPPED) {
-            report_usage(int3(page.location / brick_size));
-
-            let padded_size = float3(page_table.brick_size * page_table.page_table_extent);
-            let entry = max(uint3(ceil(brick_endpoints.entry * float3(padded_size))), uint3(1u)) % brick_size;
-            let exit  = max(uint3(ceil(brick_endpoints.exit  * float3(padded_size))), uint3(1u)) % brick_size;
-
-
-            let start = normalize_cache_address(page.location + entry);
-            let stop  = normalize_cache_address(page.location + exit);
-
-            // todo: fix num_steps, find out why boundaries are visible
-            let brick_distance = distance(
-                start * float3(page_table.brick_size),
-                stop  * float3(page_table.brick_size)
-            );
-            let num_steps = i32(brick_distance + 0.5);
-            if (num_steps < 1) {
-                //color += RED;
-                //break;
-                continue;
+    } else {
+        let entry_os = clamp_to_one(ray_at(ray_os, t_min));
+        let exit_os = clamp_to_one(ray_at(ray_os, t_max));
+        let unscaled_step = (exit_os - entry_os) * uniforms.settings.step_size;
+        let view_direction = normalize(unscaled_step);
+        var step = unscaled_step / float3(page_table.volume_size);
+        var i = 0;
+        for (
+            var position = entry_os;
+            aabb_contains(volume_bounds_os, position);
+            position += step
+        ) {
+            let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
+            let lod = select_level_of_detail(distance_to_camera, lowest_lod);
+            if (lod != last_lod) {
+                last_lod = lod;
+                page_table = clone_page_table_meta(lod);
+                step = unscaled_step / float3(page_table.volume_size);
             }
 
-            let step = (stop - start) / f32(num_steps);
-            color = ray_cast(color, start, step, num_steps);
+            // todo: think about this more carefully - does that change the ray or not?
+            let position_corrected = position * compute_volume_to_padded(page_table);
+            let page_address = compute_page_address(page_table, position_corrected);
 
-            if (is_saturated(color)) {
+            // todo: remove (debug)
+            let page_color = float3(page_address) / float3(7., 7., 1.);
+
+            let page = get_page(page_address);
+            if (page.flag == UNMAPPED) {
+                // todo: remove this (debug)
+                color = float4(page_color, 1.);
+
+                if (!requested_brick) {
+                    // todo: maybe request lower res as well?
+                    request_brick(int3(page_address));
+                    requested_brick = true;
+                }
+            } else if (page.flag == MAPPED) {
+                report_usage(int3(page.location / brick_size));
+
+                let sample_location = normalize_cache_address(compute_cache_address(page_table, position, page));
+                let value = sample_volume(sample_location);
+
+                // todo: make minimum threshold configurable
+                if (value > uniforms.settings.threshold) {
+                    var lighting = compute_lighting(value, sample_location, step, view_direction);
+                    lighting.a = value;
+                    color += lighting;
+                }
+
+                if (is_saturated(color)) {
+                    break;
+                }
+            }
+            i += 1;
+            if (i >= 100) {
                 break;
             }
         }
@@ -276,9 +317,7 @@ fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32) -> fl
     for (var i = 0; i < num_steps; i += 1) {
         let value = sample_volume(sample_location);
 
-        // todo: make minimum threshold configurable
-        if (value > 0.1) {
-            // todo: compute lighting
+        if (value > uniforms.settings.threshold) {
             var lighting = compute_lighting(value, sample_location, step, view_direction);
             lighting.a = value;
             color += lighting;
@@ -294,9 +333,7 @@ fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32) -> fl
     return color;
 }
 
-fn compute_lighting(value: f32, x: float3, step: float3, view_direction: float3) -> float4 {
-    let view = normalize(view_direction);
-
+fn compute_lighting(value: f32, x: float3, step: float3, view: float3) -> float4 {
     var light_direction = view;//float3(1.);
 
     let normal = compute_volume_normal(x, step, view);
@@ -306,10 +343,9 @@ fn compute_lighting(value: f32, x: float3, step: float3, view_direction: float3)
     let diffuse = clamp(dot(normal, light_direction), 0., 1.);
 
     let halfway = normalize(light_direction + view);
-    let shininess = 40.;
+    let shininess = 16.;
     let specular = pow(max(dot(halfway, normal), 0.), shininess);
 
-    // Calculate final color by componing different components
     return float4(
         apply_colormap(value) * (ambient + diffuse) + specular,
         value

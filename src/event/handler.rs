@@ -28,6 +28,7 @@ pub fn register_window_event_handlers(
     register_window_event_handler(canvas, "keypress", handler);
     register_window_event_handler(canvas, "keyup", handler);
     register_window_event_handler(canvas, "zarr:group", handler);
+    register_window_event_handler(canvas, "rendersettings", handler);
 }
 
 pub fn create_default_js_event_handler<T>(

@@ -27,6 +27,7 @@
     // DATA SETTINGS
     const dataParams = {
         channel: 0,
+        color: '#0000ff',
     };
     const dataSettings = settings.addFolder({
         title: 'Data',
@@ -35,10 +36,13 @@
     dataSettings
         .addInput(dataParams, 'channel', {min: 0, max: 0, step: 1})
         .on('change', console.log);
+    dataSettings.addInput(dataParams, 'color')
+        .on('change', console.log);
 
     // RENDER SETTINGS
     const renderParams = {
-        steps: 1,
+        stepSize: 5.0,
+        threshold: 0.5,
         renderMode: 'grid_traversal'
     };
 
@@ -47,8 +51,12 @@
         expanded: true,
     });
     const stepsSlider = renderSettings.addInput(
-        renderParams, 'steps',
-        {min: 1, max: 100, step: 1}
+        renderParams, 'stepSize',
+        {min: 0.5, max: 10.0, step: 0.2}
+    );
+    const thresholdSlider = renderSettings.addInput(
+        renderParams, 'threshold',
+        {min: 0.0, max: 1.0, step: 0.01}
     );
     const renderModeSelector = renderSettings.addInput(
         renderParams, 'renderMode',
@@ -60,8 +68,7 @@
         }
     );
 
-    stepsSlider.on('change', console.log);
-    renderModeSelector.on('change', console.log);
+
 
     // EXPORT SETTINGS
     const exportSettingsButton = settings.addButton({
@@ -75,7 +82,7 @@
 
     async function start() {
         try {
-            await (await createOffscreenRenderer(new Config({
+            const offscreenRenderer = await createOffscreenRenderer(new Config({
                 canvas: {
                     canvasId: 'canvas'
                 },
@@ -84,7 +91,23 @@
                     store: 'http://localhost:8005/',
                     path: 'ome-zarr/m-128x128.ome.zarr/0',
                 }, {})
-            }))).run();
+            }));
+            offscreenRenderer.run();
+
+            // register UI event listeners for render settings
+            const dispatchRenderSettingsChange = (e) => {
+                console.log(e);
+                offscreenRenderer.dispatchUIEvent(JSON.stringify({
+                    type: 'rendersettings',
+                    setting: e.presetKey,
+                    value: e.value,
+                }));
+            };
+
+            stepsSlider.on('change', dispatchRenderSettingsChange);
+            renderModeSelector.on('change', dispatchRenderSettingsChange);
+            thresholdSlider.on('change', dispatchRenderSettingsChange);
+
         } catch (e) {
             console.error(e);
         }

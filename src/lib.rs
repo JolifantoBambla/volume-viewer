@@ -2,7 +2,6 @@ extern crate core;
 
 use rayon::prelude::*;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 pub use wasm_bindgen_rayon::init_thread_pool;
 
@@ -22,7 +21,7 @@ pub mod renderer;
 pub mod sparse_residency_resource;
 pub mod util;
 
-use crate::event::{Event, RawArrayReceived};
+use crate::event::{Event, RawArrayReceived, SettingsChange};
 use util::init;
 use util::window;
 
@@ -42,6 +41,7 @@ use crate::window::window_builder_without_size;
 // todo: remove this (this is for testing the preprocessor macro)
 #[allow(unused)]
 use include_preprocessed_wgsl::include_preprocessed;
+use crate::renderer::pass::ray_guided_dvr::Settings;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -123,9 +123,8 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
     let html_canvas = canvas
         .clone()
         .unchecked_into::<web_sys::HtmlCanvasElement>();
-    let html_canvas2 = html_canvas.clone();
 
-    let builder = window_builder_without_size("Offscreen DVR".to_string(), html_canvas);
+    let builder = window_builder_without_size("Offscreen DVR".to_string(), html_canvas.clone());
     let event_loop = winit::event_loop::EventLoop::with_user_event();
     let window = builder.build(&event_loop).unwrap();
 
@@ -134,7 +133,7 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
         GLOBAL_EVENT_LOOP_PROXY = Some(event_loop.create_proxy());
     }
 
-    register_default_js_event_handlers(&html_canvas2, &event_loop);
+    register_default_js_event_handlers(&html_canvas, &event_loop);
 
     // this part shows a GPUDevice handle can be shared via a custom event posted to the canvas
     let exposed_device = expose_device().await;
@@ -145,43 +144,18 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
         false,
         &exposed_device,
     );
-    html_canvas2.dispatch_event(&event_from_rust).ok();
-
-    let mut loader_request = HashMap::new();
-    loader_request.insert("store", "http://localhost:8005/");
-    loader_request.insert("path", "ome-zarr/m.ome.zarr/0");
-    event_from_rust.init_custom_event_with_can_bubble_and_cancelable_and_detail(
-        "loader-request",
-        false,
-        false,
-        &JsValue::from_serde(&loader_request).unwrap(),
-    );
-    html_canvas2.dispatch_event(&event_from_rust).ok();
+    html_canvas.dispatch_event(&event_from_rust).ok();
 
     let renderer = MultiChannelVolumeRenderer::new(
         canvas,
         Box::new(HtmlEventTargetTexture3DSource::new(
             volume_meta,
-            html_canvas2
+            html_canvas
                 .clone()
                 .unchecked_into::<web_sys::EventTarget>(),
         )),
     )
     .await;
-    /*
-    let ctx = renderer.ctx.clone();
-    let mut volume_texture = SparseResidencyTexture3D::new(
-        Box::new(HtmlEventTargetTexture3DSource::new(
-            volume_meta,
-            html_canvas2
-                .clone()
-                .unchecked_into::<web_sys::EventTarget>(),
-        )),
-        &ctx.device,
-        &ctx.queue
-    );
-    volume_texture.request_bricks();
-     */
 
     // NOTE: All resource allocations should happen before the main render loop
     // The reason for this is that receiving allocation errors is async, but
@@ -248,6 +222,13 @@ pub fn run_event_loop(
     let mut left_mouse_pressed = false;
     let mut right_mouse_pressed = false;
     let mut frame_number = 0;
+
+    let mut settings = Settings {
+        render_mode: 0,
+        step_size: 5.0,
+        threshold: 0.5,
+        ..Settings::default()
+    };
 
     let window = Rc::new(window);
 
@@ -343,13 +324,34 @@ pub fn run_event_loop(
                 },
                 Event::RawArray(raw_array) => {
                     log::info!("got raw array {:?}", raw_array.shape);
+                },
+                Event::Settings(settings_change) => {
+                    match settings_change {
+                        SettingsChange::RenderMode(mode) => {
+                            settings.render_mode = mode as u32;
+                        },
+                        SettingsChange::StepSize(step_size) => {
+                            if step_size > 0. {
+                                settings.step_size = step_size;
+                            } else {
+                                log::error!("Illegal step size: {}", step_size);
+                            }
+                        },
+                        SettingsChange::Threshold(threshold) => {
+                            if threshold >= 0.0 && threshold <= 1.0 {
+                                settings.threshold = threshold;
+                            } else {
+                                log::error!("Illegal threshold: {}", threshold);
+                            }
+                        }
+                    }
                 }
                 _ => {}
             },
             winit::event::Event::RedrawRequested(_) => {
                 frame_number += 1;
 
-                renderer.as_ref().borrow().update(&camera, frame_number);
+                renderer.as_ref().borrow().update(&camera, frame_number, settings);
 
                 wasm_bindgen_futures::spawn_local(calling_from_async(
                     renderer.clone(),

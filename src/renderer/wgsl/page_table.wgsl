@@ -54,6 +54,14 @@ fn compute_page_address(page_table: PageTableMeta, position: float3) -> uint3 {
     return page_table.page_table_offset + compute_local_page_address(page_table, position);
 }
 
+fn compute_cache_address(page_table: PageTableMeta, position: float3, page: PageTableEntry) -> uint3 {
+    let brick_size = page_table.brick_size;
+    let volume_size = page_table.volume_size;
+    // todo: this could lead to -1! e.g.: max(ceil(0.8 * 40.), 1) % 32 - 1
+    return page.location + (max(uint3(ceil(position * float3(volume_size))), uint3(1u)) % brick_size) - 1u;
+}
+
+// todo: this could be a per-resolution constant
 /// Computes the ratio of filled voxels to total voxels in the page table.
 // The result is in range [0, 1]^3.
 fn compute_volume_to_padded(page_table: PageTableMeta) -> float3 {

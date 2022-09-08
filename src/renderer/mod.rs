@@ -25,7 +25,7 @@ use wgpu::{BindGroup, Buffer, Extent3d, SamplerDescriptor, SubmissionIndex};
 use winit::dpi::PhysicalSize;
 
 use crate::renderer::pass::present_to_screen::PresentToScreen;
-use crate::renderer::pass::ray_guided_dvr::{RayGuidedDVR, Resources};
+use crate::renderer::pass::ray_guided_dvr::{RayGuidedDVR, Resources, Settings};
 use crate::{SparseResidencyTexture3D, SparseResidencyTexture3DSource};
 pub use trivial_volume_renderer::TrivialVolumeRenderer;
 
@@ -130,11 +130,12 @@ impl MultiChannelVolumeRenderer {
         }
     }
 
-    pub fn update(&self, camera: &Camera, frame_number: u32) {
+    pub fn update(&self, camera: &Camera, frame_number: u32, settings: Settings) {
         let uniforms = ray_guided_dvr::Uniforms::new(
             camera.create_uniform(),
             self.volume_transform,
             frame_number,
+            settings,
         );
         self.ctx.queue.write_buffer(
             &self.volume_render_uniform_buffer,
