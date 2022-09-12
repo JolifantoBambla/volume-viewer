@@ -38,6 +38,23 @@ fn min_dimension(v: float3) -> u32 {
     }
 }
 
+fn max_dimension(v: float3) -> u32 {
+    // todo: make const
+    /*
+    let comparison_to_axis = array<u32, 8>(2u, 1u, 2u, 1u, 2u, 2u, 0u, 0u);
+    let comparison = (u32(v[0] < v[1]) << 2u) + (u32(v[0] < v[2]) << 1u) + u32(v[1] < v[2]);
+    return comparison_to_axis[comparison];
+    */
+
+    if (v.x > v.y && v.x > v.z) {
+        return 0u;
+    } else if (v.y > v.z) {
+        return 1u;
+    } else {
+        return 2u;
+    }
+}
+
 fn clamp_to_one(v: float3) -> float3 {
     return clamp(v, float3(), float3(1.));
 }

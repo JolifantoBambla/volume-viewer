@@ -47,6 +47,7 @@ struct Settings {
     step_size: f32,
     threshold: f32,
     padding2: u32,
+    channel_color: float4,
 }
 
 // todo: come up with a better name...
@@ -181,6 +182,9 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var last_lod = 0u;
     var page_table = clone_page_table_meta(0u);
 
+    // todo: remove this (debug)
+    var request_bricks = false;
+
     if (uniforms.settings.render_mode == GRID_TRAVERSAL) {
         for (
             var grid_traversal = create_grid_traversal(ray_os, t_min, t_max, page_table);
@@ -209,7 +213,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 // todo: remove this (debug)
                 color = float4(page_color, 1.);
 
-                if (!requested_brick) {
+                if (!requested_brick && request_bricks) {
                     // todo: maybe request lower res as well?
                     request_brick(int3(page_address));
                     requested_brick = true;
@@ -250,13 +254,33 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         let exit_os = clamp_to_one(ray_at(ray_os, t_max));
         let unscaled_step = (exit_os - entry_os) * uniforms.settings.step_size;
         let view_direction = normalize(unscaled_step);
+
+        let dist = distance(exit_os, entry_os);
+
         var step = unscaled_step / float3(page_table.volume_size);
+        var last_page_address = uint3(textureDimensions(page_directory)) * uint3(1u);
+        var page = PageTableEntry();
+
         var i = 0;
+
         for (
             var position = entry_os;
             aabb_contains(volume_bounds_os, position);
             position += step
         ) {
+
+            let steps_per_dim = dist / abs(step);
+            let num_steps = min(100., steps_per_dim[min_dimension(steps_per_dim)]) / 100.;
+            if (num_steps > 0.) {
+                color = float4(float3(num_steps), 1.);
+                break;
+            }
+
+            if (any(int3(sign(ray_os.direction)) != int3(sign(view_direction)))) {
+                color = RED;
+                break;
+            }
+
             let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
             let lod = select_level_of_detail(distance_to_camera, lowest_lod);
             if (lod != last_lod) {
@@ -268,16 +292,19 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             // todo: think about this more carefully - does that change the ray or not?
             let position_corrected = position * compute_volume_to_padded(page_table);
             let page_address = compute_page_address(page_table, position_corrected);
+            if (any(last_page_address != page_address)) {
+                last_page_address = page_address;
+                page = get_page(page_address);
+            }
 
             // todo: remove (debug)
             let page_color = float3(page_address) / float3(7., 7., 1.);
 
-            let page = get_page(page_address);
             if (page.flag == UNMAPPED) {
                 // todo: remove this (debug)
                 color = float4(page_color, 1.);
 
-                if (!requested_brick) {
+                if (!requested_brick && request_bricks) {
                     // todo: maybe request lower res as well?
                     request_brick(int3(page_address));
                     requested_brick = true;
@@ -301,6 +328,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             }
             i += 1;
             if (i >= 100) {
+                color = GREEN;
                 break;
             }
         }

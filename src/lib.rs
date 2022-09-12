@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 pub use wasm_bindgen_rayon::init_thread_pool;
 
-use glam::{Vec2, Vec3};
+use glam::{Vec2, Vec3, Vec4};
 use wasm_bindgen::{prelude::*, JsCast};
 use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
@@ -227,6 +227,7 @@ pub fn run_event_loop(
         render_mode: 0,
         step_size: 5.0,
         threshold: 0.5,
+        channel_color: Vec4::new(0., 0., 1., 1.),
         ..Settings::default()
     };
 
@@ -343,6 +344,14 @@ pub fn run_event_loop(
                             } else {
                                 log::error!("Illegal threshold: {}", threshold);
                             }
+                        }
+                        SettingsChange::Color(color) => {
+                            let decoded: Vec<f32> = hex::decode(color.chars().skip(1).take(6).collect::<String>())
+                                .expect("Invalid color")
+                                .iter()
+                                .map(|&c| (c as f32) / 255.)
+                                .collect();
+                            settings.channel_color = Vec3::from_slice(decoded.as_slice()).extend(1.);
                         }
                     }
                 }

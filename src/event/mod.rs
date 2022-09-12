@@ -29,6 +29,9 @@ pub enum SettingsChange {
 
     #[serde(rename = "threshold")]
     Threshold(f32),
+
+    #[serde(rename = "color")]
+    Color(String)
 }
 
 pub enum Event<'a, T: 'static> {

@@ -5,7 +5,7 @@ use crate::renderer::{
     pass::{AsBindGroupEntries, GPUPass},
 };
 use crate::SparseResidencyTexture3D;
-use glam::UVec4;
+use glam::{UVec4, Vec4};
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use wgsl_preprocessor::WGSLPreprocessor;
@@ -18,6 +18,7 @@ pub struct Settings {
     pub step_size: f32,
     pub threshold: f32,
     pub padding2: u32,
+    pub channel_color: Vec4,
 }
 
 #[repr(C)]
