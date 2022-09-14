@@ -43,6 +43,7 @@
         adjustForPadding: false,
         renderMode: 'grid_traversal',
         color: '#0000ff',
+        background: '#333333'
     };
 
     const renderSettings = settings.addFolder({
@@ -67,7 +68,10 @@
         }
     );
     const colorPicker = renderSettings.addInput(renderParams, 'color');
-
+    const backgroundColorPicker = renderSettings.addInput(renderParams, 'background');
+    backgroundColorPicker.on('change', e => {
+        document.body.style.backgroundColor = e.value;
+    });
 
     // EXPORT SETTINGS
     const exportSettingsButton = settings.addButton({
