@@ -30,8 +30,9 @@ export class VolumeResolutionMeta {
 }
 
 export class MultiResolutionVolumeMeta {
-    constructor(brickSize, resolutions) {
+    constructor(brickSize, scale, resolutions) {
         this.brickSize = brickSize;
+        this.scale = scale;
         this.resolutions = resolutions;
     }
 }
@@ -179,8 +180,17 @@ export class OmeZarrDataSource extends VolumeDataSource {
                 new VolumeResolutionMeta(brickSize, volumeSize, scale)
             );
         }
+        console.log(this.#omeZarrMeta);
+        const scale = this.#omeZarrMeta
+            .multiscales[0]
+            .coordinateTransformations
+            .find(d => d.type === 'scale')
+            .scale
+            .slice()
+            .reverse()
+            .slice(0, 3);
 
-        this.#volumeMeta = new MultiResolutionVolumeMeta(brickSize, resolutions);
+        this.#volumeMeta = new MultiResolutionVolumeMeta(brickSize, scale, resolutions);
         this.#maxValues = new Array(this.#zarrArrays[0].shape.slice().reverse()[3]);
     }
 

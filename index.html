@@ -27,7 +27,6 @@
     // DATA SETTINGS
     const dataParams = {
         channel: 0,
-        color: '#0000ff',
     };
     const dataSettings = settings.addFolder({
         title: 'Data',
@@ -36,14 +35,14 @@
     dataSettings
         .addInput(dataParams, 'channel', {min: 0, max: 0, step: 1})
         .on('change', console.log);
-    dataSettings.addInput(dataParams, 'color')
-        .on('change', console.log);
 
     // RENDER SETTINGS
     const renderParams = {
         stepSize: 5.0,
         threshold: 0.5,
-        renderMode: 'grid_traversal'
+        adjustForPadding: false,
+        renderMode: 'grid_traversal',
+        color: '#0000ff',
     };
 
     const renderSettings = settings.addFolder({
@@ -67,7 +66,7 @@
             }
         }
     );
-
+    const colorPicker = renderSettings.addInput(renderParams, 'color');
 
 
     // EXPORT SETTINGS
@@ -79,7 +78,6 @@
         console.log(preset);
     })
 
-
     async function start() {
         try {
             const offscreenRenderer = await createOffscreenRenderer(new Config({
@@ -89,14 +87,13 @@
                 logging: 'debug',
                 dataSource: new VolumeDataSourceConfig({
                     store: 'http://localhost:8005/',
-                    path: 'ome-zarr/m-128x128.ome.zarr/0',
+                    path: 'bunny.zarr', //'stag_beetle.zarr',//'ome-zarr/m-128x128.ome.zarr/0',
                 }, {})
             }));
             offscreenRenderer.run();
 
             // register UI event listeners for render settings
             const dispatchRenderSettingsChange = (e) => {
-                console.log(e);
                 offscreenRenderer.dispatchUIEvent(JSON.stringify({
                     type: 'rendersettings',
                     setting: e.presetKey,
@@ -107,6 +104,7 @@
             stepsSlider.on('change', dispatchRenderSettingsChange);
             renderModeSelector.on('change', dispatchRenderSettingsChange);
             thresholdSlider.on('change', dispatchRenderSettingsChange);
+            colorPicker.on('change', dispatchRenderSettingsChange);
 
         } catch (e) {
             console.error(e);

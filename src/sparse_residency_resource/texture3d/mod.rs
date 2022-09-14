@@ -17,7 +17,7 @@ use crate::util::extent::{
     extent_to_uvec, index_to_subscript, subscript_to_index, uvec_to_extent, uvec_to_origin,
     box_volume,
 };
-use glam::{UVec3, UVec4, Vec3};
+use glam::{UVec3, UVec4, Vec3, Vec4};
 use std::cmp::min;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -165,11 +165,12 @@ impl SparseResidencyTexture3D {
 
     // todo: this should come from meta data (my current data set doesn't have such meta data)
     pub fn volume_scale(&self) -> Vec3 {
-        Vec3::new(
+        let size = Vec3::new(
             self.meta.resolutions[0].volume_meta.volume_size[0] as f32,
             self.meta.resolutions[0].volume_meta.volume_size[1] as f32,
             self.meta.resolutions[0].volume_meta.volume_size[2] as f32,
-        )
+        );
+        size * self.meta.scale
     }
 
     pub fn encode_cache_management(&self, command_encoder: &mut CommandEncoder, timestamp: u32) {

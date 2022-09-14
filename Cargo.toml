@@ -28,6 +28,7 @@ flume = "0.10.14"
 futures = "0.3.21"
 futures-intrusive = "0.4.0"
 glam = { version = "0.20.5", features = ["bytemuck"] }
+hex = "0.4.3"
 instant = "0.1.12"
 js-sys = "0.3.57"
 log = "0.4.17"

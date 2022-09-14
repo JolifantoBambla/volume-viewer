@@ -46,7 +46,7 @@ struct Settings {
     render_mode: u32,
     step_size: f32,
     threshold: f32,
-    padding2: u32,
+    padding: u32,
     channel_color: float4,
 }
 
@@ -183,7 +183,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var page_table = clone_page_table_meta(0u);
 
     // todo: remove this (debug)
-    var request_bricks = false;
+    var request_bricks = true;
 
     if (uniforms.settings.render_mode == GRID_TRAVERSAL) {
         for (
@@ -269,6 +269,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             position += step
         ) {
 
+            /*
             let steps_per_dim = dist / abs(step);
             let num_steps = min(100., steps_per_dim[min_dimension(steps_per_dim)]) / 100.;
             if (num_steps > 0.) {
@@ -280,6 +281,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 color = RED;
                 break;
             }
+            */
 
             let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
             let lod = select_level_of_detail(distance_to_camera, lowest_lod);
@@ -382,7 +384,7 @@ fn compute_lighting(value: f32, x: float3, step: float3, view: float3) -> float4
 
 fn apply_colormap(value: f32) -> float3{
     let u_clim = float2(0., 0.5);
-    return BLUE.rgb * (value - u_clim[0]) / (u_clim[1] - u_clim[0]);
+    return uniforms.settings.channel_color.rgb * (value - u_clim[0]) / (u_clim[1] - u_clim[0]);
 }
 
 // page table stuff

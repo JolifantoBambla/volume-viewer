@@ -1,7 +1,7 @@
 use crate::sparse_residency_resource::texture3d::volume_meta::{
     MultiResolutionVolumeMeta, VolumeResolutionMeta,
 };
-use glam::{UVec3, UVec4};
+use glam::{UVec3, UVec4, Vec3};
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -81,6 +81,8 @@ pub struct PageDirectoryMeta {
     /// bricked multi-resolution volume.
     pub(crate) brick_size: UVec3,
 
+    pub(crate) scale: Vec3,
+
     pub(crate) extent: UVec3,
 
     /// The resolutions
@@ -122,6 +124,7 @@ impl PageDirectoryMeta {
 
         Self {
             brick_size: UVec3::from(volume_meta.brick_size),
+            scale: Vec3::from(volume_meta.scale),
             extent,
             resolutions,
         }

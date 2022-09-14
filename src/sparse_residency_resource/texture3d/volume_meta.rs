@@ -59,6 +59,9 @@ pub struct MultiResolutionVolumeMeta {
     #[serde(rename = "brickSize")]
     pub(crate) brick_size: [u32; 3],
 
+    /// The spatial extent of the volume.
+    pub scale: [f32; 3],
+
     /// The resolutions
     pub(crate) resolutions: Vec<VolumeResolutionMeta>,
 }
