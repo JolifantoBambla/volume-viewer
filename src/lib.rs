@@ -1,9 +1,8 @@
 extern crate core;
 
-use rayon::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
-pub use wasm_bindgen_rayon::init_thread_pool;
+use bytemuck::Zeroable;
 
 use glam::{Vec2, Vec3, Vec4};
 use wasm_bindgen::{prelude::*, JsCast};
@@ -20,6 +19,7 @@ pub mod event;
 pub mod renderer;
 pub mod sparse_residency_resource;
 pub mod util;
+pub mod preprocessing;
 
 use crate::event::{Event, RawArrayReceived, SettingsChange};
 use util::init;
@@ -449,22 +449,7 @@ pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock 
     )
 }
 
-#[wasm_bindgen(js_name = "maxValue")]
-pub fn max_value(data: Vec<u16>) -> f32 {
-    *data.par_iter().max().unwrap() as f32
-}
 
-#[wasm_bindgen(js_name = "isEmpty")]
-pub fn is_empty(data: Vec<u16>) -> bool {
-    data.par_iter().all(|&x| x == 0)
-}
-
-#[wasm_bindgen(js_name = "convertToUint8")]
-pub fn convert_to_uint8(data: Vec<u16>, max_value: f32) -> Vec<u8> {
-    data.par_iter()
-        .map(|x| ((*x as f32 / max_value) * 255.) as u8)
-        .collect()
-}
 
 // Test device sharing between WASM and JS context, could be useful at some point
 

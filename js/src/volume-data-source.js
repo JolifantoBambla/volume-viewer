@@ -1,11 +1,88 @@
-import init, {initThreadPool, convertToUint8, maxValue, isEmpty} from "../../pkg/volume_viewer.js";
+import init, {
+    initThreadPool,
+    isZeroU8, isZeroU16, isZeroF32,
+    maxU8, maxU16, maxF32,
+    scaleU8ToU8, scaleU16ToU8, scaleF32ToU8,
+    logTransformU8, logTransformU16, logTransformF32,
+    logScaleU8, logScaleU16, logScaleF32
+} from "../../pkg/volume_viewer.js";
 
 import { openGroup, openArray, slice } from '../../node_modules/zarr/zarr.mjs';
 
 // todo: maybe typescript?
 
+/**
+ * Splits a numpy data type descriptor (typestr) into its byte order and data type portion.
+ * @param dtype the numpy data type descriptor to split.
+ * @returns {{type: string, byteOrder: string}}
+ */
+const splitDtype = dtype => {
+    return {
+        byteOrder: dtype.slice(0, 1),
+        type: dtype.slice(1),
+    }
+};
+
+const getMaxValueForDataTypeDescriptor = dtypeDescriptor => {
+    switch (dtypeDescriptor.type) {
+        case 'u1':
+            return 255.;
+        case 'u2':
+            return 65535.;
+        case 'f4':
+            return Number.MAX_VALUE;
+        default:
+            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+    }
+};
+
+const isZero = (data, dtypeDescriptor, threshold) => {
+    switch (dtypeDescriptor.type) {
+        case 'u1':
+            return isZeroU8(data, threshold);
+        case 'u2':
+            return isZeroU16(data, threshold);
+        case 'f4':
+            return isZeroF32(data, threshold);
+        default:
+            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+    }
+};
+
+const castToU8 = (data, dtypeDescriptor) => {
+    switch (dtypeDescriptor.type) {
+        case 'u1':
+            return data;
+        case 'u2':
+            return scaleU16ToU8(data, getMaxValueForDataTypeDescriptor(dtypeDescriptor));
+        case 'f4':
+            return scaleF32ToU8(data, getMaxValueForDataTypeDescriptor(dtypeDescriptor));
+        default:
+            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+    }
+};
+
+const logTransformToU8 = (data, dtypeDescriptor) => {
+    const maxValue = getMaxValueForDataTypeDescriptor(dtypeDescriptor);
+    switch (dtypeDescriptor.type) {
+        case 'u1':
+            return logScaleU8(data, maxValue);
+        case 'u2':
+            return logScaleU16(data, maxValue);
+        case 'f4':
+            return logScaleF32(data, maxValue);
+        default:
+            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+    }
+};
+
 export const BRICK_REQUEST_EVENT = 'data-loader:brick-request';
 export const BRICK_RESPONSE_EVENT = 'data-loader:brick-response';
+
+export const PREPROCESS_METHOD_CAST = 'cast';
+export const PREPROCESS_METHOD_SCALE_TO_MAX = 'scaleToMax';
+export const PREPROCESS_METHOD_LOG = 'log';
+export const PREPROCESS_METHOD_LOG_SCALE = 'logScale';
 
 export class BrickAddress {
     constructor(index, level, channel = 0) {
@@ -121,6 +198,56 @@ export class VolumeDataSource extends BrickLoader {
         throw new Error("not implemented");
     }
 
+    get isZeroThreshold() {
+        return this.#config.isZeroThreshold || 0.0;
+    }
+
+    get preprocessingMethod() {
+        return this.#config.preprocessingMethod || PREPROCESS_METHOD_CAST;
+    }
+
+    async #scaleToMax(data, dtypeDescriptor) {
+        const maxValue = await this.getMaxValue();
+        switch (dtypeDescriptor.type) {
+            case 'u1':
+                return scaleU8ToU8(data, maxValue);
+            case 'u2':
+                return scaleU16ToU8(data, maxValue);
+            case 'f4':
+                return scaleF32ToU8(data, maxValue);
+            default:
+                throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+        }
+    }
+
+    async #logScale(data, dtypeDescriptor) {
+        const maxValue = await this.getMaxValue();
+        switch (dtypeDescriptor.type) {
+            case 'u1':
+                return logScaleU8(data, maxValue);
+            case 'u2':
+                return logScaleU16(data, maxValue);
+            case 'f4':
+                return logScaleF32(data, maxValue);
+            default:
+                throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+        }
+    }
+
+    async preprocess(data, dtypeDescriptor) {
+        switch (this.preprocessingMethod) {
+            case PREPROCESS_METHOD_LOG_SCALE:
+                return this.#logScale(data, dtypeDescriptor);
+            case PREPROCESS_METHOD_SCALE_TO_MAX:
+                return this.#scaleToMax(data, dtypeDescriptor);
+            case PREPROCESS_METHOD_LOG:
+                return logTransformToU8(data, dtypeDescriptor);
+            case PREPROCESS_METHOD_CAST:
+            default:
+                return castToU8(data, dtypeDescriptor);
+        }
+    }
+
     get config() {
         return this.#config;
     }
@@ -138,6 +265,9 @@ export class OmeZarrDataSource extends VolumeDataSource {
 
     constructor(zarrGroup, omeZarrMeta, zarrArrays, config) {
         super(config);
+
+        console.log(omeZarrMeta);
+        console.log(zarrArrays);
 
         this.#zarrGroup = zarrGroup;
         this.#omeZarrMeta = omeZarrMeta;
@@ -165,9 +295,6 @@ export class OmeZarrDataSource extends VolumeDataSource {
                 .slice()
                 .reverse()
                 .slice(0, 3);
-            // todo: this is probably not exactly what I want
-            //  I need this to be the scale factor by which I can scale the [0,1]^3 box
-            //  this is independent of the volumeSize, which is in voxels
             const scale = this.#omeZarrMeta
                 .multiscales[0]
                 .datasets[i]
@@ -182,14 +309,17 @@ export class OmeZarrDataSource extends VolumeDataSource {
             );
         }
         console.log(this.#omeZarrMeta);
-        const scale = this.#omeZarrMeta
+        const globalCoordinateTransformations = this.#omeZarrMeta
             .multiscales[0]
-            .coordinateTransformations
-            .find(d => d.type === 'scale')
-            .scale
-            .slice()
-            .reverse()
-            .slice(0, 3);
+            .coordinateTransformations;
+        let scale = [1., 1., 1.];
+        if (globalCoordinateTransformations) {
+            scale = globalCoordinateTransformations.find(d => d.type === 'scale')
+                .scale
+                .slice()
+                .reverse()
+                .slice(0, 3);
+        }
 
         this.#volumeMeta = new MultiResolutionVolumeMeta(brickSize, scale, resolutions);
         this.#maxValues = new Array(this.#zarrArrays[0].shape.slice().reverse()[3]);
@@ -232,39 +362,30 @@ export class OmeZarrDataSource extends VolumeDataSource {
     }
 
     async loadBrick(brickAddress) {
-        if (this.isBrickEmpty(brickAddress)) {
-            return null;
+        if (!this.isBrickEmpty(brickAddress)) {
+            const brickSelection = [];
+            for (let i = 2; i >= 0; --i) {
+                const origin = brickAddress.index[i] * this.brickSize[i];
+                brickSelection.push(
+                    slice(origin, origin + this.brickSize[i])
+                );
+            }
+            const dtypeDescriptor = splitDtype(this.#zarrArrays[brickAddress.level].meta.dtype);
+
+            const raw = await this.#zarrArrays[brickAddress.level]
+                .getRaw([0, brickAddress.channel, ...brickSelection]);
+
+            if (isZero(raw.data, dtypeDescriptor, this.isZeroThreshold)) {
+                this.#setBrickEmpty(brickAddress);
+            } else {
+                return await this.preprocess(raw.data, dtypeDescriptor);
+            }
         }
-
-        const brickSelection = [];
-        for (let i = 2; i >= 0; --i) {
-            const origin = brickAddress.index[i] * this.brickSize[i];
-            brickSelection.push(
-                slice(origin, origin + this.brickSize[i])
-            );
-        }
-        const raw = await this.#zarrArrays[brickAddress.level]
-            .getRaw([0, brickAddress.channel, ...brickSelection]);
-
-        if (isEmpty(raw.data)) {
-            this.#setBrickEmpty(brickAddress);
-            return null;
-        }
-
-        // this uses multithreading to transform data from uint16 to uint8
-        const uint8 = convertToUint8(
-            raw.data,
-            await this.getMaxValue(brickAddress.channel)
-        );
-
-        return {
-            ...raw,
-            data: uint8,
-        };
+        return new Uint8Array(0);
     }
 
-    async getMaxValue(channel = 0) {
-        if (!this.#maxValues[channel]) {
+    async getMaxValue(brickAddress) {
+        if (!this.#maxValues[brickAddress.channel]) {
             this.#maxValues[channel] = maxValue(
                 (await this.#zarrArrays
                         .slice()

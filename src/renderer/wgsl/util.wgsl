@@ -33,6 +33,14 @@ fn max_dimension(v: float3) -> u32 {
     return comparison_to_axis[comparison];
 }
 
+fn min_component(v: float3) -> f32 {
+    return v[min_dimension(v)];
+}
+
+fn max_component(v: float3) -> f32 {
+    return v[max_dimension(v)];
+}
+
 fn clamp_to_one(v: float3) -> float3 {
     return clamp(v, float3(), float3(1.));
 }
