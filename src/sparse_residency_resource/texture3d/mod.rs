@@ -250,41 +250,40 @@ impl SparseResidencyTexture3D {
                 let level = address.level as usize;
                 let resolution = self.meta.resolutions[level];
                 let offset = resolution.offset;
-                let extent = resolution.extent;
+                //let extent = resolution.extent;
                 let location = UVec3::from_slice(address.index.as_slice());
                 let brick_location = (offset + location) * self.meta.brick_size;
-                let brick_extent = index_to_subscript(
-                    (brick.data.len() as u32) - 1,
-                    &uvec_to_extent(&self.meta.brick_size),
-                ) + UVec3::ONE;
-
-
-                log::info!("writing subregion\n  origin: {:?}, brick_size: {:?},\n  offset: {:?}, extent: {:?},\n  address: {:?}", brick_location, brick_extent, offset, extent, address.index);
-
-                log::info!("brick data size {:?}, expected: {:?}", brick.data.len(), box_volume(&brick_extent));
-
-                self.brick_cache.write_subregion(
-                    brick.data.as_slice(),
-                    uvec_to_origin(&brick_location),
-                    uvec_to_extent(&brick_extent),
-                    &self.ctx,
-                );
-
-                // mark brick as mapped
                 let page_index =
                     subscript_to_index(&(offset + location), &self.page_directory.extent) as usize;
-                self.local_page_directory[page_index] =
-                    brick_location.extend(PageTableEntryFlag::Mapped as u32);
+
+                if brick.data.is_empty() {
+                    self.local_page_directory[page_index] =
+                        brick_location.extend(PageTableEntryFlag::Empty as u32);
+                } else {
+                    let brick_extent = index_to_subscript(
+                        (brick.data.len() as u32) - 1,
+                        &uvec_to_extent(&self.meta.brick_size),
+                    ) + UVec3::ONE;
+
+                    // log::info!("writing subregion\n  origin: {:?}, brick_size: {:?},\n  offset: {:?}, extent: {:?},\n  address: {:?}", brick_location, brick_extent, offset, extent, address.index);
+                    // log::info!("brick data size {:?}, expected: {:?}", brick.data.len(), box_volume(&brick_extent));
+                    // log::info!("brick size: {:?}, received size: {:?}", self.meta.brick_size, brick_extent);
+
+                    self.brick_cache.write_subregion(
+                        brick.data.as_slice(),
+                        uvec_to_origin(&brick_location),
+                        uvec_to_extent(&brick_extent),
+                        &self.ctx,
+                    );
+
+                    // mark brick as mapped
+                    self.local_page_directory[page_index] =
+                        brick_location.extend(PageTableEntryFlag::Mapped as u32);
+                }
 
                 let brick_id = address.into();
                 self.cached_bricks.insert(brick_id);
                 self.requested_bricks.remove(&brick_id);
-
-                log::info!(
-                    "brick size: {:?}, received size: {:?}",
-                    self.meta.brick_size,
-                    brick_extent
-                );
             }
 
             // update the page directory

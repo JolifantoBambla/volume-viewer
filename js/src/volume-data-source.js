@@ -1,4 +1,4 @@
-import init, { initThreadPool, convertToUint8, maxValue } from "../../pkg/volume_viewer.js";
+import init, {initThreadPool, convertToUint8, maxValue, isEmpty} from "../../pkg/volume_viewer.js";
 
 import { openGroup, openArray, slice } from '../../node_modules/zarr/zarr.mjs';
 
@@ -134,6 +134,8 @@ export class OmeZarrDataSource extends VolumeDataSource {
     #volumeMeta;
     #maxValues;
 
+    #emptyBricks;
+
     constructor(zarrGroup, omeZarrMeta, zarrArrays, config) {
         super(config);
 
@@ -155,7 +157,6 @@ export class OmeZarrDataSource extends VolumeDataSource {
                 );
             }
         }
-        console.log('brick size', brickSize);
 
         const resolutions = [];
         for (let i = 0; i < this.#zarrArrays.length; ++i) {
@@ -192,6 +193,7 @@ export class OmeZarrDataSource extends VolumeDataSource {
 
         this.#volumeMeta = new MultiResolutionVolumeMeta(brickSize, scale, resolutions);
         this.#maxValues = new Array(this.#zarrArrays[0].shape.slice().reverse()[3]);
+        this.#emptyBricks = {};
     }
 
     get brickSize() {
@@ -202,8 +204,38 @@ export class OmeZarrDataSource extends VolumeDataSource {
         return this.#volumeMeta;
     }
 
+    #ensureSafeEmptyBrickAccess(brickAddress) {
+        const c = `${brickAddress.channel}`;
+        const l = `${brickAddress.level}`;
+        if (this.#emptyBricks[c] === undefined) {
+            this.#emptyBricks[c] = {}
+        }
+        if (this.#emptyBricks[c][l] === undefined) {
+            this.#emptyBricks[c][l] = {}
+        }
+    }
+
+    #setBrickEmpty(brickAddress) {
+        this.#ensureSafeEmptyBrickAccess(brickAddress);
+        const c = `${brickAddress.channel}`;
+        const l = `${brickAddress.level}`;
+        const i = `${brickAddress.index}`;
+        this.#emptyBricks[c][l][i] = true;
+    }
+
+    isBrickEmpty(brickAddress) {
+        this.#ensureSafeEmptyBrickAccess(brickAddress);
+        const c = `${brickAddress.channel}`;
+        const l = `${brickAddress.level}`;
+        const i = `${brickAddress.index}`;
+        return this.#emptyBricks[c][l][i] === true;
+    }
+
     async loadBrick(brickAddress) {
-        //console.log('got brick request', brickAddress);
+        if (this.isBrickEmpty(brickAddress)) {
+            return null;
+        }
+
         const brickSelection = [];
         for (let i = 2; i >= 0; --i) {
             const origin = brickAddress.index[i] * this.brickSize[i];
@@ -213,6 +245,11 @@ export class OmeZarrDataSource extends VolumeDataSource {
         }
         const raw = await this.#zarrArrays[brickAddress.level]
             .getRaw([0, brickAddress.channel, ...brickSelection]);
+
+        if (isEmpty(raw.data)) {
+            this.#setBrickEmpty(brickAddress);
+            return null;
+        }
 
         // this uses multithreading to transform data from uint16 to uint8
         const uint8 = convertToUint8(
@@ -339,7 +376,7 @@ export class VolumeLoader {
                     type: BRICK_RESPONSE_EVENT,
                     brick: {
                         address: brickAddress,
-                        data: await this.#dataSource.loadBrick(brickAddress),
+                        data: await this.#dataSource.loadBrick(brickAddress) || [],
                     }
                 });
                 this.#currentlyLoading[JSON.stringify(brickAddress)] = false;

@@ -339,6 +339,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     debug(pixel, color);
 }
 
+
+
 fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32) -> float4 {
     let view_direction = normalize(step);
     var color = in_color;

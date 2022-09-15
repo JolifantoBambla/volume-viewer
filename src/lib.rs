@@ -454,6 +454,11 @@ pub fn max_value(data: Vec<u16>) -> f32 {
     *data.par_iter().max().unwrap() as f32
 }
 
+#[wasm_bindgen(js_name = "isEmpty")]
+pub fn is_empty(data: Vec<u16>) -> bool {
+    data.par_iter().all(|&x| x == 0)
+}
+
 #[wasm_bindgen(js_name = "convertToUint8")]
 pub fn convert_to_uint8(data: Vec<u16>, max_value: f32) -> Vec<u8> {
     data.par_iter()
