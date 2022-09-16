@@ -1,5 +1,4 @@
 use crate::renderer::geometry::Bounds3D;
-use crate::renderer::resource::Texture;
 use wgpu::Extent3d;
 
 pub type AABB = Bounds3D;

@@ -2,7 +2,74 @@ import * as Comlink from '../../node_modules/comlink/dist/esm/comlink.mjs';
 
 import init, {main, initThreadPool, dispatchChunkReceived} from '../../pkg/volume_viewer.js';
 import { toWrappedEvent } from './event.js';
-import { BrickAddress, BRICK_REQUEST_EVENT, BRICK_RESPONSE_EVENT } from './volume-data-source.js';
+import { BRICK_REQUEST_EVENT, BRICK_RESPONSE_EVENT } from './volume-data-source.js';
+
+export const RENDER_MODE_GRID_TRAVERSAL = 'grid_traversal';
+export const RENDER_MODE_DIRECT = 'direct';
+export const RENDER_MODES = [
+    RENDER_MODE_GRID_TRAVERSAL,
+    RENDER_MODE_DIRECT,
+];
+
+export class Color {
+    r;
+    g;
+    b;
+
+    constructor({r = 0.0, g = 0.0, b = 0.0}) {
+        this.r = r;
+        this.g = g;
+        this.b = b;
+    }
+
+    static random() {
+        return new Color({
+           r: Math.random(),
+           g: Math.random(),
+           b: Math.random(),
+        });
+    }
+}
+
+export class ChannelSettings {
+    channelName;
+    channelIndex;
+    maxLoD;
+    minLoD;
+    thresholdLower;
+    thresholdUpper;
+    color;
+    visible;
+
+    constructor({channelName, channelIndex = 0, maxLoD = 0, minLoD, thresholdLower = 0.0, thresholdUpper = 1.0, color, visible = false}) {
+        // todo: validation
+        this.channelName = channelName || `${channelIndex}`;
+        this.channelIndex = channelIndex;
+        this.maxLoD = maxLoD;
+        this.minLoD = minLoD || maxLoD;
+        this.thresholdLower = thresholdLower;
+        this.thresholdUpper = thresholdUpper;
+        this.color = color || Color.random();
+        this.visible = visible;
+    }
+}
+
+export class VolumeRendererSettings {
+    renderMode;
+    stepScale;
+    maxSteps;
+    backgroundColor;
+    channelSettings;
+
+    constructor({renderMode = RENDER_MODE_GRID_TRAVERSAL, stepScale = 1.0, maxSteps = 100, backgroundColor = new Color({}),channelSettings = [new ChannelSettings({})]}) {
+        // todo: validation
+        this.renderMode = renderMode;
+        this.stepScale = stepScale;
+        this.maxSteps = maxSteps;
+        this.backgroundColor = backgroundColor;
+        this.channelSettings = channelSettings;
+    }
+}
 
 export class VolumeRenderer {
     #canvas;
@@ -42,7 +109,7 @@ export class VolumeRenderer {
         this.#initialized = true;
     }
 
-    async run() {
+    async run(renderSettings = null) {
         if (!this.#initialized) {
             console.warn('\'run\' called on uninitialized VolumeRenderer.')
             return;
@@ -92,8 +159,10 @@ export class VolumeRenderer {
             }
         })
 
+        console.log(renderSettings);
+
         // start event loop
-        main(this.#canvas, this.#loader.volumeMeta);
+        main(this.#canvas, this.#loader.volumeMeta, renderSettings);
     }
 
     get volumeMeta() {

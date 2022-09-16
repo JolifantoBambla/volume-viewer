@@ -113,10 +113,11 @@ export class VolumeResolutionMeta {
 }
 
 export class MultiResolutionVolumeMeta {
-    constructor(brickSize, scale, resolutions) {
+    constructor(brickSize, scale, resolutions, channels) {
         this.brickSize = brickSize;
         this.scale = scale;
         this.resolutions = resolutions;
+        this.channels = channels;
     }
 }
 
@@ -264,6 +265,8 @@ export class OmeZarrDataSource extends VolumeDataSource {
         this.#omeZarrMeta = omeZarrMeta;
         this.#zarrArrays = zarrArrays;
 
+        const numChannels = this.#zarrArrays[0].meta.shape[this.#zarrArrays[0].meta.shape.length - 4];
+
         const brickSize = config.bricks.minimumSize;
         for (const arr of this.#zarrArrays) {
             for (let i = 0; i < 3; ++i) {
@@ -311,7 +314,7 @@ export class OmeZarrDataSource extends VolumeDataSource {
                 .slice(0, 3);
         }
 
-        this.#volumeMeta = new MultiResolutionVolumeMeta(brickSize, scale, resolutions);
+        this.#volumeMeta = new MultiResolutionVolumeMeta(brickSize, scale, resolutions, [...new Array(numChannels).keys()].map(k => { name: `${k}` }));
         this.#maxValues = new Array(this.#zarrArrays[0].shape.slice().reverse()[3]);
         this.#emptyBricks = {};
     }

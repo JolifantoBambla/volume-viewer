@@ -14,6 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.0/dist/tweakpane.min.js"></script>
 <script type="module">
     import { createOffscreenRenderer, Config } from './js/src/offscreen_renderer.js';
+    import { ChannelSettings, VolumeRendererSettings, RENDER_MODE_GRID_TRAVERSAL, RENDER_MODE_DIRECT } from './js/src/volume-renderer.js';
     import { VolumeDataSourceConfig, DataStoreConfig, BrickConfig, PreprocessConfig, PREPROCESS_METHOD_CAST } from "./js/src/volume-data-source.js";
 
     // todo: this should come from the user
@@ -32,79 +33,6 @@
         }),
     );
 
-
-    // TODO: clean this up
-    // can it do transfer functions?
-    // maybe: https://github.com/tweakpane/plugin-essentials
-    const settings = new Tweakpane.Pane({
-        title: 'Settings',
-        expanded: true,
-    });
-
-    // DATA SETTINGS
-    const dataParams = {
-        channel: 0,
-    };
-    const dataSettings = settings.addFolder({
-        title: 'Data',
-        expanded: true,
-    });
-    dataSettings
-        .addInput(dataParams, 'channel', {min: 0, max: 0, step: 1})
-        .on('change', console.log);
-
-    // RENDER SETTINGS
-    const renderParams = {
-        stepSize: 5.0,
-        threshold: 0.5,
-        adjustForPadding: false,
-        renderMode: 'grid_traversal',
-        color: '#0000ff',
-        background: '#333333'
-    };
-
-    const renderSettings = settings.addFolder({
-        title: 'Rendering',
-        expanded: true,
-    });
-    const stepsSlider = renderSettings.addInput(
-        renderParams, 'stepSize',
-        {min: 0.5, max: 10.0, step: 0.2}
-    );
-    const thresholdSlider = renderSettings.addInput(
-        renderParams, 'threshold',
-        {min: 0.0, max: 1.0, step: 0.01}
-    );
-    const renderModeSelector = renderSettings.addInput(
-        renderParams, 'renderMode',
-        {
-            options: {
-                'Grid Traversal': 'grid_traversal',
-                Direct: 'direct',
-            }
-        }
-    );
-    const colorPicker = renderSettings.addInput(renderParams, 'color', {
-        picker: 'inline',
-        expanded: false,
-    });
-    const backgroundColorPicker = renderSettings.addInput(renderParams, 'background', {
-        picker: 'inline',
-        expanded: false,
-    });
-    backgroundColorPicker.on('change', e => {
-        document.body.style.backgroundColor = e.value;
-    });
-
-    // EXPORT SETTINGS
-    const exportSettingsButton = settings.addButton({
-        title: 'Export Settings',
-    });
-    exportSettingsButton.on('click', function() {
-        const preset = settings.exportPreset();
-        console.log(preset);
-    })
-
     async function start() {
         try {
             const offscreenRenderer = await createOffscreenRenderer(new Config({
@@ -116,8 +44,116 @@
             }));
 
             const volumeMetaData = await offscreenRenderer.volumeMeta;
-            console.log('volume meta in main', volumeMetaData);
-            offscreenRenderer.run();
+            const volumeRendererSettings = new VolumeRendererSettings({
+                channelSettings: volumeMetaData.channels.map((_, channelIndex) => {
+                    return new ChannelSettings({
+                        channelIndex,
+                        visible: channelIndex === 0,
+                        minLoD: volumeMetaData.resolutions.length,
+                    });
+                })
+            });
+
+            // TODO: clean this up
+            // can it do transfer functions?
+            // maybe: https://github.com/tweakpane/plugin-essentials
+            const settings = new Tweakpane.Pane({
+                title: 'Settings',
+                expanded: true,
+            });
+
+            // RENDER SETTINGS
+            const renderParams = {
+                stepSize: 5.0,
+                threshold: 0.5,
+                adjustForPadding: false,
+                renderMode: 'grid_traversal',
+                color: '#0000ff',
+                background: '#333333'
+            };
+
+            // todo: remove old render settings
+            // todo: adapt event handling
+            // todo: pass render settings to renderer at run
+            const renderSettings = settings.addFolder({
+                title: 'Rendering',
+                expanded: true,
+            });
+            const renderModeSelector = renderSettings.addInput(
+                volumeRendererSettings, 'renderMode',
+                {
+                    options: {
+                        'Grid Traversal': RENDER_MODE_GRID_TRAVERSAL,
+                        Direct: RENDER_MODE_DIRECT,
+                    }
+                }
+            );
+            const stepsSlider = renderSettings.addInput(
+                volumeRendererSettings, 'stepScale',
+                {min: 0.5, max: 10.0, step: 0.2, label: 'Step spacing'}
+            );
+            const numStepsSlider = renderSettings.addInput(
+                volumeRendererSettings, 'maxSteps',
+                {min: 1, max: 1000, step: 1, label: 'Max. steps'}
+            );
+            const backgroundColorPicker = renderSettings.addInput(volumeRendererSettings, 'backgroundColor', {
+                picker: 'inline',
+                expanded: false,
+            });
+            backgroundColorPicker.on('change', e => {
+                document.body.style.backgroundColor = e.value;
+            });
+
+            const channelsSettings = renderSettings.addFolder({
+                title: 'Channel Settings',
+                expanded: true,
+            });
+            volumeRendererSettings.channelSettings.forEach(c => {
+                const channelSettings = channelsSettings.addFolder({
+                    title: c.channelName,
+                    expanded: c.visible,
+                });
+                console.log(c.color);
+                const colorPicker = channelSettings.addInput(c, 'color', {
+                    picker: 'inline',
+                    expanded: c.visible,
+                    color: {type: 'float'},
+                });
+                const maxLodSlider = channelSettings.addInput(c, 'maxLoD', {
+                    label: 'Highest Level of Detail',
+                    min: 0, max: c.minLoD, step: 1
+                });
+                const thresholdLowerSlider = channelSettings.addInput(c, 'thresholdLower', {
+                    label: 'Threshold (lower)',
+                    min: 0.0, max: 1.0, step: 0.01
+                });
+                const thresholdUpperSlider = channelSettings.addInput(c, 'thresholdUpper', {
+                    label: 'Threshold (upper)',
+                    min: 0.0, max: 1.0, step: 0.01
+                });
+                const visible = channelSettings.addInput(c, 'visible');
+            });
+
+            const thresholdSlider = renderSettings.addInput(
+                renderParams, 'threshold',
+                {min: 0.0, max: 1.0, step: 0.01}
+            );
+            const colorPicker = renderSettings.addInput(renderParams, 'color', {
+                picker: 'inline',
+                expanded: false,
+            });
+
+            // EXPORT SETTINGS
+            const exportSettingsButton = settings.addButton({
+                title: 'Export Settings',
+            });
+            exportSettingsButton.on('click', function() {
+                const preset = settings.exportPreset();
+                console.log(preset);
+            })
+
+            console.log('volume meta in main', volumeMetaData, volumeRendererSettings);
+            offscreenRenderer.run(volumeRendererSettings);
 
             // register UI event listeners for render settings
             const dispatchRenderSettingsChange = (e) => {

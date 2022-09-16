@@ -40,6 +40,7 @@ use crate::window::window_builder_without_size;
 #[allow(unused)]
 use include_preprocessed_wgsl::include_preprocessed;
 use crate::renderer::pass::ray_guided_dvr::Settings;
+use crate::renderer::settings::MultiChannelVolumeRendererSettings;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -77,7 +78,7 @@ pub fn dispatch_chunk_received(data: Vec<u16>, shape: Vec<u32>) {
 //  create CustomEvent enum that consists of WindowEvent and can be extended by other events
 //  create thread pool that is supplied with event proxies sending events to event loop
 #[wasm_bindgen]
-pub fn main(canvas: JsValue, volume_meta: JsValue) {
+pub fn main(canvas: JsValue, volume_meta: JsValue, render_settings: JsValue) {
     // todo: make logger configurable
     init::set_panic_hook();
     init::set_logger(None);
@@ -114,10 +115,14 @@ pub fn main(canvas: JsValue, volume_meta: JsValue) {
         .into_serde()
         .expect("Received invalid volume meta. Shutting down.");
 
-    wasm_bindgen_futures::spawn_local(start_event_loop(canvas, volume_meta));
+    let render_settings: MultiChannelVolumeRendererSettings = render_settings
+        .into_serde()
+        .expect("Received invalid render settings. Shutting down.");
+
+    wasm_bindgen_futures::spawn_local(start_event_loop(canvas, volume_meta, render_settings));
 }
 
-async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMeta) {
+async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMeta, render_settings: MultiChannelVolumeRendererSettings) {
     let html_canvas = canvas
         .clone()
         .unchecked_into::<web_sys::HtmlCanvasElement>();
