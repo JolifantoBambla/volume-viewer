@@ -2,10 +2,9 @@ extern crate core;
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use bytemuck::Zeroable;
 
 use glam::{Vec2, Vec3, Vec4};
-use wasm_bindgen::{prelude::*, JsCast};
+use wasm_bindgen::{JsCast, prelude::*};
 use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
 };
@@ -17,7 +16,6 @@ pub use zarr_wasm::zarr::{DimensionArraySelection, GetOptions, ZarrArray};
 
 pub mod event;
 pub mod renderer;
-pub mod sparse_residency_resource;
 pub mod util;
 pub mod preprocessing;
 
@@ -31,11 +29,11 @@ use crate::renderer::context::GPUContext;
 use crate::renderer::geometry::Bounds3D;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::MultiChannelVolumeRenderer;
-use crate::sparse_residency_resource::texture3d::data_source::{
+use renderer::resource::sparse_residency::texture3d::data_source::{
     HtmlEventTargetTexture3DSource, SparseResidencyTexture3DSource,
 };
-use crate::sparse_residency_resource::texture3d::volume_meta::MultiResolutionVolumeMeta;
-use crate::sparse_residency_resource::texture3d::SparseResidencyTexture3D;
+use renderer::resource::sparse_residency::texture3d::volume_meta::MultiResolutionVolumeMeta;
+use renderer::resource::sparse_residency::texture3d::SparseResidencyTexture3D;
 use crate::window::window_builder_without_size;
 
 // todo: remove this (this is for testing the preprocessor macro)

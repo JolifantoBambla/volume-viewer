@@ -1,6 +1,5 @@
 pub mod dvr;
 pub mod present_to_screen;
-pub mod process_requests;
 pub mod ray_guided_dvr;
 
 use crate::renderer::context::GPUContext;

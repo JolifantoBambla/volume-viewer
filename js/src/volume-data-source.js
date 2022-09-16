@@ -1,6 +1,7 @@
 import init, {
     initThreadPool,
     isZeroU8, isZeroU16, isZeroF32,
+    minU8, minU16, minF32,
     maxU8, maxU16, maxF32,
     scaleU8ToU8, scaleU16ToU8, scaleF32ToU8,
     logTransformU8, logTransformU16, logTransformF32,
@@ -83,6 +84,12 @@ export const PREPROCESS_METHOD_CAST = 'cast';
 export const PREPROCESS_METHOD_SCALE_TO_MAX = 'scaleToMax';
 export const PREPROCESS_METHOD_LOG = 'log';
 export const PREPROCESS_METHOD_LOG_SCALE = 'logScale';
+export const PREPROCESS_METHODS = [
+    PREPROCESS_METHOD_CAST,
+    PREPROCESS_METHOD_SCALE_TO_MAX,
+    PREPROCESS_METHOD_LOG,
+    PREPROCESS_METHOD_LOG_SCALE
+];
 
 export class BrickAddress {
     constructor(index, level, channel = 0) {
@@ -102,7 +109,6 @@ export class VolumeResolutionMeta {
             );
         }
         this.scale = scale;
-        console.log("scale:", scale);
     }
 }
 
@@ -112,18 +118,6 @@ export class MultiResolutionVolumeMeta {
         this.scale = scale;
         this.resolutions = resolutions;
     }
-}
-
-export class Chunk {
-    /**
-     * The canonical origin of the chunk (i.e. in [0,1]^3)
-     */
-    origin;
-
-    /**
-     * The extent of the chunk (within [0,1]^3)
-     */
-    extent;
 }
 
 export class RawVolumeChunk {
@@ -199,11 +193,11 @@ export class VolumeDataSource extends BrickLoader {
     }
 
     get isZeroThreshold() {
-        return this.#config.isZeroThreshold || 0.0;
+        return this.#config.preprocessing.isZeroThreshold || 0.0;
     }
 
     get preprocessingMethod() {
-        return this.#config.preprocessingMethod || PREPROCESS_METHOD_CAST;
+        return this.#config.preprocessing.preprocessingMethod || PREPROCESS_METHOD_CAST;
     }
 
     async #scaleToMax(data, dtypeDescriptor) {
@@ -266,21 +260,18 @@ export class OmeZarrDataSource extends VolumeDataSource {
     constructor(zarrGroup, omeZarrMeta, zarrArrays, config) {
         super(config);
 
-        console.log(omeZarrMeta);
-        console.log(zarrArrays);
-
         this.#zarrGroup = zarrGroup;
         this.#omeZarrMeta = omeZarrMeta;
         this.#zarrArrays = zarrArrays;
 
-        const brickSize = config.minimumBrickSize;
+        const brickSize = config.bricks.minimumSize;
         for (const arr of this.#zarrArrays) {
             for (let i = 0; i < 3; ++i) {
                 brickSize[i] = Math.min(
-                    config.maximumBrickSize[i],
+                    config.bricks.maximumSize[i],
                     arr.shape[arr.shape.length - 1 - i],
                     Math.max(
-                        config.minimumBrickSize[i],
+                        config.bricks.minimumSize[i],
                         brickSize[i],
                         arr.chunks[arr.chunks.length - 1 - i]
                     )
@@ -308,7 +299,6 @@ export class OmeZarrDataSource extends VolumeDataSource {
                 new VolumeResolutionMeta(brickSize, volumeSize, scale)
             );
         }
-        console.log(this.#omeZarrMeta);
         const globalCoordinateTransformations = this.#omeZarrMeta
             .multiscales[0]
             .coordinateTransformations;
@@ -374,11 +364,14 @@ export class OmeZarrDataSource extends VolumeDataSource {
 
             const raw = await this.#zarrArrays[brickAddress.level]
                 .getRaw([0, brickAddress.channel, ...brickSelection]);
+            const data = await this.preprocess(
+                raw.data,
+                dtypeDescriptor);
 
-            if (isZero(raw.data, dtypeDescriptor, this.isZeroThreshold)) {
+            if (isZero(data, dtypeDescriptor, this.isZeroThreshold)) {
                 this.#setBrickEmpty(brickAddress);
             } else {
-                return await this.preprocess(raw.data, dtypeDescriptor);
+                return data;
             }
         }
         return new Uint8Array(0);
@@ -398,39 +391,81 @@ export class OmeZarrDataSource extends VolumeDataSource {
     }
 }
 
-export class VolumeDataSourceConfig {
+// -------------------- CONFIG ----------------------------
+export class DataStoreConfig {
     store;
     path;
     sourceType;
-    maximumBrickSize;
-    minimumBrickSize;
 
-    constructor({store, path, sourceType = "OME-Zarr"}, { maximumBrickSize = [256, 256, 256], minimumBrickSize = [32, 32, 32] }) {
+    constructor({store, path, sourceType = "OME-Zarr"}) {
         this.store = store;
         this.path = path;
         this.sourceType = sourceType;
-        this.maximumBrickSize = maximumBrickSize;
-        this.minimumBrickSize = minimumBrickSize;
     }
 }
+
+export class PreprocessConfig {
+    isZeroThreshold;
+    preprocessingMethod;
+
+    constructor({preprocessingMethod = PREPROCESS_METHOD_CAST, isZeroThreshold = 0.0}) {
+        if (!PREPROCESS_METHODS.includes(preprocessingMethod)) {
+            throw Error(`Expected one of ${PREPROCESS_METHODS}, got ${preprocessingMethod}`);
+        }
+        if (typeof isZeroThreshold !== 'number' || isZeroThreshold < 0.0) {
+            throw Error(`Expected a number >= 0.0, got ${isZeroThreshold}`);
+        }
+        this.preprocessingMethod = preprocessingMethod;
+        this.isZeroThreshold = isZeroThreshold;
+    }
+}
+
+export class BrickConfig {
+    minimumSize;
+    maximumSize;
+
+    constructor({ maxSize = [256, 256, 256], minSize = [32, 32, 32] }) {
+        if (maxSize.length != 3 || minSize.length != 3) {
+            throw Error(`Expected brick sizes of exactly length 3, got ${minSize} and ${maxSize}`);
+        }
+        for (let i = 0; i < 3; ++i) {
+            if (maxSize[i] < minSize[i]) {
+                throw Error(`Expected minimum size to be component wise <= minimum size, got ${minSize} and ${maxSize}`);
+            }
+        }
+        this.minimumSize = minSize;
+        this.maximumSize = minSize;
+    }
+}
+
+export class VolumeDataSourceConfig {
+    dataStore;
+    preprocessing;
+    bricks;
+
+    constructor(dataStore, preprocessConfig, brickConfig) {
+        this.dataStore = dataStore;
+        this.preprocessing = preprocessConfig;
+        this.bricks = brickConfig;
+    }
+}
+
+// -------------------- CONFIG ----------------------------
 
 async function createVolumeDataSource(config) {
     const mode = 'r';
 
-    const {store, path} = config;
+    const {store, path} = config.dataStore;
     const group = await openGroup(store, path, mode);
     const attributes = await group.attrs.asObject();
     const multiscale = attributes.multiscales[0];
     const resolutions = [];
     for (const dataset of multiscale.datasets) {
         resolutions.push(await openArray({
-            store: config.store,
+            store,
             path: `${path}/${dataset.path}`,
             mode
         }));
-
-        const idx = resolutions.length - 1;
-        console.log(`res shape ${resolutions[idx].shape}, res chunks: ${resolutions[idx].chunks}, res chunkSize: ${resolutions[idx].chunkSize}, res numChunks: ${resolutions[idx].numChunks}`)
     }
 
     return new OmeZarrDataSource(group, attributes, resolutions, config);

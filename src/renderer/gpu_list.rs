@@ -1,6 +1,6 @@
 use crate::renderer::context::GPUContext;
 use crate::renderer::pass::AsBindGroupEntries;
-use crate::renderer::resources::MappableBuffer;
+use crate::renderer::resource::MappableBuffer;
 use std::cmp::min;
 use std::marker::PhantomData;
 use std::mem::size_of;

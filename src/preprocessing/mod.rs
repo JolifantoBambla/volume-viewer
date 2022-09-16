@@ -24,6 +24,23 @@ pub fn is_zero_f32(data: Vec<f32>, threshold: f32) -> bool {
     data.par_iter().all(|&x| x.abs() <= thresh)
 }
 
+// MIN
+
+#[wasm_bindgen(js_name = "minU8")]
+pub fn min_u8(data: Vec<u8>) -> f32 {
+    *data.par_iter().min().unwrap() as f32
+}
+
+#[wasm_bindgen(js_name = "minU16")]
+pub fn min_u16(data: Vec<u16>) -> f32 {
+    *data.par_iter().min().unwrap() as f32
+}
+
+#[wasm_bindgen(js_name = "minF32")]
+pub fn min_f32(data: Vec<f32>) -> f32 {
+    *data.par_iter().min_by(|&a, &b| a.partial_cmp(b).expect("Encountered NaN value in data")).unwrap()
+}
+
 // MAX
 
 #[wasm_bindgen(js_name = "maxU8")]

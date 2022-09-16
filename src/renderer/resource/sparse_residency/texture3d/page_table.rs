@@ -1,4 +1,4 @@
-use crate::sparse_residency_resource::texture3d::volume_meta::{
+use crate::renderer::resource::sparse_residency::texture3d::volume_meta::{
     MultiResolutionVolumeMeta, VolumeResolutionMeta,
 };
 use glam::{UVec3, UVec4, Vec3};

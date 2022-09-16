@@ -1,5 +1,5 @@
 use crate::renderer::gpu_list::GpuList;
-use crate::renderer::resources::Texture;
+use crate::renderer::resource::Texture;
 use crate::renderer::{
     context::GPUContext,
     pass::{AsBindGroupEntries, GPUPass},
@@ -7,18 +7,6 @@ use crate::renderer::{
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Buffer, CommandEncoder};
 use wgsl_preprocessor::WGSLPreprocessor;
-
-#[repr(C)]
-#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Timestamp {
-    pub now: u32,
-}
-
-impl Timestamp {
-    pub fn new(now: u32) -> Self {
-        Self { now }
-    }
-}
 
 pub struct Resources<'a> {
     pub page_table_meta: &'a Buffer,

@@ -2,20 +2,25 @@ pub mod data_source;
 pub mod page_table;
 pub mod volume_meta;
 
+mod cache_management;
+
 use crate::renderer::context::GPUContext;
-use crate::renderer::pass::process_requests::{ProcessRequests, Resources, Timestamp};
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
-use crate::renderer::resources::Texture;
-use crate::sparse_residency_resource::texture3d::data_source::{
+use crate::renderer::resource::Texture;
+use crate::renderer::resource::sparse_residency::texture3d::data_source::{
     Brick, SparseResidencyTexture3DSource,
 };
-use crate::sparse_residency_resource::texture3d::page_table::{
+use crate::renderer::resource::sparse_residency::texture3d::page_table::{
     PageDirectoryMeta, PageTableEntryFlag,
 };
-use crate::sparse_residency_resource::texture3d::volume_meta::BrickAddress;
+use crate::renderer::resource::sparse_residency::texture3d::volume_meta::BrickAddress;
+
+use cache_management::Timestamp;
+use cache_management::process_requests::{ProcessRequests, Resources};
+
 use crate::util::extent::{
-    extent_to_uvec, index_to_subscript, subscript_to_index, uvec_to_extent, uvec_to_origin,
-    box_volume,
+    box_volume, extent_to_uvec, index_to_subscript, subscript_to_index, uvec_to_extent,
+    uvec_to_origin,
 };
 use glam::{UVec3, UVec4, Vec3};
 use std::cmp::min;

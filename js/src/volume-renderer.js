@@ -96,6 +96,10 @@ export class VolumeRenderer {
         main(this.#canvas, this.#loader.volumeMeta);
     }
 
+    get volumeMeta() {
+        return this.#loader.volumeMeta;
+    }
+
     /**
      * Dispatches a serialized event to the OffscreenCanvas.
      * @param eventString a serialized event

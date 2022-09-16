@@ -7,6 +7,8 @@ pub mod resources;
 pub mod trivial_volume_renderer;
 pub mod volume;
 pub mod wgsl;
+pub mod settings;
+pub mod resource;
 
 use wasm_bindgen::prelude::*;
 
@@ -14,8 +16,8 @@ use crate::renderer::camera::Camera;
 use crate::renderer::context::{ContextDescriptor, GPUContext};
 use crate::renderer::pass::present_to_screen;
 use crate::renderer::pass::{ray_guided_dvr, GPUPass};
-
 use crate::renderer::wgsl::create_wgsl_preprocessor;
+
 use bytemuck;
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
@@ -71,7 +73,7 @@ impl MultiChannelVolumeRenderer {
         };
 
         // todo: make size configurable
-        let dvr_result = resources::Texture::create_storage_texture(
+        let dvr_result = resource::Texture::create_storage_texture(
             &ctx.device,
             volume_render_result_extent.width,
             volume_render_result_extent.height,

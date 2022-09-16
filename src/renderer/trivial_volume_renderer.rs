@@ -1,7 +1,7 @@
 use crate::renderer::context::{ContextDescriptor, GPUContext};
 use crate::renderer::pass::GPUPass;
 use crate::renderer::pass::{dvr, present_to_screen};
-use crate::renderer::resources;
+use crate::renderer::resource;
 use crate::renderer::wgsl::create_wgsl_preprocessor;
 use crate::{Camera, RawVolumeBlock};
 use bytemuck;
@@ -38,8 +38,8 @@ impl TrivialVolumeRenderer {
         let wgsl_preprocessor = create_wgsl_preprocessor();
 
         let volume_texture =
-            resources::Texture::from_raw_volume_block(&ctx.device, &ctx.queue, &volume);
-        let storage_texture = resources::Texture::create_storage_texture(
+            resource::Texture::from_raw_volume_block(&ctx.device, &ctx.queue, &volume);
+        let storage_texture = resource::Texture::create_storage_texture(
             &ctx.device,
             canvas.width(),
             canvas.height(),
