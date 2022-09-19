@@ -41,7 +41,7 @@ export class ChannelSettings {
     color;
     visible;
 
-    constructor({channelName, channelIndex = 0, maxLoD = 0, minLoD, thresholdLower = 0.0, thresholdUpper = 1.0, color, visible = false}) {
+    constructor({channelName, channelIndex = 0, maxLoD = 0, minLoD, thresholdLower = 0.01, thresholdUpper = 1.0, color, visible = false}) {
         // todo: validation
         this.channelName = channelName || `${channelIndex}`;
         this.channelIndex = channelIndex;

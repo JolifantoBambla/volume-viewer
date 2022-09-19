@@ -134,11 +134,11 @@ async function createUI(offscreenRenderer) {
             expanded: c.visible,
             color: {type: 'float'},
         });
-        const lodSlider = channelSettings.addInput({lod: {min: 0, max: c.minLoD}}, 'lod', {
+        const lodSlider = channelSettings.addInput({lod: {min: c.maxLoD, max: c.minLoD}}, 'lod', {
             label: 'Resolution Levels',
             min: 0, max: c.minLoD, step: 1,
         });
-        const thresholdSlider = channelSettings.addInput({threshold: {min: 0.0, max: 1.0}}, 'threshold', {
+        const thresholdSlider = channelSettings.addInput({threshold: {min: c.thresholdLower, max: c.thresholdUpper}}, 'threshold', {
             label: 'Threshold',
             min: 0.0, max: 1.0, step: 0.01,
         });
