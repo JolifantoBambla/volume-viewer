@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Volume Viewer</title>
 </head>
-<body style="background-color:rgb(51, 51, 51);">
+<body style="background-color:rgb(0, 0, 0);">
 
 <!-- Adds COOP and COEP headers, see: https://github.com/gzuidhof/coi-serviceworker -->
 <script src="coi-serviceworker.min.js"></script>
@@ -15,7 +15,6 @@
 <script src="js/external/tweakpane-plugin-essentials-0.1.5.min.js"></script>
 <script type="module">
     import { createOffscreenRenderer, Config } from './js/src/offscreen_renderer.js';
-    import { ChannelSettings, VolumeRendererSettings, RENDER_MODE_GRID_TRAVERSAL, RENDER_MODE_DIRECT } from './js/src/volume-renderer.js';
     import { VolumeDataSourceConfig, DataStoreConfig, BrickConfig, PreprocessConfig, PREPROCESS_METHOD_CAST } from "./js/src/volume-data-source.js";
 
     // todo: this should come from the user
@@ -36,126 +35,14 @@
 
     async function start() {
         try {
-            const offscreenRenderer = await createOffscreenRenderer(new Config({
+            const {offscreenRenderer, volumeRendererSettings} = await createOffscreenRenderer(new Config({
                 canvas: {
                     canvasId: 'canvas'
                 },
                 logging: 'debug',
                 dataSource: dataSourceConfig,
             }));
-
-            // register UI event listeners for render settings
-            const dispatchRenderSettingsChange = (e, channelIndex = undefined) => {
-                offscreenRenderer.dispatchUIEvent(JSON.stringify({
-                    type: 'rendersettings',
-                    setting: e.presetKey,
-                    value: e.value,
-                    channelIndex,
-                }));
-            };
-
-            const volumeMetaData = await offscreenRenderer.volumeMeta;
-            const volumeRendererSettings = new VolumeRendererSettings({
-                channelSettings: volumeMetaData.channels.map((_, channelIndex) => {
-                    return new ChannelSettings({
-                        channelIndex,
-                        visible: channelIndex === 0,
-                        minLoD: volumeMetaData.resolutions.length,
-                    });
-                })
-            });
-
-            // TODO: clean this up
-            // can it do transfer functions?
-            // maybe: https://github.com/tweakpane/plugin-essentials
-            const settings = new Tweakpane.Pane({
-                title: 'Settings',
-                expanded: true,
-            });
-            settings.registerPlugin(TweakpaneEssentialsPlugin);
-
-            // todo: remove old render settings
-            // todo: adapt event handling
-            // todo: pass render settings to renderer at run
-            const renderSettings = settings.addFolder({
-                title: 'Rendering',
-                expanded: true,
-            });
-            const renderModeSelector = renderSettings.addInput(
-                volumeRendererSettings, 'renderMode',
-                {
-                    options: {
-                        'Grid Traversal': RENDER_MODE_GRID_TRAVERSAL,
-                        Direct: RENDER_MODE_DIRECT,
-                    }
-                }
-            );
-            const stepsSlider = renderSettings.addInput(
-                volumeRendererSettings, 'stepScale',
-                {min: 0.5, max: 10.0, step: 0.2, label: 'Step spacing'}
-            );
-            const numStepsSlider = renderSettings.addInput(
-                volumeRendererSettings, 'maxSteps',
-                {min: 1, max: 1000, step: 1, label: 'Max. steps'}
-            );
-            const backgroundColorPicker = renderSettings.addInput(volumeRendererSettings, 'backgroundColor', {
-                picker: 'inline',
-                expanded: false,
-            });
-            backgroundColorPicker.on('change', e => {
-                document.body.style.backgroundColor = e.value;
-            });
-
-            [renderModeSelector, stepsSlider, numStepsSlider, backgroundColorPicker]
-                .forEach(i => i.on('change', dispatchRenderSettingsChange));
-
-            const channelsSettings = renderSettings.addFolder({
-                title: 'Channel Settings',
-                expanded: true,
-            });
-            volumeRendererSettings.channelSettings.forEach(c => {
-                const channelSettings = channelsSettings.addFolder({
-                    title: c.channelName,
-                    expanded: c.visible,
-                });
-                const visibleToggle = channelSettings.addInput(c, 'visible');
-                const colorPicker = channelSettings.addInput(c, 'color', {
-                    picker: 'inline',
-                    expanded: c.visible,
-                    color: {type: 'float'},
-                });
-                const lodSlider = channelSettings.addInput({lod: {min: 0, max: c.minLoD}}, 'lod', {
-                   label: 'Resolution Levels',
-                    min: 0, max: c.minLoD, step: 1,
-                });
-                const thresholdSlider = channelSettings.addInput({threshold: {min: 0.0, max: 1.0}}, 'threshold', {
-                    label: 'Threshold',
-                    min: 0.0, max: 1.0, step: 0.01,
-                });
-
-                // todo: range slider events
-                [colorPicker, visibleToggle]
-                    .forEach(i => i.on('change', e => dispatchRenderSettingsChange(e, channelIndex)));
-                lodSlider.on('change', e => {
-                   console.log(e);
-                });
-                thresholdSlider.on('change', e => {
-                    console.log(e);
-                })
-            });
-
-            // EXPORT SETTINGS
-            const exportSettingsButton = settings.addButton({
-                title: 'Export Settings',
-            });
-            exportSettingsButton.on('click', function() {
-                const preset = settings.exportPreset();
-                console.log(preset);
-            })
-
-            console.log('volume meta in main', volumeMetaData, volumeRendererSettings);
             offscreenRenderer.run(volumeRendererSettings);
-
         } catch (e) {
             console.error(e);
         }

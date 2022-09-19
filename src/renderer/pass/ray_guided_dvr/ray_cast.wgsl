@@ -211,6 +211,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var requested_brick = false;
     var last_lod = 0u;
     var page_table = clone_page_table_meta(0u);
+    var steps_taken = 0u;
 
     // todo: remove this (debug)
     var request_bricks = true;
@@ -277,6 +278,11 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 if (is_saturated(color)) {
                     break;
                 }
+
+                steps_taken += 1;
+            }
+            if (steps_taken >= uniforms.settings.max_steps) {
+                break;
             }
         }
     } else {
@@ -337,6 +343,12 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     break;
                 }
             }
+
+            steps_taken += 1;
+            if (steps_taken >= uniforms.settings.max_steps) {
+                break;
+            }
+
             p += ray_os.direction * dt;
         }
 

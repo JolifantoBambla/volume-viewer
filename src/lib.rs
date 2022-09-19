@@ -19,7 +19,7 @@ pub mod renderer;
 pub mod util;
 pub mod preprocessing;
 
-use crate::event::{Event, RawArrayReceived, SettingsChange};
+use crate::event::{ChannelSettingsChange, Event, RawArrayReceived, SettingsChange};
 use util::init;
 use util::window;
 
@@ -335,7 +335,31 @@ pub fn run_event_loop(
                                 log::error!("Illegal step size: {}", step_scale);
                             }
                         }
-                        _ => {}
+                        SettingsChange::MaxSteps(max_steps) => {
+                            settings.max_steps = max_steps;
+                        }
+                        SettingsChange::BackgroundColor(color) => {
+                            settings.background_color = color;
+                        }
+                        SettingsChange::ChannelSetting(channel_setting) => {
+                            let i = channel_setting.channel_index as usize;
+                            match channel_setting.channel_setting {
+                                ChannelSettingsChange::Color(color) => {
+                                    settings.channel_settings[i].color = color;
+                                }
+                                ChannelSettingsChange::Visible(visible) => {
+                                    settings.channel_settings[i].visible = visible;
+                                }
+                                ChannelSettingsChange::Threshold(range) => {
+                                    settings.channel_settings[i].threshold_lower = range.min;
+                                    settings.channel_settings[i].threshold_upper = range.max;
+                                }
+                                ChannelSettingsChange::LoD(range) => {
+                                    settings.channel_settings[i].max_lod = range.min;
+                                    settings.channel_settings[i].min_lod = range.max;
+                                }
+                            }
+                        }
                     }
                 }
                 _ => {}
