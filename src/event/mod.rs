@@ -16,8 +16,8 @@ pub enum SettingsChange {
     #[serde(rename = "renderMode")]
     RenderMode(RenderMode),
 
-    #[serde(rename = "stepSize")]
-    StepSize(f32),
+    #[serde(rename = "stepScale")]
+    StepScale(f32),
 
     #[serde(rename = "threshold")]
     Threshold(f32),

@@ -12,6 +12,7 @@
 <script src="coi-serviceworker.min.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.0/dist/tweakpane.min.js"></script>
+<script src="js/external/tweakpane-plugin-essentials-0.1.5.min.js"></script>
 <script type="module">
     import { createOffscreenRenderer, Config } from './js/src/offscreen_renderer.js';
     import { ChannelSettings, VolumeRendererSettings, RENDER_MODE_GRID_TRAVERSAL, RENDER_MODE_DIRECT } from './js/src/volume-renderer.js';
@@ -43,6 +44,16 @@
                 dataSource: dataSourceConfig,
             }));
 
+            // register UI event listeners for render settings
+            const dispatchRenderSettingsChange = (e, channelIndex = undefined) => {
+                offscreenRenderer.dispatchUIEvent(JSON.stringify({
+                    type: 'rendersettings',
+                    setting: e.presetKey,
+                    value: e.value,
+                    channelIndex,
+                }));
+            };
+
             const volumeMetaData = await offscreenRenderer.volumeMeta;
             const volumeRendererSettings = new VolumeRendererSettings({
                 channelSettings: volumeMetaData.channels.map((_, channelIndex) => {
@@ -61,16 +72,7 @@
                 title: 'Settings',
                 expanded: true,
             });
-
-            // RENDER SETTINGS
-            const renderParams = {
-                stepSize: 5.0,
-                threshold: 0.5,
-                adjustForPadding: false,
-                renderMode: 'grid_traversal',
-                color: '#0000ff',
-                background: '#333333'
-            };
+            settings.registerPlugin(TweakpaneEssentialsPlugin);
 
             // todo: remove old render settings
             // todo: adapt event handling
@@ -104,6 +106,9 @@
                 document.body.style.backgroundColor = e.value;
             });
 
+            [renderModeSelector, stepsSlider, numStepsSlider, backgroundColorPicker]
+                .forEach(i => i.on('change', dispatchRenderSettingsChange));
+
             const channelsSettings = renderSettings.addFolder({
                 title: 'Channel Settings',
                 expanded: true,
@@ -113,34 +118,30 @@
                     title: c.channelName,
                     expanded: c.visible,
                 });
-                console.log(c.color);
+                const visibleToggle = channelSettings.addInput(c, 'visible');
                 const colorPicker = channelSettings.addInput(c, 'color', {
                     picker: 'inline',
                     expanded: c.visible,
                     color: {type: 'float'},
                 });
-                const maxLodSlider = channelSettings.addInput(c, 'maxLoD', {
-                    label: 'Highest Level of Detail',
-                    min: 0, max: c.minLoD, step: 1
+                const lodSlider = channelSettings.addInput({lod: {min: 0, max: c.minLoD}}, 'lod', {
+                   label: 'Resolution Levels',
+                    min: 0, max: c.minLoD, step: 1,
                 });
-                const thresholdLowerSlider = channelSettings.addInput(c, 'thresholdLower', {
-                    label: 'Threshold (lower)',
-                    min: 0.0, max: 1.0, step: 0.01
+                const thresholdSlider = channelSettings.addInput({threshold: {min: 0.0, max: 1.0}}, 'threshold', {
+                    label: 'Threshold',
+                    min: 0.0, max: 1.0, step: 0.01,
                 });
-                const thresholdUpperSlider = channelSettings.addInput(c, 'thresholdUpper', {
-                    label: 'Threshold (upper)',
-                    min: 0.0, max: 1.0, step: 0.01
-                });
-                const visible = channelSettings.addInput(c, 'visible');
-            });
 
-            const thresholdSlider = renderSettings.addInput(
-                renderParams, 'threshold',
-                {min: 0.0, max: 1.0, step: 0.01}
-            );
-            const colorPicker = renderSettings.addInput(renderParams, 'color', {
-                picker: 'inline',
-                expanded: false,
+                // todo: range slider events
+                [colorPicker, visibleToggle]
+                    .forEach(i => i.on('change', e => dispatchRenderSettingsChange(e, channelIndex)));
+                lodSlider.on('change', e => {
+                   console.log(e);
+                });
+                thresholdSlider.on('change', e => {
+                    console.log(e);
+                })
             });
 
             // EXPORT SETTINGS
@@ -154,20 +155,6 @@
 
             console.log('volume meta in main', volumeMetaData, volumeRendererSettings);
             offscreenRenderer.run(volumeRendererSettings);
-
-            // register UI event listeners for render settings
-            const dispatchRenderSettingsChange = (e) => {
-                offscreenRenderer.dispatchUIEvent(JSON.stringify({
-                    type: 'rendersettings',
-                    setting: e.presetKey,
-                    value: e.value,
-                }));
-            };
-
-            stepsSlider.on('change', dispatchRenderSettingsChange);
-            renderModeSelector.on('change', dispatchRenderSettingsChange);
-            thresholdSlider.on('change', dispatchRenderSettingsChange);
-            colorPicker.on('change', dispatchRenderSettingsChange);
 
         } catch (e) {
             console.error(e);

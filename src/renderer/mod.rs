@@ -27,8 +27,8 @@ use wgpu::{BindGroup, Buffer, Extent3d, SamplerDescriptor, SubmissionIndex};
 use winit::dpi::PhysicalSize;
 
 use crate::renderer::pass::present_to_screen::PresentToScreen;
-use crate::renderer::pass::ray_guided_dvr::{RayGuidedDVR, Resources, Settings};
-use crate::{SparseResidencyTexture3D, SparseResidencyTexture3DSource};
+use crate::renderer::pass::ray_guided_dvr::{RayGuidedDVR, Resources, ChannelSettings};
+use crate::{MultiChannelVolumeRendererSettings, SparseResidencyTexture3D, SparseResidencyTexture3DSource};
 pub use trivial_volume_renderer::TrivialVolumeRenderer;
 
 pub struct MultiChannelVolumeRenderer {
@@ -39,7 +39,8 @@ pub struct MultiChannelVolumeRenderer {
 
     volume_render_pass: RayGuidedDVR,
     volume_render_bind_group: BindGroup,
-    volume_render_uniform_buffer: Buffer,
+    volume_render_global_settings_buffer: Buffer,
+    volume_render_channel_settings_buffer: Buffer,
     volume_render_result_extent: Extent3d,
 
     present_to_screen_pass: PresentToScreen,
@@ -51,6 +52,7 @@ impl MultiChannelVolumeRenderer {
     pub async fn new(
         canvas: JsValue,
         volume_source: Box<dyn SparseResidencyTexture3DSource>,
+        render_settings: &MultiChannelVolumeRendererSettings,
     ) -> Self {
         let canvas = canvas.unchecked_into::<OffscreenCanvas>();
         let ctx = Arc::new(
@@ -96,7 +98,7 @@ impl MultiChannelVolumeRenderer {
             &glam::Mat4::from_translation(glam::Vec3::new(-0.5, -0.5, -0.5)),
         );
         let uniforms = ray_guided_dvr::Uniforms::default();
-        let volume_render_uniform_buffer =
+        let volume_render_global_settings_buffer =
             ctx.device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
@@ -104,11 +106,25 @@ impl MultiChannelVolumeRenderer {
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
 
+        let channel_settings: Vec<ChannelSettings> = render_settings
+            .channel_settings
+            .iter()
+            .map(|cs| ChannelSettings::from(cs))
+            .collect();
+        let volume_render_channel_settings_buffer =
+            ctx.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor{
+                    label: None,
+                    contents: bytemuck::cast_slice(channel_settings.as_slice()),
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                });
+
         let volume_render_pass = RayGuidedDVR::new(&volume_texture, &wgsl_preprocessor, &ctx);
         let volume_render_bind_group = volume_render_pass.create_bind_group(Resources {
             volume_sampler: &volume_sampler,
             output: &dvr_result.view,
-            uniforms: &volume_render_uniform_buffer,
+            uniforms: &volume_render_global_settings_buffer,
+            channel_settings: &volume_render_channel_settings_buffer,
         });
 
         let present_to_screen_pass = PresentToScreen::new(&ctx);
@@ -125,24 +141,36 @@ impl MultiChannelVolumeRenderer {
             volume_texture,
             volume_render_pass,
             volume_render_bind_group,
-            volume_render_uniform_buffer,
+            volume_render_global_settings_buffer,
+            volume_render_channel_settings_buffer,
             volume_render_result_extent,
             present_to_screen_pass,
             present_to_screen_bind_group,
         }
     }
 
-    pub fn update(&self, camera: &Camera, frame_number: u32, settings: Settings) {
+    pub fn update(&self, camera: &Camera, frame_number: u32, settings: &MultiChannelVolumeRendererSettings) {
         let uniforms = ray_guided_dvr::Uniforms::new(
             camera.create_uniform(),
             self.volume_transform,
             frame_number,
             settings,
         );
+        let channel_settings: Vec<ChannelSettings> = settings
+            .channel_settings
+            .iter()
+            .map(|cs| ChannelSettings::from(cs))
+            .collect();
+
         self.ctx.queue.write_buffer(
-            &self.volume_render_uniform_buffer,
+            &self.volume_render_global_settings_buffer,
             0,
             bytemuck::bytes_of(&uniforms),
+        );
+        self.ctx.queue.write_buffer(
+            &self.volume_render_channel_settings_buffer,
+            0,
+            bytemuck::cast_slice(channel_settings.as_slice())
         );
     }
 

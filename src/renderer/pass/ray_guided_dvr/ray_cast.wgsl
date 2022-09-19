@@ -12,13 +12,6 @@
 // includes that require the shader to define certain functions
 @include(volume_util)
 
-// constant values
-// todo: maybe just remove this
-let relative_step_size: f32 = 1.;
-// todo: should be a uniform
-let background_color = float4(float3(0.2), 1.);
-
-
 fn debug(pixel: int2, color: float4) {
     textureStore(result, pixel, color);
 }
@@ -42,12 +35,12 @@ fn black(pixel: int2) {
 let GRID_TRAVERSAL = 0u;
 let DIRECT = 1u;
 
-struct Settings {
+struct GlobalSettings {
     render_mode: u32,
-    step_size: f32,
-    threshold: f32,
+    step_scale: f32,
+    max_steps: u32,
     padding: u32,
-    channel_color: float4,
+    background_color: float4,
 }
 
 // todo: come up with a better name...
@@ -56,7 +49,23 @@ struct Uniforms {
     camera: Camera,
     volume_transform: Transform,
     @size(16) timestamp: u32,
-    settings: Settings,
+    settings: GlobalSettings,
+}
+
+struct ChannelSettings {
+    color: float4,
+    channel_index: u32,
+    max_lod: u32,
+    min_lod: u32,
+    threshold_lower: f32,
+    threshold_upper: f32,
+    visible: u32,
+    padding1: u32,
+    padding2: u32,
+}
+
+struct ChannelSettingsList {
+    channels: array<ChannelSettings>,
 }
 
 // Bindings
@@ -65,6 +74,7 @@ struct Uniforms {
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var volume_sampler: sampler;
 @group(0) @binding(2) var result: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(3) var<storage> channel_settings_list: ChannelSettingsList;
 
 // Each channel in the multiresolution, multichannel volume is represented by its own bind group of the following structure:
 // 1) page_directory: holds page entries for accessing the brick cache
@@ -113,6 +123,21 @@ fn clone_page_table_meta(level: u32) -> PageTableMeta {
         page_table_meta.page_table_extent,
         page_table_meta.volume_size
     );
+}
+
+fn clone_channel_settings(channel_index: u32) -> ChannelSettings {
+    let channel_settings = channel_settings_list.channels[channel_index];
+    return ChannelSettings(
+        channel_settings.color,
+        channel_settings.channel_index,
+        channel_settings.max_lod,
+        channel_settings.min_lod,
+        channel_settings.threshold_lower,
+        channel_settings.threshold_upper,
+        channel_settings.visible,
+        0u, // padding1,
+        0u  // padding2,
+     );
 }
 
 fn normalize_cache_address(cache_address: uint3) -> float3 {
@@ -173,7 +198,12 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let timestamp = uniforms.timestamp;
 
-    let lowest_lod = arrayLength(&page_table_meta.resolutions);
+    // todo: look for visible channels as soon as multiple channels are supported
+    let cs = clone_channel_settings(0);
+    
+    let lowest_res = min(cs.min_lod, arrayLength(&page_table_meta.resolutions));
+    let highest_res = min(cs.max_lod, lowest_res);
+    
     let brick_size = page_table_meta.resolutions[0].brick_size;
 
     // Set up state tracking
@@ -195,7 +225,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
             let position = brick_endpoints.entry;
             let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
-            let lod = select_level_of_detail(distance_to_camera, lowest_lod);
+            let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res);
             if (lod != last_lod) {
                 last_lod = lod;
                 page_table = clone_page_table_meta(lod);
@@ -242,7 +272,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 }
 
                 let step = (stop - start) / f32(num_steps);
-                color = ray_cast(color, start, step, num_steps);
+                color = ray_cast(color, start, step, num_steps, cs);
 
                 if (is_saturated(color)) {
                     break;
@@ -251,7 +281,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
     } else {
         let dt_vec = 1. / (float3(page_table.volume_size) * abs(ray_os.direction));
-        let dt_scale = uniforms.settings.step_size;
+        let dt_scale = uniforms.settings.step_scale;
         let dt = dt_scale * min_component(dt_vec);
         let offset = wang_hash(pixel.x + 640 * pixel.y);
         var p = ray_at(ray_os, t_min + offset * dt);
@@ -261,7 +291,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
         for (var t = t_min; t_min < t_max; t += dt) {
             let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
-            let lod = select_level_of_detail(distance_to_camera, lowest_lod);
+            let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res);
             if (lod != last_lod) {
                 last_lod = lod;
                 page_table = clone_page_table_meta(lod);
@@ -295,8 +325,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 let value = sample_volume(sample_location);
 
                 // todo: make minimum threshold configurable
-                if (value > uniforms.settings.threshold) {
-                    let trans_sample = uniforms.settings.channel_color;
+                if (value >= cs.threshold_lower && value <= cs.threshold_upper) {
+                    let trans_sample = cs.color;
                     var val_color = float4(trans_sample.rgb, value * trans_sample.a);
                     val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
                     color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
@@ -313,7 +343,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         /*
         let entry_os = clamp_to_one(ray_at(ray_os, t_min));
         let exit_os = clamp_to_one(ray_at(ray_os, t_max));
-        let unscaled_step = (exit_os - entry_os) * uniforms.settings.step_size;
+        let unscaled_step = (exit_os - entry_os) * uniforms.settings.step_scale;
         let view_direction = normalize(unscaled_step);
 
         let dist = distance(exit_os, entry_os);
@@ -341,7 +371,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             //}
 
             let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
-            let lod = select_level_of_detail(distance_to_camera, lowest_lod);
+            let lod = select_level_of_detail(distance_to_camera, lowest_res);
             if (lod != last_lod) {
                 last_lod = lod;
                 page_table = clone_page_table_meta(lod);
@@ -425,7 +455,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 	}
 */
 
-fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32) -> float4 {
+fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32, channel_settings: ChannelSettings) -> float4 {
     let view_direction = normalize(step);
     var color = in_color;
 
@@ -433,8 +463,8 @@ fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32) -> fl
     for (var i = 0; i < num_steps; i += 1) {
         let value = sample_volume(sample_location);
 
-        if (value > uniforms.settings.threshold) {
-            var lighting = compute_lighting(value, sample_location, step, view_direction);
+        if (value >= channel_settings.threshold_lower && value <= channel_settings.threshold_upper) {
+            var lighting = compute_lighting(value, sample_location, step, view_direction, channel_settings);
             lighting.a = value;
             color += lighting;
         }
@@ -449,7 +479,7 @@ fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32) -> fl
     return color;
 }
 
-fn compute_lighting(value: f32, x: float3, step: float3, view: float3) -> float4 {
+fn compute_lighting(value: f32, x: float3, step: float3, view: float3, channel_settings: ChannelSettings) -> float4 {
     var light_direction = view;//float3(1.);
 
     let normal = compute_volume_normal(x, step, view);
@@ -463,19 +493,21 @@ fn compute_lighting(value: f32, x: float3, step: float3, view: float3) -> float4
     let specular = pow(max(dot(halfway, normal), 0.), shininess);
 
     return float4(
-        apply_colormap(value) * (ambient + diffuse) + specular,
+        apply_colormap(value, channel_settings) * (ambient + diffuse) + specular,
         value
     );
 }
 
-fn apply_colormap(value: f32) -> float3{
+fn apply_colormap(value: f32, channel_settings: ChannelSettings) -> float3{
     let u_clim = float2(0., 0.5);
-    return uniforms.settings.channel_color.rgb * (value - u_clim[0]) / (u_clim[1] - u_clim[0]);
+    return channel_settings.color.rgb * (value - u_clim[0]) / (u_clim[1] - u_clim[0]);
 }
 
 // page table stuff
-fn select_level_of_detail(distance: f32, lowest_lod: u32) -> u32 {
+fn select_level_of_detail(distance: f32, highest_res: u32, lowest_res: u32) -> u32 {
     // todo: select based on distance to camera or screen size?
+    // let lod ...
+    // return clamp(lod, highest_res, lowest_res);
     return 0u; //page_table_meta.max_lod;
 }
 

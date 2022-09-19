@@ -3,7 +3,7 @@ extern crate core;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use glam::{Vec2, Vec3, Vec4};
+use glam::{Vec2, Vec3};
 use wasm_bindgen::{JsCast, prelude::*};
 use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
@@ -29,6 +29,7 @@ use crate::renderer::context::GPUContext;
 use crate::renderer::geometry::Bounds3D;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::MultiChannelVolumeRenderer;
+use crate::renderer::settings::MultiChannelVolumeRendererSettings;
 use renderer::resource::sparse_residency::texture3d::data_source::{
     HtmlEventTargetTexture3DSource, SparseResidencyTexture3DSource,
 };
@@ -39,8 +40,6 @@ use crate::window::window_builder_without_size;
 // todo: remove this (this is for testing the preprocessor macro)
 #[allow(unused)]
 use include_preprocessed_wgsl::include_preprocessed;
-use crate::renderer::pass::ray_guided_dvr::Settings;
-use crate::renderer::settings::MultiChannelVolumeRendererSettings;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -157,12 +156,13 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
                 .clone()
                 .unchecked_into::<web_sys::EventTarget>(),
         )),
+        &render_settings,
     )
     .await;
 
     // NOTE: All resource allocations should happen before the main render loop
     // The reason for this is that receiving allocation errors is async, but
-    let start_closure = Closure::once_into_js(move || run_event_loop(renderer, window, event_loop));
+    let start_closure = Closure::once_into_js(move || run_event_loop(renderer, render_settings, window, event_loop));
 
     // make sure to handle JS exceptions thrown inside start.
     // Otherwise wasm_bindgen_futures Queue would break and never handle any tasks again.
@@ -186,10 +186,12 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
 
 pub fn run_event_loop(
     renderer: MultiChannelVolumeRenderer,
+    render_settings: MultiChannelVolumeRendererSettings,
     window: Window,
     event_loop: EventLoop<Event<()>>,
 ) {
     let renderer = Rc::new(RefCell::new(renderer));
+    let mut settings = render_settings.clone();
 
     // TODO: refactor these params
     let distance_from_center = 500.;
@@ -225,14 +227,6 @@ pub fn run_event_loop(
     let mut left_mouse_pressed = false;
     let mut right_mouse_pressed = false;
     let mut frame_number = 0;
-
-    let mut settings = Settings {
-        render_mode: 0,
-        step_size: 5.0,
-        threshold: 0.5,
-        channel_color: Vec4::new(0., 0., 1., 1.),
-        ..Settings::default()
-    };
 
     let window = Rc::new(window);
 
@@ -332,30 +326,16 @@ pub fn run_event_loop(
                 Event::Settings(settings_change) => {
                     match settings_change {
                         SettingsChange::RenderMode(mode) => {
-                            settings.render_mode = mode as u32;
+                            settings.render_mode = mode;
                         },
-                        SettingsChange::StepSize(step_size) => {
-                            if step_size > 0. {
-                                settings.step_size = step_size;
+                        SettingsChange::StepScale(step_scale) => {
+                            if step_scale > 0. {
+                                settings.step_scale = step_scale;
                             } else {
-                                log::error!("Illegal step size: {}", step_size);
-                            }
-                        },
-                        SettingsChange::Threshold(threshold) => {
-                            if threshold >= 0.0 && threshold <= 1.0 {
-                                settings.threshold = threshold;
-                            } else {
-                                log::error!("Illegal threshold: {}", threshold);
+                                log::error!("Illegal step size: {}", step_scale);
                             }
                         }
-                        SettingsChange::Color(color) => {
-                            let decoded: Vec<f32> = hex::decode(color.chars().skip(1).take(6).collect::<String>())
-                                .expect("Invalid color")
-                                .iter()
-                                .map(|&c| (c as f32) / 255.)
-                                .collect();
-                            settings.channel_color = Vec3::from_slice(decoded.as_slice()).extend(1.);
-                        }
+                        _ => {}
                     }
                 }
                 _ => {}
@@ -363,7 +343,7 @@ pub fn run_event_loop(
             winit::event::Event::RedrawRequested(_) => {
                 frame_number += 1;
 
-                renderer.as_ref().borrow().update(&camera, frame_number, settings);
+                renderer.as_ref().borrow().update(&camera, frame_number, &settings);
 
                 wasm_bindgen_futures::spawn_local(calling_from_async(
                     renderer.clone(),

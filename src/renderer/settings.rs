@@ -1,7 +1,8 @@
+use glam::Vec4;
 use serde::{Deserialize, Serialize};
 
 #[repr(u32)]
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum RenderMode {
     /// Renders a bricked volume by stepping from brick to brick in a voxel line, and sampling the
     /// fetched bricks.
@@ -14,14 +15,20 @@ pub enum RenderMode {
     Direct,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct Color {
     r: f32,
     g: f32,
     b: f32,
 }
 
-#[derive(Deserialize, Serialize)]
+impl From<Color> for Vec4 {
+    fn from(color: Color) -> Self {
+        Vec4::new(color.r, color.g, color.b, 1.)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ChannelSettings {
     /// This channel's name.
     #[serde(rename = "channelName")]
@@ -63,7 +70,7 @@ pub struct ChannelSettings {
     pub visible: bool,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MultiChannelVolumeRendererSettings {
     #[serde(rename = "renderMode")]
     pub render_mode: RenderMode,
