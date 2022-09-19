@@ -1,8 +1,8 @@
 use crate::renderer::context::{ContextDescriptor, GPUContext};
 use crate::renderer::pass::GPUPass;
 use crate::renderer::pass::{dvr, present_to_screen};
-use crate::renderer::resource;
-use crate::renderer::wgsl::create_wgsl_preprocessor;
+use crate::resource;
+use crate::wgsl::create_wgsl_preprocessor;
 use crate::{Camera, RawVolumeBlock};
 use bytemuck;
 use std::sync::Arc;

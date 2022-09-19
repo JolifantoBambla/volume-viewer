@@ -14,10 +14,13 @@ use winit::window::Window;
 pub use numcodecs_wasm::*;
 pub use zarr_wasm::zarr::{DimensionArraySelection, GetOptions, ZarrArray};
 
+pub mod gpu_list;
 pub mod event;
-pub mod renderer;
-pub mod util;
 pub mod preprocessing;
+pub mod renderer;
+pub mod resource;
+pub mod util;
+pub mod wgsl;
 
 use crate::event::{ChannelSettingsChange, Event, RawArrayReceived, SettingsChange};
 use util::init;
@@ -30,11 +33,13 @@ use crate::renderer::geometry::Bounds3D;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::MultiChannelVolumeRenderer;
 use crate::renderer::settings::MultiChannelVolumeRendererSettings;
-use renderer::resource::sparse_residency::texture3d::data_source::{
-    HtmlEventTargetTexture3DSource, SparseResidencyTexture3DSource,
+use crate::resource::sparse_residency::texture3d::{
+    data_source::{
+        HtmlEventTargetTexture3DSource, SparseResidencyTexture3DSource,
+    },
+    volume_meta::MultiResolutionVolumeMeta,
+    SparseResidencyTexture3D,
 };
-use renderer::resource::sparse_residency::texture3d::volume_meta::MultiResolutionVolumeMeta;
-use renderer::resource::sparse_residency::texture3d::SparseResidencyTexture3D;
 use crate::window::window_builder_without_size;
 
 // todo: remove this (this is for testing the preprocessor macro)

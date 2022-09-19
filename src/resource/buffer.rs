@@ -3,7 +3,6 @@ use std::ops::RangeBounds;
 use std::sync::{Arc, Mutex};
 use wgpu::{Buffer, BufferAddress, MapMode};
 
-
 pub async fn map_buffer<S: RangeBounds<BufferAddress>>(buffer: &Buffer, bounds: S) {
     let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
 

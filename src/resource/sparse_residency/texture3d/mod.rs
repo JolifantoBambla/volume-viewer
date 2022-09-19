@@ -6,14 +6,14 @@ mod cache_management;
 
 use crate::renderer::context::GPUContext;
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
-use crate::renderer::resource::Texture;
-use crate::renderer::resource::sparse_residency::texture3d::data_source::{
+use crate::resource::Texture;
+use crate::resource::sparse_residency::texture3d::data_source::{
     Brick, SparseResidencyTexture3DSource,
 };
-use crate::renderer::resource::sparse_residency::texture3d::page_table::{
+use crate::resource::sparse_residency::texture3d::page_table::{
     PageDirectoryMeta, PageTableEntryFlag,
 };
-use crate::renderer::resource::sparse_residency::texture3d::volume_meta::BrickAddress;
+use crate::resource::sparse_residency::texture3d::volume_meta::BrickAddress;
 
 use cache_management::Timestamp;
 use cache_management::process_requests::{ProcessRequests, Resources};

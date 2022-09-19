@@ -1,4 +1,4 @@
-use crate::renderer::resource::sparse_residency::texture3d::volume_meta::{
+use crate::resource::sparse_residency::texture3d::volume_meta::{
     BrickAddress, MultiResolutionVolumeMeta,
 };
 use serde::{Deserialize, Serialize};

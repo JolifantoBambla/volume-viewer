@@ -1,5 +1,5 @@
-use crate::renderer::gpu_list::GpuList;
-use crate::renderer::resource::Texture;
+use crate::gpu_list::GpuList;
+use crate::resource::Texture;
 use crate::renderer::{
     context::GPUContext,
     pass::{AsBindGroupEntries, GPUPass},

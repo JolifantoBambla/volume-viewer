@@ -1,22 +1,22 @@
 pub mod camera;
 pub mod context;
 pub mod geometry;
-pub mod gpu_list;
 pub mod pass;
 pub mod resources;
 pub mod trivial_volume_renderer;
 pub mod volume;
-pub mod wgsl;
 pub mod settings;
-pub mod resource;
 
 use wasm_bindgen::prelude::*;
+
+use crate::resource;
 
 use crate::renderer::camera::Camera;
 use crate::renderer::context::{ContextDescriptor, GPUContext};
 use crate::renderer::pass::present_to_screen;
 use crate::renderer::pass::{ray_guided_dvr, GPUPass};
-use crate::renderer::wgsl::create_wgsl_preprocessor;
+
+use crate::wgsl::create_wgsl_preprocessor;
 
 use bytemuck;
 use std::sync::Arc;
