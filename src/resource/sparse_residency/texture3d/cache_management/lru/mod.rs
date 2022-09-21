@@ -179,4 +179,10 @@ impl LRUCache {
     pub(crate) fn get_usage_buffer_as_binding_resource(&self) -> BindingResource {
         BindingResource::TextureView(&self.usage_buffer.view)
     }
+
+    /// Writes data to the cache and returns the 3D cache address of the slot the data was written to
+    pub fn add_cache_entry(&self, data: &Vec<u8>) -> Result<UVec3, CacheFullError> {
+        // todo: implement
+        Ok(UVec3::ZERO)
+    }
 }
