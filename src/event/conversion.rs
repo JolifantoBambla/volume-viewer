@@ -34,9 +34,7 @@ pub fn convert_js_event<'a, T>(js_event: JsValue) -> Result<Event<'a, T>, Conver
         "keydown" | "keypress" | "keyup" => {
             convert_keyboard_event(event.unchecked_into::<KeyboardEvent>())
         }
-        "rendersettings" => {
-            convert_render_settings_event(event.unchecked_into::<CustomEvent>())
-        }
+        "rendersettings" => convert_render_settings_event(event.unchecked_into::<CustomEvent>()),
         _ => Err(ConversionError {
             event_type: event.type_(),
             message: "Unsupported event type".to_string(),
@@ -314,7 +312,9 @@ pub fn convert_keyboard_event<'a, T>(
     }))
 }
 
-pub fn convert_render_settings_event<'a, T>(event: CustomEvent) -> Result<Event<'a, T>, ConversionError> {
+pub fn convert_render_settings_event<'a, T>(
+    event: CustomEvent,
+) -> Result<Event<'a, T>, ConversionError> {
     // event.detail.setting & event.detail.value
     let detail = serde_wasm_bindgen::from_value(event.detail());
     if let Ok(detail) = detail {
@@ -322,7 +322,7 @@ pub fn convert_render_settings_event<'a, T>(event: CustomEvent) -> Result<Event<
     } else {
         Err(ConversionError {
             event_type: "rendersettings".to_string(),
-            message: "Invalid render settings event".to_string()
+            message: "Invalid render settings event".to_string(),
         })
     }
 }

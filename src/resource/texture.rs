@@ -2,7 +2,7 @@ use crate::renderer::volume::RawVolumeBlock;
 use crate::util::extent::extent_volume;
 use crate::GPUContext;
 use glam::UVec4;
-use std::sync::{Arc};
+use std::sync::Arc;
 use wgpu::util::DeviceExt;
 use wgpu::{
     Device, Extent3d, ImageCopyTexture, ImageDataLayout, Origin3d, Queue, TextureAspect,

@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use glam::{Vec2, Vec3};
-use wasm_bindgen::{JsCast, prelude::*};
+use wasm_bindgen::{prelude::*, JsCast};
 use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
 };
@@ -14,15 +14,15 @@ use winit::window::Window;
 pub use numcodecs_wasm::*;
 pub use zarr_wasm::zarr::{DimensionArraySelection, GetOptions, ZarrArray};
 
-pub mod gpu_list;
+pub mod app;
 pub mod event;
+pub mod gpu_list;
+pub mod input;
 pub mod preprocessing;
 pub mod renderer;
 pub mod resource;
 pub mod util;
 pub mod wgsl;
-pub mod input;
-pub mod app;
 
 use crate::event::{ChannelSettingsChange, Event, RawArrayReceived, SettingsChange};
 use util::init;
@@ -33,13 +33,11 @@ use crate::input::Input;
 use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::context::GPUContext;
 use crate::renderer::geometry::Bounds3D;
+use crate::renderer::settings::MultiChannelVolumeRendererSettings;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::MultiChannelVolumeRenderer;
-use crate::renderer::settings::MultiChannelVolumeRendererSettings;
 use crate::resource::sparse_residency::texture3d::{
-    data_source::{
-        HtmlEventTargetTexture3DSource, SparseResidencyTexture3DSource,
-    },
+    data_source::{HtmlEventTargetTexture3DSource, SparseResidencyTexture3DSource},
     volume_meta::MultiResolutionVolumeMeta,
     SparseResidencyTexture3D,
 };
@@ -129,7 +127,11 @@ pub fn main(canvas: JsValue, volume_meta: JsValue, render_settings: JsValue) {
     wasm_bindgen_futures::spawn_local(start_event_loop(canvas, volume_meta, render_settings));
 }
 
-async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMeta, render_settings: MultiChannelVolumeRendererSettings) {
+async fn start_event_loop(
+    canvas: JsValue,
+    volume_meta: MultiResolutionVolumeMeta,
+    render_settings: MultiChannelVolumeRendererSettings,
+) {
     let html_canvas = canvas
         .clone()
         .unchecked_into::<web_sys::HtmlCanvasElement>();
@@ -160,9 +162,7 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
         canvas,
         Box::new(HtmlEventTargetTexture3DSource::new(
             volume_meta,
-            html_canvas
-                .clone()
-                .unchecked_into::<web_sys::EventTarget>(),
+            html_canvas.clone().unchecked_into::<web_sys::EventTarget>(),
         )),
         &render_settings,
     )
@@ -170,7 +170,9 @@ async fn start_event_loop(canvas: JsValue, volume_meta: MultiResolutionVolumeMet
 
     // NOTE: All resource allocations should happen before the main render loop
     // The reason for this is that receiving allocation errors is async, but
-    let start_closure = Closure::once_into_js(move || run_event_loop(renderer, render_settings, window, event_loop));
+    let start_closure = Closure::once_into_js(move || {
+        run_event_loop(renderer, render_settings, window, event_loop)
+    });
 
     // make sure to handle JS exceptions thrown inside start.
     // Otherwise wasm_bindgen_futures Queue would break and never handle any tasks again.
@@ -330,53 +332,54 @@ pub fn run_event_loop(
                 },
                 Event::RawArray(raw_array) => {
                     log::info!("got raw array {:?}", raw_array.shape);
-                },
-                Event::Settings(settings_change) => {
-                    match settings_change {
-                        SettingsChange::RenderMode(mode) => {
-                            settings.render_mode = mode;
-                        },
-                        SettingsChange::StepScale(step_scale) => {
-                            if step_scale > 0. {
-                                settings.step_scale = step_scale;
-                            } else {
-                                log::error!("Illegal step size: {}", step_scale);
+                }
+                Event::Settings(settings_change) => match settings_change {
+                    SettingsChange::RenderMode(mode) => {
+                        settings.render_mode = mode;
+                    }
+                    SettingsChange::StepScale(step_scale) => {
+                        if step_scale > 0. {
+                            settings.step_scale = step_scale;
+                        } else {
+                            log::error!("Illegal step size: {}", step_scale);
+                        }
+                    }
+                    SettingsChange::MaxSteps(max_steps) => {
+                        settings.max_steps = max_steps;
+                    }
+                    SettingsChange::BackgroundColor(color) => {
+                        settings.background_color = color;
+                    }
+                    SettingsChange::ChannelSetting(channel_setting) => {
+                        let i = channel_setting.channel_index as usize;
+                        match channel_setting.channel_setting {
+                            ChannelSettingsChange::Color(color) => {
+                                settings.channel_settings[i].color = color;
                             }
-                        }
-                        SettingsChange::MaxSteps(max_steps) => {
-                            settings.max_steps = max_steps;
-                        }
-                        SettingsChange::BackgroundColor(color) => {
-                            settings.background_color = color;
-                        }
-                        SettingsChange::ChannelSetting(channel_setting) => {
-                            let i = channel_setting.channel_index as usize;
-                            match channel_setting.channel_setting {
-                                ChannelSettingsChange::Color(color) => {
-                                    settings.channel_settings[i].color = color;
-                                }
-                                ChannelSettingsChange::Visible(visible) => {
-                                    settings.channel_settings[i].visible = visible;
-                                }
-                                ChannelSettingsChange::Threshold(range) => {
-                                    settings.channel_settings[i].threshold_lower = range.min;
-                                    settings.channel_settings[i].threshold_upper = range.max;
-                                }
-                                ChannelSettingsChange::LoD(range) => {
-                                    settings.channel_settings[i].max_lod = range.min;
-                                    settings.channel_settings[i].min_lod = range.max;
-                                }
+                            ChannelSettingsChange::Visible(visible) => {
+                                settings.channel_settings[i].visible = visible;
+                            }
+                            ChannelSettingsChange::Threshold(range) => {
+                                settings.channel_settings[i].threshold_lower = range.min;
+                                settings.channel_settings[i].threshold_upper = range.max;
+                            }
+                            ChannelSettingsChange::LoD(range) => {
+                                settings.channel_settings[i].max_lod = range.min;
+                                settings.channel_settings[i].min_lod = range.max;
                             }
                         }
                     }
-                }
+                },
                 _ => {}
             },
             // todo: refactor this
             winit::event::Event::RedrawRequested(_) => {
                 let input = Input::from_last(&last_input);
 
-                renderer.as_ref().borrow().update(&camera, &input, &settings);
+                renderer
+                    .as_ref()
+                    .borrow()
+                    .update(&camera, &input, &settings);
 
                 wasm_bindgen_futures::spawn_local(calling_from_async(
                     renderer.clone(),
@@ -443,10 +446,7 @@ async fn calling_from_async(
 
     renderer.as_ref().borrow().render(&view, &input);
 
-    renderer
-        .as_ref()
-        .borrow_mut()
-        .post_render(&input);
+    renderer.as_ref().borrow_mut().post_render(&input);
 
     frame.present();
 
@@ -466,8 +466,6 @@ pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock 
         shape[0],
     )
 }
-
-
 
 // Test device sharing between WASM and JS context, could be useful at some point
 

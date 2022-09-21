@@ -72,7 +72,12 @@ pub struct Uniforms {
 }
 
 impl Uniforms {
-    pub fn new(camera: CameraUniform, object_to_world: glam::Mat4, timestamp: u32, settings: &MultiChannelVolumeRendererSettings) -> Self {
+    pub fn new(
+        camera: CameraUniform,
+        object_to_world: glam::Mat4,
+        timestamp: u32,
+        settings: &MultiChannelVolumeRendererSettings,
+    ) -> Self {
         let volume_transform = TransformUniform::from_object_to_world(object_to_world);
         Self {
             camera,
@@ -108,7 +113,7 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
             BindGroupEntry {
                 binding: 3,
                 resource: self.channel_settings.as_entire_binding(),
-            }
+            },
         ]
     }
 }

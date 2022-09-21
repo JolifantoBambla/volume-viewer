@@ -39,11 +39,8 @@ impl TrivialVolumeRenderer {
 
         let volume_texture =
             resource::Texture::from_raw_volume_block(&ctx.device, &ctx.queue, &volume);
-        let storage_texture = resource::Texture::create_storage_texture(
-            &ctx.device,
-            canvas.width(),
-            canvas.height(),
-        );
+        let storage_texture =
+            resource::Texture::create_storage_texture(&ctx.device, canvas.width(), canvas.height());
 
         let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
             mag_filter: wgpu::FilterMode::Linear,

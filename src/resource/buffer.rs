@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::ops::RangeBounds;
 use std::sync::{Arc, Mutex};
-use wgpu::{Buffer, BufferAddress, BufferUsages, Device, MapMode};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu::{Buffer, BufferAddress, BufferUsages, Device, MapMode};
 
 pub async fn map_buffer<S: RangeBounds<BufferAddress>>(buffer: &Buffer, bounds: S) {
     let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
@@ -121,12 +121,17 @@ impl<T: bytemuck::Pod> MultiBufferedMappableBuffer<T> {
         }
     }
 
-    fn to_index(&self, index_or_frame_number: u32) -> usize {
+    pub fn to_index(&self, index_or_frame_number: u32) -> usize {
         index_or_frame_number as usize % self.num_buffers()
     }
 
     fn get_buffer(&self, index_or_frame_number: u32) -> &MappableBuffer<T> {
         &self.buffers[self.to_index(index_or_frame_number)]
+    }
+
+    pub fn to_previous_index(&self, index_or_frame_number: u32) -> u32 {
+        let num_buffers = self.num_buffers() as u32;
+        (index_or_frame_number + num_buffers - 1) % num_buffers
     }
 
     pub fn num_buffers(&self) -> usize {
@@ -137,8 +142,14 @@ impl<T: bytemuck::Pod> MultiBufferedMappableBuffer<T> {
         self.get_buffer(index_or_frame_number).as_buffer_ref()
     }
 
-    pub fn map_async<S: RangeBounds<BufferAddress>>(&self, index_or_frame_number: u32, mode: MapMode, bounds: S) {
-        self.get_buffer(index_or_frame_number).map_async(mode, bounds);
+    pub fn map_async<S: RangeBounds<BufferAddress>>(
+        &self,
+        index_or_frame_number: u32,
+        mode: MapMode,
+        bounds: S,
+    ) {
+        self.get_buffer(index_or_frame_number)
+            .map_async(mode, bounds);
     }
 
     pub fn is_ready(&self, index_or_frame_number: u32) -> bool {
@@ -149,7 +160,11 @@ impl<T: bytemuck::Pod> MultiBufferedMappableBuffer<T> {
         self.get_buffer(index_or_frame_number).is_mapped()
     }
 
-    pub fn maybe_read<S: RangeBounds<BufferAddress>>(&self, index_or_frame_number: u32, bounds: S) -> Vec<T> {
+    pub fn maybe_read<S: RangeBounds<BufferAddress>>(
+        &self,
+        index_or_frame_number: u32,
+        bounds: S,
+    ) -> Vec<T> {
         self.get_buffer(index_or_frame_number).maybe_read(bounds)
     }
 

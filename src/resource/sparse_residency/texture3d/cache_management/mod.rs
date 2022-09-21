@@ -1,5 +1,5 @@
-pub mod process_requests;
 pub mod lru;
+pub mod process_requests;
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]

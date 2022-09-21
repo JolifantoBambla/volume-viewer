@@ -8,9 +8,7 @@ pub struct Frame {
 
 impl Frame {
     pub fn new(number: u32) -> Self {
-        Self {
-            number
-        }
+        Self { number }
     }
 }
 

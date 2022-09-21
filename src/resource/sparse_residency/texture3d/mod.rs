@@ -6,7 +6,6 @@ mod cache_management;
 
 use crate::renderer::context::GPUContext;
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
-use crate::resource::Texture;
 use crate::resource::sparse_residency::texture3d::data_source::{
     Brick, SparseResidencyTexture3DSource,
 };
@@ -14,10 +13,12 @@ use crate::resource::sparse_residency::texture3d::page_table::{
     PageDirectoryMeta, PageTableEntryFlag,
 };
 use crate::resource::sparse_residency::texture3d::volume_meta::BrickAddress;
+use crate::resource::Texture;
 
-use cache_management::Timestamp;
 use cache_management::process_requests::{ProcessRequests, Resources};
+use cache_management::Timestamp;
 
+use crate::input::Input;
 use crate::util::extent::{
     box_volume, extent_to_uvec, index_to_subscript, subscript_to_index, uvec_to_extent,
     uvec_to_origin,
@@ -32,7 +33,6 @@ use wgpu::{
     CommandEncoder, Extent3d, SubmissionIndex,
 };
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::input::Input;
 
 /// Manages a 3D sparse residency texture.
 /// A sparse residency texture is not necessarily present in GPU memory as a whole.
@@ -228,15 +228,12 @@ impl SparseResidencyTexture3D {
         let free_slots: Vec<usize> = vec![0; 32];
 
         // todo: step by step:
-        //  - mark bricks as empty if they only contain zeros
         //  - manage free slots (sort usages, replace unused bricks)
         //    - add parallel radix sort
-        //  - pass initial settings to constructor
         //  - add more settings (transfer function, channel selection -> pass volume meta to main thread)
         //  - fix rendering
         //  - add shader customization
         //  - handle multiple channels
-        //  - refactor: texture3d into resource module
         //  - clean up & document
         //  - report back statistics to main thread (fps)
 

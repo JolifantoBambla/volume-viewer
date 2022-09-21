@@ -1,9 +1,9 @@
 use crate::gpu_list::GpuList;
-use crate::resource::Texture;
 use crate::renderer::{
     context::GPUContext,
     pass::{AsBindGroupEntries, GPUPass},
 };
+use crate::resource::Texture;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Buffer, CommandEncoder};
 use wgsl_preprocessor::WGSLPreprocessor;

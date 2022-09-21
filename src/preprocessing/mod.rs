@@ -38,7 +38,10 @@ pub fn min_u16(data: Vec<u16>) -> f32 {
 
 #[wasm_bindgen(js_name = "minF32")]
 pub fn min_f32(data: Vec<f32>) -> f32 {
-    *data.par_iter().min_by(|&a, &b| a.partial_cmp(b).expect("Encountered NaN value in data")).unwrap()
+    *data
+        .par_iter()
+        .min_by(|&a, &b| a.partial_cmp(b).expect("Encountered NaN value in data"))
+        .unwrap()
 }
 
 // MAX
@@ -55,7 +58,10 @@ pub fn max_u16(data: Vec<u16>) -> f32 {
 
 #[wasm_bindgen(js_name = "maxF32")]
 pub fn max_f32(data: Vec<f32>) -> f32 {
-    *data.par_iter().max_by(|&a, &b| a.partial_cmp(b).expect("Encountered NaN value in data")).unwrap()
+    *data
+        .par_iter()
+        .max_by(|&a, &b| a.partial_cmp(b).expect("Encountered NaN value in data"))
+        .unwrap()
 }
 
 // SCALE
@@ -99,9 +105,7 @@ pub fn log_transform_u16(data: Vec<u16>) -> Vec<u16> {
 
 #[wasm_bindgen(js_name = "logTransformF32")]
 pub fn log_transform_f32(data: Vec<f32>) -> Vec<f32> {
-    data.par_iter()
-        .map(|&x| f32::log10(x))
-        .collect()
+    data.par_iter().map(|&x| f32::log10(x)).collect()
 }
 
 // LOG & SCALE

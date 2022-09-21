@@ -3,9 +3,9 @@ pub mod context;
 pub mod geometry;
 pub mod pass;
 pub mod resources;
+pub mod settings;
 pub mod trivial_volume_renderer;
 pub mod volume;
-pub mod settings;
 
 use wasm_bindgen::prelude::*;
 
@@ -26,11 +26,13 @@ use wgpu::util::DeviceExt;
 use wgpu::{BindGroup, Buffer, Extent3d, SamplerDescriptor, SubmissionIndex};
 use winit::dpi::PhysicalSize;
 
-use crate::renderer::pass::present_to_screen::PresentToScreen;
-use crate::renderer::pass::ray_guided_dvr::{RayGuidedDVR, Resources, ChannelSettings};
-use crate::{MultiChannelVolumeRendererSettings, SparseResidencyTexture3D, SparseResidencyTexture3DSource};
-pub use trivial_volume_renderer::TrivialVolumeRenderer;
 use crate::input::Input;
+use crate::renderer::pass::present_to_screen::PresentToScreen;
+use crate::renderer::pass::ray_guided_dvr::{ChannelSettings, RayGuidedDVR, Resources};
+use crate::{
+    MultiChannelVolumeRendererSettings, SparseResidencyTexture3D, SparseResidencyTexture3DSource,
+};
+pub use trivial_volume_renderer::TrivialVolumeRenderer;
 
 pub struct MultiChannelVolumeRenderer {
     pub(crate) ctx: Arc<GPUContext>,
@@ -114,7 +116,7 @@ impl MultiChannelVolumeRenderer {
             .collect();
         let volume_render_channel_settings_buffer =
             ctx.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor{
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
                     contents: bytemuck::cast_slice(channel_settings.as_slice()),
                     usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
@@ -150,7 +152,12 @@ impl MultiChannelVolumeRenderer {
         }
     }
 
-    pub fn update(&self, camera: &Camera, input: &Input, settings: &MultiChannelVolumeRendererSettings) {
+    pub fn update(
+        &self,
+        camera: &Camera,
+        input: &Input,
+        settings: &MultiChannelVolumeRendererSettings,
+    ) {
         let uniforms = ray_guided_dvr::Uniforms::new(
             camera.create_uniform(),
             self.volume_transform,
@@ -171,7 +178,7 @@ impl MultiChannelVolumeRenderer {
         self.ctx.queue.write_buffer(
             &self.volume_render_channel_settings_buffer,
             0,
-            bytemuck::cast_slice(channel_settings.as_slice())
+            bytemuck::cast_slice(channel_settings.as_slice()),
         );
     }
 
@@ -199,7 +206,6 @@ impl MultiChannelVolumeRenderer {
     }
 
     pub fn post_render(&mut self, input: &Input) {
-        self.volume_texture
-            .update_cache(input);
+        self.volume_texture.update_cache(input);
     }
 }

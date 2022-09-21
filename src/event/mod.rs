@@ -65,4 +65,3 @@ pub enum Event<'a, T: 'static> {
     Settings(SettingsChange),
     Custom(T),
 }
-

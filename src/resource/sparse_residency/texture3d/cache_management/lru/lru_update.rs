@@ -1,11 +1,14 @@
+use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
+use crate::resource::Texture;
+use crate::GPUContext;
 use std::borrow::Cow;
 use std::mem::size_of;
 use std::sync::Arc;
-use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder};
+use wgpu::{
+    BindGroup, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress, BufferDescriptor,
+    BufferUsages, CommandEncoder,
+};
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::GPUContext;
-use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
-use crate::resource::Texture;
 
 pub struct Resources<'a> {
     pub usage_buffer: &'a Texture,
@@ -110,7 +113,7 @@ impl LRUUpdate {
                 BindGroupEntry {
                     binding: 0,
                     resource: scan_odd.as_entire_binding(),
-                }
+                },
             ],
         });
 
