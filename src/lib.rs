@@ -21,12 +21,15 @@ pub mod renderer;
 pub mod resource;
 pub mod util;
 pub mod wgsl;
+pub mod input;
+pub mod app;
 
 use crate::event::{ChannelSettingsChange, Event, RawArrayReceived, SettingsChange};
 use util::init;
 use util::window;
 
 use crate::event::handler::register_default_js_event_handlers;
+use crate::input::Input;
 use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::context::GPUContext;
 use crate::renderer::geometry::Bounds3D;
@@ -197,6 +200,7 @@ pub fn run_event_loop(
 ) {
     let renderer = Rc::new(RefCell::new(renderer));
     let mut settings = render_settings.clone();
+    let mut last_input = Input::new();
 
     // TODO: refactor these params
     let distance_from_center = 500.;
@@ -231,7 +235,6 @@ pub fn run_event_loop(
     let mut last_mouse_position = Vec2::new(0., 0.);
     let mut left_mouse_pressed = false;
     let mut right_mouse_pressed = false;
-    let mut frame_number = 0;
 
     let window = Rc::new(window);
 
@@ -369,17 +372,20 @@ pub fn run_event_loop(
                 }
                 _ => {}
             },
+            // todo: refactor this
             winit::event::Event::RedrawRequested(_) => {
-                frame_number += 1;
+                let input = Input::from_last(&last_input);
 
-                renderer.as_ref().borrow().update(&camera, frame_number, &settings);
+                renderer.as_ref().borrow().update(&camera, &input, &settings);
 
                 wasm_bindgen_futures::spawn_local(calling_from_async(
                     renderer.clone(),
                     camera,
-                    frame_number,
+                    input.clone(),
                     window.clone(),
                 ));
+
+                last_input = input;
             }
             _ => {}
         }
@@ -389,7 +395,7 @@ pub fn run_event_loop(
 async fn calling_from_async(
     renderer: Rc<RefCell<MultiChannelVolumeRenderer>>,
     _camera: Camera,
-    frame_number: u32,
+    input: Input,
     window: Rc<Window>,
 ) {
     let frame = match renderer
@@ -435,12 +441,12 @@ async fn calling_from_async(
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
 
-    let submission_index = renderer.as_ref().borrow().render(&view, frame_number);
+    renderer.as_ref().borrow().render(&view, &input);
 
     renderer
         .as_ref()
         .borrow_mut()
-        .post_render(submission_index, frame_number);
+        .post_render(&input);
 
     frame.present();
 

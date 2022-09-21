@@ -30,6 +30,7 @@ use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::ray_guided_dvr::{RayGuidedDVR, Resources, ChannelSettings};
 use crate::{MultiChannelVolumeRendererSettings, SparseResidencyTexture3D, SparseResidencyTexture3DSource};
 pub use trivial_volume_renderer::TrivialVolumeRenderer;
+use crate::input::Input;
 
 pub struct MultiChannelVolumeRenderer {
     pub(crate) ctx: Arc<GPUContext>,
@@ -80,7 +81,7 @@ impl MultiChannelVolumeRenderer {
             volume_render_result_extent.width,
             volume_render_result_extent.height,
         );
-        let volume_sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
+        let volume_sampler = ctx.device.create_sampler(&SamplerDescriptor {
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
@@ -149,11 +150,11 @@ impl MultiChannelVolumeRenderer {
         }
     }
 
-    pub fn update(&self, camera: &Camera, frame_number: u32, settings: &MultiChannelVolumeRendererSettings) {
+    pub fn update(&self, camera: &Camera, input: &Input, settings: &MultiChannelVolumeRendererSettings) {
         let uniforms = ray_guided_dvr::Uniforms::new(
             camera.create_uniform(),
             self.volume_transform,
-            frame_number,
+            input.frame.number,
             settings,
         );
         let channel_settings: Vec<ChannelSettings> = settings
@@ -174,7 +175,7 @@ impl MultiChannelVolumeRenderer {
         );
     }
 
-    pub fn render(&self, surface_view: &wgpu::TextureView, frame_numer: u32) -> SubmissionIndex {
+    pub fn render(&self, surface_view: &wgpu::TextureView, input: &Input) -> SubmissionIndex {
         let mut encoder = self
             .ctx
             .device
@@ -192,13 +193,13 @@ impl MultiChannelVolumeRenderer {
 
         // todo: process request & usage buffers
         self.volume_texture
-            .encode_cache_management(&mut encoder, frame_numer);
+            .encode_cache_management(&mut encoder, input.frame.number);
 
         self.ctx.queue.submit(Some(encoder.finish()))
     }
 
-    pub fn post_render(&mut self, submission_index: SubmissionIndex, temp_frame: u32) {
+    pub fn post_render(&mut self, input: &Input) {
         self.volume_texture
-            .update_cache(submission_index, temp_frame);
+            .update_cache(input);
     }
 }

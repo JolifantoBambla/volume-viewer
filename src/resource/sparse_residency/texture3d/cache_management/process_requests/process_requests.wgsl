@@ -2,11 +2,8 @@
 @include(gpu_list)
 @include(page_table)
 @include(type_alias)
+@include(timestamp)
 @include(util)
-
-struct Timestamp {
-    now: u32,
-}
 
 @group(0) @binding(0) var<storage> page_table_meta: PageDirectoryMeta;
 @group(0) @binding(1) var request_buffer: texture_3d<u32>;

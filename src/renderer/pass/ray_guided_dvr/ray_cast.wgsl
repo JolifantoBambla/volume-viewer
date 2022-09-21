@@ -5,6 +5,7 @@
 @include(constant)
 @include(page_table)
 @include(ray)
+@include(timestamp)
 @include(transform)
 @include(type_alias)
 @include(grid_traversal)
@@ -48,6 +49,7 @@ struct GlobalSettings {
 struct Uniforms {
     camera: Camera,
     volume_transform: Transform,
+    //todo: use Timestamp struct
     @size(16) timestamp: u32,
     settings: GlobalSettings,
 }

@@ -32,6 +32,7 @@ use wgpu::{
     CommandEncoder, Extent3d, SubmissionIndex,
 };
 use wgsl_preprocessor::WGSLPreprocessor;
+use crate::input::Input;
 
 /// Manages a 3D sparse residency texture.
 /// A sparse residency texture is not necessarily present in GPU memory as a whole.
@@ -68,6 +69,9 @@ pub struct ResMeta {
     page_table_offset: UVec4,
     page_table_extent: UVec4,
     volume_size: UVec4,
+    // todo: I also need:
+    //   - volume to padded ratio
+    //   - linear offset in bricks
 }
 
 impl SparseResidencyTexture3D {
@@ -197,7 +201,7 @@ impl SparseResidencyTexture3D {
     }
 
     /// Call this after rendering has completed to read back requests & usages
-    pub fn update_cache(&mut self, _submission_index: SubmissionIndex, _temp_frame: u32) {
+    pub fn update_cache(&mut self, input: &Input) {
         // todo: map buffers
         self.process_requests_pass.map_for_reading();
 

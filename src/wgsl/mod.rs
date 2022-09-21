@@ -15,6 +15,7 @@ pub fn create_wgsl_preprocessor() -> WGSLPreprocessor {
         .include("page_table", include_str!("page_table.wgsl"))
         .include("ray", include_str!("ray.wgsl"))
         .include("sphere", include_str!("sphere.wgsl"))
+        .include("timestamp", include_str!("timestamp.wgsl"))
         .include("transform", include_str!("transform.wgsl"))
         .include("type_alias", include_str!("type_alias.wgsl"))
         .include("util", include_str!("util.wgsl"))

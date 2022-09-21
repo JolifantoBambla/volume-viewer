@@ -74,6 +74,14 @@ fn compute_volume_to_padded(page_table: PageTableMeta) -> float3 {
     return volume_size / padded_size;
 }
 
+// this constructs a multi res page table index where the level and each component in the page table are
+// represented as 8 bit unsigned integers - this enforces a limit on page table dimensions, namely that
+// they must not contain more than [0,255]^3 bricks
+fn compute_brick_id(page_table: PageTableMeta, gobal_id: uint3, level: u32) -> u32 {
+    let local_brick_address = global_id - page_table.page_table_offset;
+    return pack4x8uint(uint4(local_brick_address, level));
+}
+
 struct PageDirectoryMeta {
     resolutions: array<PageTableMeta>,
 }

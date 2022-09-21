@@ -41,6 +41,17 @@ fn max_component(v: float3) -> f32 {
     return v[max_dimension(v)];
 }
 
+fn index_to_subscript(index: u32, extent: uint3) -> uint3 {
+    let x = index % extent.x;
+    let y = (index - x) / extent.x % extent.y;
+    let z = ((index - x) / extent.x - y) / extent.y;
+    return uint3(x, y, z);
+}
+
+fn subscript_to_index(subscript: uint3, extent: uint3) -> u32 {
+    return subscript.x + extent.x * (subscript.y + extent.y * subscript.z);
+}
+
 fn clamp_to_one(v: float3) -> float3 {
     return clamp(v, float3(), float3(1.));
 }
