@@ -107,11 +107,11 @@ impl LRUUpdate {
                     resource: usage_mask.as_entire_binding(),
                 },
                 BindGroupEntry {
-                    binding: 0,
+                    binding: 1,
                     resource: scan_even.as_entire_binding(),
                 },
                 BindGroupEntry {
-                    binding: 0,
+                    binding: 2,
                     resource: scan_odd.as_entire_binding(),
                 },
             ],

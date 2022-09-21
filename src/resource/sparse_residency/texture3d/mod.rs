@@ -15,8 +15,11 @@ use crate::resource::sparse_residency::texture3d::page_table::{
 use crate::resource::sparse_residency::texture3d::volume_meta::BrickAddress;
 use crate::resource::Texture;
 
-use cache_management::process_requests::{ProcessRequests, Resources};
-use cache_management::Timestamp;
+use cache_management::{
+    lru::LRUCache,
+    process_requests::{ProcessRequests, Resources},
+    Timestamp,
+};
 
 use crate::input::Input;
 use crate::util::extent::{
@@ -55,6 +58,9 @@ pub struct SparseResidencyTexture3D {
     brick_usage_buffer: Texture,
     request_buffer: Texture,
 
+    // todo: remove cache & usage buffer in favor of this field
+    lru_cache: LRUCache,
+
     // Process Request Helper
     timestamp_uniform_buffer: Buffer,
     process_requests_pass: ProcessRequests,
@@ -80,6 +86,13 @@ impl SparseResidencyTexture3D {
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
+        let timestamp = Timestamp::default();
+        let timestamp_uniform_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::bytes_of(&timestamp),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
         let volume_meta = source.get_meta();
         let meta = PageDirectoryMeta::new(volume_meta);
 
@@ -109,6 +122,23 @@ impl SparseResidencyTexture3D {
             Texture::create_page_directory(&ctx.device, &ctx.queue, uvec_to_extent(&meta.extent));
 
         // todo: make configurable
+        let cache_size = Extent3d {
+            width: 1024,
+            height: 1024,
+            depth_or_array_layers: 1024,
+        };
+        let num_multi_buffering = 2;
+
+        let lru_cache = LRUCache::new(
+            extent_to_uvec(&cache_size),
+            meta.brick_size,
+            &timestamp_uniform_buffer,
+            num_multi_buffering,
+            wgsl_preprocessor,
+            ctx
+        );
+
+        // todo: remove
         let brick_cache = Texture::create_brick_cache(
             &ctx.device,
             Extent3d {
@@ -118,9 +148,11 @@ impl SparseResidencyTexture3D {
             },
         );
 
+        // todo: remove
         let brick_cache_size = extent_to_uvec(&brick_cache.extent);
         let bricks_per_dimension = brick_cache_size / meta.brick_size;
 
+        // todo: remove
         // 1:1 mapping, 1 timestamp per brick in cache
         let brick_usage_buffer = Texture::create_u32_storage_3d(
             "Usage Buffer".to_string(),
@@ -138,12 +170,7 @@ impl SparseResidencyTexture3D {
         );
 
         let brick_request_limit = 32;
-        let timestamp = Timestamp::default();
-        let timestamp_uniform_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::bytes_of(&timestamp),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+
         let process_requests_pass =
             ProcessRequests::new(brick_request_limit as u32, wgsl_preprocessor, ctx);
         let process_requests_bind_group = process_requests_pass.create_bind_group(Resources {
@@ -163,6 +190,7 @@ impl SparseResidencyTexture3D {
             brick_cache,
             brick_usage_buffer,
             request_buffer,
+            lru_cache,
             timestamp_uniform_buffer,
             process_requests_pass,
             process_requests_bind_group,

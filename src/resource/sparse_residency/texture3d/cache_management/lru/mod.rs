@@ -8,10 +8,7 @@ use std::borrow::Cow;
 use std::mem::size_of;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{
-    BindGroup, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress, BufferDescriptor,
-    BufferUsages, CommandEncoder,
-};
+use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder};
 use wgsl_preprocessor::WGSLPreprocessor;
 
 use crate::gpu_list::GpuList;
@@ -173,5 +170,13 @@ impl LRUCache {
         } else {
             log::warn!("Could not update LRU at frame {}", input.frame.number);
         }
+    }
+
+    pub(crate) fn get_cache_as_binding_resource(&self) -> BindingResource {
+        BindingResource::TextureView(&self.cache.view)
+    }
+
+    pub(crate) fn get_usage_buffer_as_binding_resource(&self) -> BindingResource {
+        BindingResource::TextureView(&self.usage_buffer.view)
     }
 }
