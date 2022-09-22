@@ -150,6 +150,10 @@ impl LRUCache {
         // so we'll copy to the current frame's buffer
         // and read from the last frame's buffer (if it is mapped, i.e. maybe_read_all)
         self.copy_to_readable(encoder, input.frame.number);
+
+        //  Maps the current frame's LRU read buffer for reading
+        self.lru_read_buffer.map_async(input.frame.number, wgpu::MapMode::Read, ..);
+        self.num_used_entries_read_buffer.map_async(input.frame.number, wgpu::MapMode::Read, ..);
     }
 
     fn copy_to_readable(&self, encoder: &mut CommandEncoder, buffer_index: u32) {
@@ -171,12 +175,9 @@ impl LRUCache {
         }
     }
 
-    /// Maps the current frame's LRU read buffer for reading and tries to read the last frame's to
+    /// tries to read the last frame's to
     /// to update its CPU local list of free cache entries.
     pub fn update_local_lru(&mut self, input: &Input) {
-        self.lru_read_buffer.map_async(input.frame.number, wgpu::MapMode::Read, ..);
-        self.num_used_entries_read_buffer.map_async(input.frame.number, wgpu::MapMode::Read, ..);
-
         let last_lru_index = self.lru_read_buffer.to_previous_index(input.frame.number);
         let last_num_entries_index = self.num_used_entries_read_buffer.to_previous_index(input.frame.number);
         if self.lru_read_buffer.is_mapped(last_lru_index) && self.num_used_entries_read_buffer.is_mapped(last_num_entries_index) {
