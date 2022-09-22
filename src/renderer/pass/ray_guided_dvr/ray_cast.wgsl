@@ -297,7 +297,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         var last_page_address = uint3(textureDimensions(page_directory)) + uint3(1u);
         var page = PageTableEntry();
 
-        for (var t = t_min; t_min < t_max; t += dt) {
+        for (var t = t_min; t < t_max; t += dt) {
             let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
             let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res);
             if (lod != last_lod) {
