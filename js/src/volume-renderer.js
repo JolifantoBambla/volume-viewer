@@ -61,7 +61,7 @@ export class VolumeRendererSettings {
     backgroundColor;
     channelSettings;
 
-    constructor({renderMode = RENDER_MODE_GRID_TRAVERSAL, stepScale = 1.0, maxSteps = 100, backgroundColor = new Color({}),channelSettings = [new ChannelSettings({})]}) {
+    constructor({renderMode = RENDER_MODE_DIRECT, stepScale = 1.0, maxSteps = 300, backgroundColor = new Color({}),channelSettings = [new ChannelSettings({})]}) {
         // todo: validation
         this.renderMode = renderMode;
         this.stepScale = stepScale;
