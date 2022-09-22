@@ -22,6 +22,7 @@ pub mod preprocessing;
 pub mod renderer;
 pub mod resource;
 pub mod util;
+pub mod volume;
 pub mod wgsl;
 
 use crate::event::{ChannelSettingsChange, Event, RawArrayReceived, SettingsChange};
@@ -36,10 +37,9 @@ use crate::renderer::geometry::Bounds3D;
 use crate::renderer::settings::MultiChannelVolumeRendererSettings;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::MultiChannelVolumeRenderer;
-use crate::resource::sparse_residency::texture3d::{
-    data_source::{HtmlEventTargetTexture3DSource, SparseResidencyTexture3DSource},
-    volume_meta::MultiResolutionVolumeMeta,
-    SparseResidencyTexture3D,
+use crate::resource::SparseResidencyTexture3D;
+use crate::volume::{
+    BrickedMultiResolutionMultiVolumeMeta, HtmlEventTargetVolumeDataSource, VolumeDataSource,
 };
 use crate::window::window_builder_without_size;
 
@@ -116,7 +116,7 @@ pub fn main(canvas: JsValue, volume_meta: JsValue, render_settings: JsValue) {
     );
      */
 
-    let volume_meta: MultiResolutionVolumeMeta = volume_meta
+    let volume_meta: BrickedMultiResolutionMultiVolumeMeta = volume_meta
         .into_serde()
         .expect("Received invalid volume meta. Shutting down.");
 
@@ -129,7 +129,7 @@ pub fn main(canvas: JsValue, volume_meta: JsValue, render_settings: JsValue) {
 
 async fn start_event_loop(
     canvas: JsValue,
-    volume_meta: MultiResolutionVolumeMeta,
+    volume_meta: BrickedMultiResolutionMultiVolumeMeta,
     render_settings: MultiChannelVolumeRendererSettings,
 ) {
     let html_canvas = canvas
@@ -160,7 +160,7 @@ async fn start_event_loop(
 
     let renderer = MultiChannelVolumeRenderer::new(
         canvas,
-        Box::new(HtmlEventTargetTexture3DSource::new(
+        Box::new(HtmlEventTargetVolumeDataSource::new(
             volume_meta,
             html_canvas.clone().unchecked_into::<web_sys::EventTarget>(),
         )),

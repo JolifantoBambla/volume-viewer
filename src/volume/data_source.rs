@@ -1,6 +1,3 @@
-use crate::resource::sparse_residency::texture3d::volume_meta::{
-    BrickAddress, MultiResolutionVolumeMeta,
-};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::cmp::min;
@@ -10,27 +7,15 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{CustomEvent, EventTarget};
 
-#[derive(Deserialize, Serialize)]
-#[readonly::make]
-pub struct Brick {
-    pub data: Vec<u8>,
-    pub min: u8,
-    pub max: u8,
-}
+use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 
-pub trait SparseResidencyTexture3DSource {
-    fn get_meta(&self) -> &MultiResolutionVolumeMeta;
+pub trait VolumeDataSource {
+    fn get_meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta;
 
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>);
 
     fn poll_bricks(&mut self, limit: usize) -> Vec<(BrickAddress, Brick)>;
 }
-
-#[cfg(target_arch = "wasm32")]
-pub const BRICK_REQUEST_EVENT: &str = "data-loader:brick-request";
-
-#[cfg(target_arch = "wasm32")]
-pub const BRICK_RESPONSE_EVENT: &str = "data-loader:brick-response";
 
 #[cfg(target_arch = "wasm32")]
 #[derive(Deserialize, Serialize)]
@@ -39,20 +24,29 @@ struct BrickEvent {
     brick: Brick,
 }
 
+#[cfg(target_arch = "wasm32")]
+pub const BRICK_REQUEST_EVENT: &str = "data-loader:brick-request";
+
+#[cfg(target_arch = "wasm32")]
+pub const BRICK_RESPONSE_EVENT: &str = "data-loader:brick-response";
+
 /// A `SparseResidencyTexture3DSource` that is backed by an `web_sys::EventTarget`.
 /// It uses the `web_sys::EventTarget` to pass on brick requests to and receive brick responses from
 /// it.
 /// It is agnostic of the way the `web_sys::EventTarget` actually acquires bricks.
 #[cfg(target_arch = "wasm32")]
-pub struct HtmlEventTargetTexture3DSource {
-    volume_meta: MultiResolutionVolumeMeta,
+pub struct HtmlEventTargetVolumeDataSource {
+    volume_meta: BrickedMultiResolutionMultiVolumeMeta,
     brick_queue: Rc<RefCell<VecDeque<(BrickAddress, Brick)>>>,
     event_target: EventTarget,
 }
 
 #[cfg(target_arch = "wasm32")]
-impl HtmlEventTargetTexture3DSource {
-    pub fn new(volume_meta: MultiResolutionVolumeMeta, event_target: EventTarget) -> Self {
+impl HtmlEventTargetVolumeDataSource {
+    pub fn new(
+        volume_meta: BrickedMultiResolutionMultiVolumeMeta,
+        event_target: EventTarget,
+    ) -> Self {
         let brick_queue = Rc::new(RefCell::new(VecDeque::new()));
         let receiver = brick_queue.clone();
         let event_callback = Closure::wrap(Box::new(move |event: JsValue| {
@@ -81,8 +75,8 @@ impl HtmlEventTargetTexture3DSource {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl SparseResidencyTexture3DSource for HtmlEventTargetTexture3DSource {
-    fn get_meta(&self) -> &MultiResolutionVolumeMeta {
+impl VolumeDataSource for HtmlEventTargetVolumeDataSource {
+    fn get_meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta {
         &self.volume_meta
     }
 

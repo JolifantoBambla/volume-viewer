@@ -2,7 +2,6 @@ pub mod camera;
 pub mod context;
 pub mod geometry;
 pub mod pass;
-pub mod resources;
 pub mod settings;
 pub mod trivial_volume_renderer;
 pub mod volume;
@@ -29,9 +28,7 @@ use winit::dpi::PhysicalSize;
 use crate::input::Input;
 use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::ray_guided_dvr::{ChannelSettings, RayGuidedDVR, Resources};
-use crate::{
-    MultiChannelVolumeRendererSettings, SparseResidencyTexture3D, SparseResidencyTexture3DSource,
-};
+use crate::{MultiChannelVolumeRendererSettings, SparseResidencyTexture3D, VolumeDataSource};
 pub use trivial_volume_renderer::TrivialVolumeRenderer;
 
 pub struct MultiChannelVolumeRenderer {
@@ -54,7 +51,7 @@ impl MultiChannelVolumeRenderer {
     #[cfg(target_arch = "wasm32")]
     pub async fn new(
         canvas: JsValue,
-        volume_source: Box<dyn SparseResidencyTexture3DSource>,
+        volume_source: Box<dyn VolumeDataSource>,
         render_settings: &MultiChannelVolumeRendererSettings,
     ) -> Self {
         let canvas = canvas.unchecked_into::<OffscreenCanvas>();

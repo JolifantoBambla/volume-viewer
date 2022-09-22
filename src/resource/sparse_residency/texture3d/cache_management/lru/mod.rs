@@ -7,7 +7,9 @@ use glam::UVec3;
 use std::mem::size_of;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{BindGroup, BindingResource, Buffer, BufferAddress, BufferUsages, CommandEncoder, Extent3d};
+use wgpu::{
+    BindGroup, BindingResource, Buffer, BufferAddress, BufferUsages, CommandEncoder, Extent3d,
+};
 use wgsl_preprocessor::WGSLPreprocessor;
 
 use crate::renderer::pass::GPUPass;
@@ -99,11 +101,8 @@ impl LRUCache {
             usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         });
 
-        let lru_read_buffer = MultiBufferedMappableBuffer::new(
-            num_multi_buffering,
-            &lru_local,
-            &ctx.device,
-        );
+        let lru_read_buffer =
+            MultiBufferedMappableBuffer::new(num_multi_buffering, &lru_local, &ctx.device);
         let num_used_entries_read_buffer = MultiBufferedMappableBuffer::new(
             num_multi_buffering,
             &vec![num_unused_entries],
@@ -154,11 +153,14 @@ impl LRUCache {
     }
 
     fn copy_to_readable(&self, encoder: &mut CommandEncoder, buffer_index: u32) {
-        if self.lru_read_buffer.is_ready(buffer_index) && self.num_used_entries_read_buffer.is_ready(buffer_index) {
+        if self.lru_read_buffer.is_ready(buffer_index)
+            && self.num_used_entries_read_buffer.is_ready(buffer_index)
+        {
             encoder.copy_buffer_to_buffer(
                 &self.num_used_entries_buffer,
                 0,
-                self.num_used_entries_read_buffer.as_buffer_ref(buffer_index),
+                self.num_used_entries_read_buffer
+                    .as_buffer_ref(buffer_index),
                 0,
                 size_of::<NumUsedEntries>() as BufferAddress,
             );
@@ -217,11 +219,18 @@ impl LRUCache {
     }
 
     /// Writes data to the cache and returns the 3D cache address of the slot the data was written to
-    pub fn add_cache_entry(&mut self, data: &Vec<u8>, extent: Extent3d, input: &Input) -> Result<UVec3, CacheFullError> {
+    pub fn add_cache_entry(
+        &mut self,
+        data: &Vec<u8>,
+        extent: Extent3d,
+        input: &Input,
+    ) -> Result<UVec3, CacheFullError> {
         for i in ((self.num_used_entries_local as usize)..(self.next_empty_index as usize)).rev() {
             let cache_entry_index = self.lru_local[i];
             let last_written = self.lru_last_writes[cache_entry_index as usize];
-            if last_written > input.frame.number || (input.frame.number - last_written) > self.time_to_live {
+            if last_written > input.frame.number
+                || (input.frame.number - last_written) > self.time_to_live
+            {
                 let cache_entry_location = self.cache_entry_index_to_location(cache_entry_index);
                 self.cache.write_subregion(
                     data.as_slice(),
@@ -230,11 +239,7 @@ impl LRUCache {
                     &self.ctx,
                 );
                 self.lru_last_writes[cache_entry_index as usize] = input.frame.number;
-                self.next_empty_index = if i > 0 {
-                    i as u32 - 1
-                } else {
-                    0
-                };
+                self.next_empty_index = if i > 0 { i as u32 - 1 } else { 0 };
                 return Ok(cache_entry_location);
             }
         }
