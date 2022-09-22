@@ -110,7 +110,7 @@ impl<T: bytemuck::Pod> MultiBufferedMappableBuffer<T> {
             let buffer = MappableBuffer::new(device.create_buffer_init(&BufferInitDescriptor {
                 label: None,
                 contents: bytemuck::cast_slice(init_data),
-                usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+                usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
             }));
             buffers.push(buffer);
         }

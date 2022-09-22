@@ -112,6 +112,14 @@ export class VolumeResolutionMeta {
     }
 }
 
+export class ChannelInfo {
+    name;
+    constructor(name) {
+        this.name = name;
+    }
+
+}
+
 export class MultiResolutionVolumeMeta {
     constructor(brickSize, scale, resolutions, channels) {
         this.brickSize = brickSize;
@@ -314,7 +322,7 @@ export class OmeZarrDataSource extends VolumeDataSource {
                 .slice(0, 3);
         }
 
-        this.#volumeMeta = new MultiResolutionVolumeMeta(brickSize, scale, resolutions, [...new Array(numChannels).keys()].map(k => { name: `${k}` }));
+        this.#volumeMeta = new MultiResolutionVolumeMeta(brickSize, scale, resolutions, [...new Array(numChannels).keys()].map(k => new ChannelInfo(`${k}`)));
         this.#maxValues = new Array(this.#zarrArrays[0].shape.slice().reverse()[3]);
         this.#emptyBricks = {};
     }

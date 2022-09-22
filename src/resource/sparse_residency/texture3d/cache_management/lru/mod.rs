@@ -4,17 +4,15 @@
 mod lru_update;
 
 use glam::UVec3;
-use std::borrow::Cow;
 use std::mem::size_of;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, Extent3d};
+use wgpu::{BindGroup, BindingResource, Buffer, BufferAddress, BufferUsages, CommandEncoder, Extent3d};
 use wgsl_preprocessor::WGSLPreprocessor;
 
-use crate::gpu_list::GpuList;
-use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
-use crate::resource::{MappableBuffer, Texture};
-use crate::util::extent::{box_volume, extent_to_uvec, index_to_subscript, uvec_to_extent, uvec_to_origin};
+use crate::renderer::pass::GPUPass;
+use crate::resource::Texture;
+use crate::util::extent::{box_volume, index_to_subscript, uvec_to_extent, uvec_to_origin};
 use crate::{GPUContext, Input};
 
 use crate::resource::buffer::MultiBufferedMappableBuffer;
@@ -140,20 +138,19 @@ impl LRUCache {
         }
     }
 
-    pub fn encode_lru_update(&self, encoder: &mut CommandEncoder, input: &Input) {
+    pub fn encode_lru_update(&self, encoder: &mut CommandEncoder, timestamp: u32) {
+        // todo: this is way too slow :/
+        /*
         self.lru_update_pass.encode(
             encoder,
             &self.lru_update_bind_group,
             &self.usage_buffer.extent,
         );
+         */
         // we can't copy to and read from the same buffer in one frame
         // so we'll copy to the current frame's buffer
         // and read from the last frame's buffer (if it is mapped, i.e. maybe_read_all)
-        self.copy_to_readable(encoder, input.frame.number);
-
-        //  Maps the current frame's LRU read buffer for reading
-        self.lru_read_buffer.map_async(input.frame.number, wgpu::MapMode::Read, ..);
-        self.num_used_entries_read_buffer.map_async(input.frame.number, wgpu::MapMode::Read, ..);
+        self.copy_to_readable(encoder, timestamp);
     }
 
     fn copy_to_readable(&self, encoder: &mut CommandEncoder, buffer_index: u32) {
@@ -178,11 +175,16 @@ impl LRUCache {
     /// tries to read the last frame's to
     /// to update its CPU local list of free cache entries.
     pub fn update_local_lru(&mut self, input: &Input) {
+        /*
+        //  Maps the current frame's LRU read buffer for reading
+        self.lru_read_buffer.map_async(input.frame.number, wgpu::MapMode::Read, ..);
+        self.num_used_entries_read_buffer.map_async(input.frame.number, wgpu::MapMode::Read, ..);
+
         let last_lru_index = self.lru_read_buffer.to_previous_index(input.frame.number);
         let last_num_entries_index = self.num_used_entries_read_buffer.to_previous_index(input.frame.number);
         if self.lru_read_buffer.is_mapped(last_lru_index) && self.num_used_entries_read_buffer.is_mapped(last_num_entries_index) {
             let lru = self.lru_read_buffer.maybe_read_all(last_lru_index);
-            let num_used_entries = self.num_used_entries_read_buffer.maybe_read_all(last_lru_index);
+            let num_used_entries = self.num_used_entries_read_buffer.maybe_read_all(last_num_entries_index);
 
             if lru.is_empty() || num_used_entries.is_empty() {
                 log::error!("Could not read LRU at frame {}", input.frame.number);
@@ -192,8 +194,9 @@ impl LRUCache {
                 self.next_empty_index = self.lru_local.len() as u32 - 1;
             }
         } else {
-            log::warn!("Could not update LRU at frame {}", input.frame.number);
+            //log::warn!("Could not update LRU at frame {}", input.frame.number);
         }
+         */
     }
 
     pub(crate) fn get_cache_as_binding_resource(&self) -> BindingResource {
@@ -202,6 +205,11 @@ impl LRUCache {
 
     pub(crate) fn get_usage_buffer_as_binding_resource(&self) -> BindingResource {
         BindingResource::TextureView(&self.usage_buffer.view)
+    }
+
+    pub fn num_writable_bricks(&self) -> usize {
+        // todo: filter with ttl? worst case: would loop over 32768 entries in a 1024³ cache with 32^3 brick size
+        self.lru_local.len() - self.num_used_entries_local as usize
     }
 
     fn cache_entry_index_to_location(&self, index: u32) -> UVec3 {
@@ -222,6 +230,11 @@ impl LRUCache {
                     &self.ctx,
                 );
                 self.lru_last_writes[cache_entry_index as usize] = input.frame.number;
+                self.next_empty_index = if i > 0 {
+                    i as u32 - 1
+                } else {
+                    0
+                };
                 return Ok(cache_entry_location);
             }
         }

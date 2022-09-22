@@ -34,8 +34,13 @@ impl From<BrickAddress> for u32 {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ChannelInfo {
+    pub name: String,
+}
+
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VolumeResolutionMeta {
     /// The size of the volume in voxels.
     /// It is not necessarily a multiple of `brick_size`.
@@ -64,6 +69,8 @@ pub struct MultiResolutionVolumeMeta {
 
     /// The resolutions
     pub(crate) resolutions: Vec<VolumeResolutionMeta>,
+
+    pub channels: Vec<ChannelInfo>,
 }
 
 impl MultiResolutionVolumeMeta {

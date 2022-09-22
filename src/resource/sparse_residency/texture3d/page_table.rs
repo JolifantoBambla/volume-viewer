@@ -64,15 +64,35 @@ impl From<PageTableEntry> for UVec4 {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone)]
 pub struct PageTableMeta {
     /// The offset of this resolution's page table in the page directory.
-    pub(crate) offset: UVec3,
+    offsets: Vec<UVec3>,
 
     pub(crate) extent: UVec3,
 
     ///
     pub(crate) volume_meta: VolumeResolutionMeta,
+}
+
+impl PageTableMeta {
+    pub fn new(offsets: Vec<UVec3>, extent: UVec3, volume_meta: VolumeResolutionMeta) -> Self {
+        Self {
+            offsets,
+            extent,
+            volume_meta,
+        }
+    }
+
+    pub fn get_channel_offset(&self, channel: u32) -> UVec3 {
+        self.offsets[channel as usize]
+    }
+
+    pub fn get_max_location(&self) -> UVec3 {
+        self.offsets
+            .iter()
+            .fold(UVec3::ZERO, |a, &b| a.max(b + self.extent))
+    }
 }
 
 #[derive(Clone)]
@@ -101,26 +121,29 @@ impl PageDirectoryMeta {
         } else {
             UVec3::Z
         };
+        let mut last_offset = UVec3::ZERO;
+        let mut last_extent = UVec3::ZERO;
         for (level, volume_resolution) in volume_meta.resolutions.iter().enumerate() {
-            let offset = if level > 0 {
-                let last_offset = resolutions[level - 1].offset;
-                let last_extent = resolutions[level - 1].extent;
-
-                last_offset + last_extent * packing_axis
-            } else {
-                UVec3::ZERO
-            };
+            let mut offsets = Vec::new();
+            // todo: configure how many channels the page table can hold
+            // todo: better packing
+            for _ in 0..1 { //volume_meta.channels.len() {
+                let offset = last_offset + last_extent * packing_axis;
+                offsets.push(offset);
+                last_offset = offset;
+                last_extent = UVec3::from_slice(&volume_resolution.volume_size);
+            }
             let extent = volume_meta.bricks_per_dimension(level);
-            resolutions.push(PageTableMeta {
-                offset,
+            resolutions.push(PageTableMeta::new(
+                offsets,
                 extent,
-                volume_meta: *volume_resolution,
-            });
+                volume_resolution.clone(),
+            ));
         }
 
         let extent = resolutions
             .iter()
-            .fold(UVec3::ZERO, |a, b| a.max(b.offset + b.extent));
+            .fold(UVec3::ZERO, |a, b| a.max(b.get_max_location()));
 
         Self {
             brick_size: UVec3::from(volume_meta.brick_size),
