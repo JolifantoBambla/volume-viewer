@@ -8,13 +8,13 @@ use std::borrow::Cow;
 use std::mem::size_of;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder};
+use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, Extent3d};
 use wgsl_preprocessor::WGSLPreprocessor;
 
 use crate::gpu_list::GpuList;
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use crate::resource::{MappableBuffer, Texture};
-use crate::util::extent::{box_volume, extent_to_uvec, uvec_to_extent};
+use crate::util::extent::{box_volume, extent_to_uvec, index_to_subscript, uvec_to_extent, uvec_to_origin};
 use crate::{GPUContext, Input};
 
 use crate::resource::buffer::MultiBufferedMappableBuffer;
@@ -27,11 +27,25 @@ pub struct NumUsedEntries {
     num: u32,
 }
 
+pub struct CacheFullError {}
+
 pub struct LRUCache {
+    ctx: Arc<GPUContext>,
+
     cache: Texture,
+    cache_entry_size: UVec3,
 
     /// Stores one timestamp for each brick in the bricked multi-resolution hierarchy.
     usage_buffer: Texture,
+
+    /// Stores the last timestamp the cache entry with the corresponding index has been written.
+    /// If a cache entry has never been written to `u32::MAX` is stored as a special value.
+    lru_last_writes: Vec<u32>,
+
+    // Each cache entry can't be overridden for `time_to_live` frames.
+    time_to_live: u32,
+
+    next_empty_index: u32,
 
     lru_local: Vec<u32>,
     lru_buffer: Buffer,
@@ -49,20 +63,23 @@ pub struct LRUCache {
 impl LRUCache {
     pub fn new(
         cache_size: UVec3,
-        entry_size: UVec3,
+        cache_entry_size: UVec3,
         timestamp_uniform_buffer: &Buffer,
         num_multi_buffering: u32,
+        time_to_live: u32,
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
         // todo: make configurable
         let cache = Texture::create_brick_cache(&ctx.device, uvec_to_extent(&cache_size));
 
-        let entries_per_dimension = cache_size / entry_size;
-        let num_entries = box_volume(&entries_per_dimension);
+        let usage_buffer_size = cache_size / cache_entry_size;
+        let num_entries = box_volume(&usage_buffer_size);
         let num_unused_entries = NumUsedEntries { num: num_entries };
 
-        let lru_local = vec![0u32; num_entries as usize];
+        let next_empty_index = num_entries - 1;
+        let lru_local = Vec::from_iter((0..num_entries).rev());
+        let lru_last_update = vec![u32::MAX; num_entries as usize];
         let lru_buffer_size = (size_of::<u32>() * num_entries as usize) as BufferAddress;
 
         // 1:1 mapping, 1 timestamp per brick in cache
@@ -70,7 +87,7 @@ impl LRUCache {
             "Usage Buffer".to_string(),
             &ctx.device,
             &ctx.queue,
-            uvec_to_extent(&entries_per_dimension),
+            uvec_to_extent(&usage_buffer_size),
         );
 
         let lru_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
@@ -104,8 +121,13 @@ impl LRUCache {
         });
 
         Self {
+            ctx: ctx.clone(),
             cache,
+            cache_entry_size,
             usage_buffer,
+            lru_last_writes: lru_last_update,
+            time_to_live,
+            next_empty_index,
             lru_local,
             lru_buffer,
             lru_read_buffer,
@@ -166,6 +188,7 @@ impl LRUCache {
             } else {
                 self.lru_local = lru;
                 self.num_used_entries_local = num_used_entries[0].num;
+                self.next_empty_index = self.lru_local.len() as u32 - 1;
             }
         } else {
             log::warn!("Could not update LRU at frame {}", input.frame.number);
@@ -180,9 +203,27 @@ impl LRUCache {
         BindingResource::TextureView(&self.usage_buffer.view)
     }
 
+    fn cache_entry_index_to_location(&self, index: u32) -> UVec3 {
+        index_to_subscript(index, &self.usage_buffer.extent) * self.cache_entry_size
+    }
+
     /// Writes data to the cache and returns the 3D cache address of the slot the data was written to
-    pub fn add_cache_entry(&self, data: &Vec<u8>) -> Result<UVec3, CacheFullError> {
-        // todo: implement
-        Ok(UVec3::ZERO)
+    pub fn add_cache_entry(&mut self, data: &Vec<u8>, extent: Extent3d, input: &Input) -> Result<UVec3, CacheFullError> {
+        for i in ((self.num_used_entries_local as usize)..(self.next_empty_index as usize)).rev() {
+            let cache_entry_index = self.lru_local[i];
+            let last_written = self.lru_last_writes[cache_entry_index as usize];
+            if last_written > input.frame.number || (input.frame.number - last_written) > self.time_to_live {
+                let cache_entry_location = self.cache_entry_index_to_location(cache_entry_index);
+                self.cache.write_subregion(
+                    data.as_slice(),
+                    uvec_to_origin(&cache_entry_location),
+                    extent,
+                    &self.ctx,
+                );
+                self.lru_last_writes[cache_entry_index as usize] = input.frame.number;
+                return Ok(cache_entry_location);
+            }
+        }
+        Err(CacheFullError {})
     }
 }

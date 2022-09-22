@@ -128,12 +128,14 @@ impl SparseResidencyTexture3D {
             depth_or_array_layers: 1024,
         };
         let num_multi_buffering = 2;
+        let time_to_live = 5;
 
         let lru_cache = LRUCache::new(
             extent_to_uvec(&cache_size),
             meta.brick_size,
             &timestamp_uniform_buffer,
             num_multi_buffering,
+            time_to_live,
             wgsl_preprocessor,
             ctx
         );
