@@ -43,8 +43,8 @@ fn max_component(v: float3) -> f32 {
 
 fn index_to_subscript(index: u32, extent: uint3) -> uint3 {
     let x = index % extent.x;
-    let y = (index - x) / extent.x % extent.y;
-    let z = ((index - x) / extent.x - y) / extent.y;
+    let y = ((index - x) / extent.x) % extent.y;
+    let z = (((index - x) / extent.x) - y) / extent.y;
     return uint3(x, y, z);
 }
 

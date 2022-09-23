@@ -9,6 +9,7 @@ use wgpu::{
     BufferUsages, CommandEncoder,
 };
 use wgsl_preprocessor::WGSLPreprocessor;
+use crate::util::extent::extent_volume;
 
 pub struct Resources<'a> {
     pub usage_buffer: &'a Texture,
@@ -102,16 +103,18 @@ impl LRUUpdate {
             label: None,
             layout: &internal_bind_group_layout,
             entries: &vec![
+                /*
                 BindGroupEntry {
                     binding: 0,
                     resource: usage_mask.as_entire_binding(),
                 },
+                 */
                 BindGroupEntry {
-                    binding: 1,
+                    binding: 0,
                     resource: scan_even.as_entire_binding(),
                 },
                 BindGroupEntry {
-                    binding: 2,
+                    binding: 1,
                     resource: scan_odd.as_entire_binding(),
                 },
             ],
@@ -142,9 +145,9 @@ impl LRUUpdate {
         cpass.set_bind_group(1, &self.internal_bind_group, &[]);
         cpass.insert_debug_marker(self.label());
         cpass.dispatch_workgroups(
-            (output_extent.width as f32 / 4.).ceil() as u32,
-            (output_extent.height as f32 / 4.).ceil() as u32,
-            (output_extent.depth_or_array_layers as f32 / 4.).ceil() as u32,
+            (extent_volume(output_extent) as f32 / 128.).ceil() as u32,
+            1,
+            1,
         );
     }
 }

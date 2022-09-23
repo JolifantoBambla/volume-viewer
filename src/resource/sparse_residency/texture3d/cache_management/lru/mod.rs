@@ -79,7 +79,7 @@ impl LRUCache {
         let num_entries = box_volume(&usage_buffer_size);
         let num_unused_entries = NumUsedEntries { num: num_entries };
 
-        let next_empty_index = num_entries - 1;
+        let next_empty_index = num_entries;
         let lru_local = Vec::from_iter((0..num_entries).rev());
         let lru_last_update = vec![u32::MAX; num_entries as usize];
         let lru_buffer_size = (size_of::<u32>() * num_entries as usize) as BufferAddress;
@@ -196,10 +196,11 @@ impl LRUCache {
                 log::error!("Could not read LRU at frame {}", timestamp);
             } else {
                 let h: HashSet<u32> = HashSet::from_iter(lru.iter().cloned());
-                assert_eq!(h.len(), lru.len(), "lru {:?}", lru);
+                assert_eq!(h.len(), lru.len(), "lru {:?}, num_used: {}", lru, num_used_entries[0].num);
+                log::info!("updated lru {:?}", lru);
                 self.lru_local = lru;
                 self.num_used_entries_local = num_used_entries[0].num;
-                self.next_empty_index = self.lru_local.len() as u32 - 1;
+                self.next_empty_index = self.lru_local.len() as u32;
             }
         } else {
             log::warn!("Could not update LRU at frame {}", timestamp);
@@ -236,6 +237,7 @@ impl LRUCache {
             if last_written > input.frame.number
                 || (input.frame.number - last_written) > self.time_to_live
             {
+                log::info!("writing idx {}", cache_entry_index);
                 let extent = uvec_to_extent(
                     &(index_to_subscript(
                         (data.len() as u32) - 1,
@@ -251,7 +253,7 @@ impl LRUCache {
                     &self.ctx,
                 );
                 self.lru_last_writes[cache_entry_index as usize] = input.frame.number;
-                self.next_empty_index = if i > 0 { i as u32 - 1 } else { 0 };
+                self.next_empty_index = i as u32;// if i > 0 { i as u32 - 1 } else { 0 };
                 return Ok(cache_entry_location);
             }
         }
