@@ -1,5 +1,6 @@
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use crate::resource::Texture;
+use crate::util::extent::extent_volume;
 use crate::GPUContext;
 use std::borrow::Cow;
 use std::mem::size_of;
@@ -9,7 +10,6 @@ use wgpu::{
     BufferUsages, CommandEncoder,
 };
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::util::extent::extent_volume;
 
 pub struct Resources<'a> {
     pub usage_buffer: &'a Texture,
@@ -46,7 +46,6 @@ pub(crate) struct LRUUpdate {
     pipeline: wgpu::ComputePipeline,
     bind_group_layout: BindGroupLayout,
     internal_bind_group: BindGroup,
-    usage_mask: Buffer,
     scan_even: Buffer,
     scan_odd: Buffer,
 }
@@ -57,12 +56,6 @@ impl LRUUpdate {
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
-        let usage_mask = ctx.device.create_buffer(&BufferDescriptor {
-            label: None,
-            size: (size_of::<u32>() * num_entries as usize) as BufferAddress,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
         let scan_even = ctx.device.create_buffer(&BufferDescriptor {
             label: None,
             size: (size_of::<u32>() * num_entries as usize) as BufferAddress,
@@ -103,12 +96,6 @@ impl LRUUpdate {
             label: None,
             layout: &internal_bind_group_layout,
             entries: &vec![
-                /*
-                BindGroupEntry {
-                    binding: 0,
-                    resource: usage_mask.as_entire_binding(),
-                },
-                 */
                 BindGroupEntry {
                     binding: 0,
                     resource: scan_even.as_entire_binding(),
@@ -125,7 +112,6 @@ impl LRUUpdate {
             pipeline,
             bind_group_layout,
             internal_bind_group,
-            usage_mask,
             scan_even,
             scan_odd,
         }
@@ -138,7 +124,7 @@ impl LRUUpdate {
         output_extent: &wgpu::Extent3d,
     ) {
         let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("Create Mask"),
+            label: Some("LRU Update"),
         });
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, bind_group, &[]);

@@ -186,14 +186,12 @@ impl PageTableDirectory {
 
     pub fn mark_as_empty(&mut self, brick_address: &BrickAddress) {
         let index = self.brick_address_to_page_index(brick_address);
-        self.local_page_directory[index] =
-            UVec3::ZERO.extend(PageTableEntryFlag::Empty as u32);
+        self.local_page_directory[index] = UVec3::ZERO.extend(PageTableEntryFlag::Empty as u32);
     }
 
     pub fn mark_as_mapped(&mut self, brick_address: &BrickAddress, brick_location: &UVec3) {
         let index = self.brick_address_to_page_index(brick_address);
-        self.local_page_directory[index] =
-            brick_location.extend(PageTableEntryFlag::Mapped as u32);
+        self.local_page_directory[index] = brick_location.extend(PageTableEntryFlag::Mapped as u32);
     }
 
     pub fn invalidate_page_table(&mut self, resolution: u32, channel: u32) {

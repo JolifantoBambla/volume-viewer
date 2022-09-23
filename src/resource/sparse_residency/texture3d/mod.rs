@@ -187,10 +187,7 @@ impl SparseResidencyTexture3D {
                     self.page_table_directory.mark_as_empty(&address);
                 } else {
                     // write brick to cache
-                    let brick_location = self.lru_cache.add_cache_entry(
-                        &brick.data,
-                        input,
-                    );
+                    let brick_location = self.lru_cache.add_cache_entry(&brick.data, input);
 
                     match brick_location {
                         Ok(brick_location) => {

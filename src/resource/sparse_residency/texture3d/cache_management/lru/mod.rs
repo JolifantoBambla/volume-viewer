@@ -3,8 +3,8 @@
 
 mod lru_update;
 
-use std::collections::HashSet;
 use glam::UVec3;
+use std::collections::HashSet;
 use std::mem::size_of;
 use std::sync::Arc;
 use web_sys::console::time;
@@ -140,9 +140,7 @@ impl LRUCache {
     }
 
     pub fn encode_lru_update(&self, encoder: &mut CommandEncoder, timestamp: u32) {
-        let num_used_entries = NumUsedEntries {
-            num: 0
-        };
+        let num_used_entries = NumUsedEntries { num: 0 };
         self.ctx.queue.write_buffer(
             &self.num_used_entries_buffer,
             0 as BufferAddress,
@@ -185,10 +183,14 @@ impl LRUCache {
         let next_frame = timestamp + 1;
 
         //  Maps the current frame's LRU read buffer for reading
-        self.lru_read_buffer.map_async(next_frame, wgpu::MapMode::Read, ..);
-        self.num_used_entries_read_buffer.map_async(next_frame, wgpu::MapMode::Read, ..);
+        self.lru_read_buffer
+            .map_async(next_frame, wgpu::MapMode::Read, ..);
+        self.num_used_entries_read_buffer
+            .map_async(next_frame, wgpu::MapMode::Read, ..);
 
-        if self.lru_read_buffer.is_mapped(timestamp) && self.num_used_entries_read_buffer.is_mapped(timestamp) {
+        if self.lru_read_buffer.is_mapped(timestamp)
+            && self.num_used_entries_read_buffer.is_mapped(timestamp)
+        {
             let lru = self.lru_read_buffer.maybe_read_all(timestamp);
             let num_used_entries = self.num_used_entries_read_buffer.maybe_read_all(timestamp);
 
@@ -196,8 +198,14 @@ impl LRUCache {
                 log::error!("Could not read LRU at frame {}", timestamp);
             } else {
                 let h: HashSet<u32> = HashSet::from_iter(lru.iter().cloned());
-                assert_eq!(h.len(), lru.len(), "lru {:?}, num_used: {}", lru, num_used_entries[0].num);
-                log::info!("updated lru {:?}", lru);
+                assert_eq!(
+                    h.len(),
+                    lru.len(),
+                    "lru {:?}, num_used: {}",
+                    lru,
+                    num_used_entries[0].num
+                );
+                //log::info!("updated lru {:?}", lru);
                 self.lru_local = lru;
                 self.num_used_entries_local = num_used_entries[0].num;
                 self.next_empty_index = self.lru_local.len() as u32;
@@ -242,7 +250,7 @@ impl LRUCache {
                     &(index_to_subscript(
                         (data.len() as u32) - 1,
                         &uvec_to_extent(&self.cache_entry_size),
-                    ) + UVec3::ONE)
+                    ) + UVec3::ONE),
                 );
 
                 let cache_entry_location = self.cache_entry_index_to_location(cache_entry_index);
@@ -253,7 +261,7 @@ impl LRUCache {
                     &self.ctx,
                 );
                 self.lru_last_writes[cache_entry_index as usize] = input.frame.number;
-                self.next_empty_index = i as u32;// if i > 0 { i as u32 - 1 } else { 0 };
+                self.next_empty_index = i as u32; // if i > 0 { i as u32 - 1 } else { 0 };
                 return Ok(cache_entry_location);
             }
         }
