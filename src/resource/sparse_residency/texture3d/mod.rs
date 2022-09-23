@@ -21,6 +21,7 @@ use crate::util::extent::{
 };
 use crate::volume::{Brick, BrickAddress, VolumeDataSource};
 
+use crate::resource::sparse_residency::texture3d::page_table::PageTableDirectory;
 use cache_management::{
     lru::LRUCache,
     process_requests::{ProcessRequests, Resources},
@@ -37,13 +38,9 @@ pub struct SparseResidencyTexture3D {
     brick_transfer_limit: usize,
     brick_request_limit: usize,
 
-    // todo: refactor into pagetable
-    meta: PageDirectoryMeta,
-    local_page_directory: Vec<UVec4>,
-    page_table_meta_buffer: Buffer,
-    page_directory: Texture,
-
     timestamp_uniform_buffer: Buffer,
+
+    page_table_directory: PageTableDirectory,
 
     lru_cache: LRUCache,
 
@@ -54,21 +51,6 @@ pub struct SparseResidencyTexture3D {
     requested_bricks: HashSet<u32>,
     // todo: needs to be updated when cache entries are overridden
     cached_bricks: HashSet<u32>,
-}
-
-// todo: rename to pagetablemeta
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct ResMeta {
-    // note: brick size is just copied
-    brick_size: UVec4,
-    page_table_offset: UVec4,
-    page_table_extent: UVec4,
-    volume_size: UVec4,
-    // todo: I also need:
-    //   - volume to padded ratio
-    //   - linear offset in bricks
-    //   - a variable saying which channel this page table holds
 }
 
 impl SparseResidencyTexture3D {
@@ -85,33 +67,12 @@ impl SparseResidencyTexture3D {
         });
 
         let volume_meta = source.get_meta();
-        let meta = PageDirectoryMeta::new(volume_meta);
+        let brick_size = UVec3::from_slice(&volume_meta.brick_size);
 
-        let res_meta_data: Vec<ResMeta> = meta
-            .resolutions
-            .iter()
-            .map(|r| ResMeta {
-                brick_size: meta.brick_size.extend(0),
-                // todo: one page table per res and channel
-                page_table_offset: r.get_channel_offset(0).extend(0),
-                page_table_extent: r.extent.extend(0),
-                volume_size: UVec3::from_slice(r.volume_meta.volume_size.as_slice()).extend(0),
-            })
-            .collect();
+        // todo: make configurable
+        let max_visible_channels = 1;
 
-        for r in &res_meta_data {
-            log::info!("resolution meta data: {:?}", r);
-        }
-
-        let page_table_meta_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Page Table Meta"),
-            contents: bytemuck::cast_slice(res_meta_data.as_slice()),
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        // 1 page table entry per brick
-        let (page_directory, local_page_directory) =
-            Texture::create_page_directory(&ctx.device, &ctx.queue, uvec_to_extent(&meta.extent));
+        let page_table_directory = PageTableDirectory::new(volume_meta, max_visible_channels, ctx);
 
         // todo: make configurable
         let cache_size = Extent3d {
@@ -119,12 +80,12 @@ impl SparseResidencyTexture3D {
             height: 1024,
             depth_or_array_layers: 1024,
         };
-        let num_multi_buffering = 2;
+        let num_multi_buffering = 3;
         let time_to_live = 5;
 
         let lru_cache = LRUCache::new(
             extent_to_uvec(&cache_size),
-            meta.brick_size,
+            brick_size,
             &timestamp_uniform_buffer,
             num_multi_buffering,
             time_to_live,
@@ -137,7 +98,7 @@ impl SparseResidencyTexture3D {
             "Request Buffer".to_string(),
             &ctx.device,
             &ctx.queue,
-            page_directory.extent,
+            page_table_directory.extent(),
         );
 
         let brick_request_limit = 32;
@@ -145,37 +106,29 @@ impl SparseResidencyTexture3D {
         let process_requests_pass =
             ProcessRequests::new(brick_request_limit as u32, wgsl_preprocessor, ctx);
         let process_requests_bind_group = process_requests_pass.create_bind_group(Resources {
-            page_table_meta: &page_table_meta_buffer,
+            page_table_meta: &page_table_directory.page_table_meta_buffer(),
             request_buffer: &request_buffer,
             timestamp: &timestamp_uniform_buffer,
         });
 
         Self {
             ctx: ctx.clone(),
-            meta,
             source,
             brick_transfer_limit: 32,
             brick_request_limit,
-            page_table_meta_buffer,
-            page_directory,
+            page_table_directory,
             request_buffer,
             lru_cache,
             timestamp_uniform_buffer,
             process_requests_pass,
             process_requests_bind_group,
-            local_page_directory,
             requested_bricks: HashSet::new(),
             cached_bricks: HashSet::new(),
         }
     }
 
     pub fn volume_scale(&self) -> Vec3 {
-        let size = Vec3::new(
-            self.meta.resolutions[0].volume_meta.volume_size[0] as f32,
-            self.meta.resolutions[0].volume_meta.volume_size[1] as f32,
-            self.meta.resolutions[0].volume_meta.volume_size[2] as f32,
-        );
-        size * (self.meta.scale / self.meta.scale.max_element())
+        self.page_table_directory.volume_scale()
     }
 
     pub fn encode_cache_management(&self, command_encoder: &mut CommandEncoder, timestamp: u32) {
@@ -218,20 +171,9 @@ impl SparseResidencyTexture3D {
         }
     }
 
-    fn brick_address_to_page_index(&self, brick_address: &BrickAddress) -> usize {
-        // todo: compute page location
-        let level = brick_address.level as usize;
-        // todo: channel_offset!
-        let offset = self.meta.resolutions[level].get_channel_offset(0);
-        let location = UVec3::from_slice(brick_address.index.as_slice());
-        let page_index =
-            subscript_to_index(&(offset + location), &self.page_directory.extent) as usize;
-        page_index
-    }
-
     fn process_new_bricks(&mut self, input: &Input) {
         // update CPU local LRU cache
-        self.lru_cache.update_local_lru(input);
+        self.lru_cache.update_local_lru(input.frame.number);
 
         let bricks = self.source.poll_bricks(min(
             self.brick_transfer_limit,
@@ -241,32 +183,24 @@ impl SparseResidencyTexture3D {
         // write bricks to cache
         if !bricks.is_empty() {
             for (address, brick) in bricks {
-                let page_index = self.brick_address_to_page_index(&address);
-
                 if brick.data.is_empty() {
-                    self.local_page_directory[page_index] =
-                        UVec3::ZERO.extend(PageTableEntryFlag::Empty as u32);
+                    self.page_table_directory.mark_as_empty(&address);
                 } else {
-                    let brick_extent = index_to_subscript(
-                        (brick.data.len() as u32) - 1,
-                        &uvec_to_extent(&self.meta.brick_size),
-                    ) + UVec3::ONE;
-
                     // write brick to cache
                     let brick_location = self.lru_cache.add_cache_entry(
                         &brick.data,
-                        uvec_to_extent(&brick_extent),
                         input,
                     );
 
                     match brick_location {
                         Ok(brick_location) => {
                             // mark brick as mapped
-                            self.local_page_directory[page_index] =
-                                brick_location.extend(PageTableEntryFlag::Mapped as u32);
+                            self.page_table_directory
+                                .mark_as_mapped(&address, &brick_location);
                         }
                         Err(_) => {
                             // todo: error handling
+                            log::error!("Could not add brick to cache");
                         }
                     }
                 }
@@ -276,8 +210,7 @@ impl SparseResidencyTexture3D {
             }
 
             // update the page directory
-            self.page_directory
-                .write(self.local_page_directory.as_slice(), &self.ctx);
+            self.page_table_directory.commit_changes();
         }
     }
 
@@ -299,11 +232,15 @@ impl AsBindGroupEntries for SparseResidencyTexture3D {
         vec![
             BindGroupEntry {
                 binding: 0,
-                resource: self.page_table_meta_buffer.as_entire_binding(),
+                resource: self
+                    .page_table_directory
+                    .get_page_table_meta_as_binding_resource(),
             },
             BindGroupEntry {
                 binding: 1,
-                resource: BindingResource::TextureView(&self.page_directory.view),
+                resource: self
+                    .page_table_directory
+                    .get_page_directory_as_binding_resource(),
             },
             BindGroupEntry {
                 binding: 2,

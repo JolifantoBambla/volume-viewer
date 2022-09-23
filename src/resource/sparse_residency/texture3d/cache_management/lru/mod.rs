@@ -6,6 +6,7 @@ mod lru_update;
 use glam::UVec3;
 use std::mem::size_of;
 use std::sync::Arc;
+use web_sys::console::time;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroup, BindingResource, Buffer, BufferAddress, BufferUsages, CommandEncoder, Extent3d,
@@ -98,7 +99,7 @@ impl LRUCache {
         let num_used_entries_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::bytes_of(&num_unused_entries),
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
         });
 
         let lru_read_buffer =
@@ -138,18 +139,21 @@ impl LRUCache {
     }
 
     pub fn encode_lru_update(&self, encoder: &mut CommandEncoder, timestamp: u32) {
-        // todo: this is way too slow :/
-        /*
+        let num_used_entries = NumUsedEntries {
+            num: 0
+        };
+        self.ctx.queue.write_buffer(
+            &self.num_used_entries_buffer,
+            0 as BufferAddress,
+            bytemuck::bytes_of(&num_used_entries),
+        );
+
         self.lru_update_pass.encode(
             encoder,
             &self.lru_update_bind_group,
             &self.usage_buffer.extent,
         );
-         */
-        // we can't copy to and read from the same buffer in one frame
-        // so we'll copy to the current frame's buffer
-        // and read from the last frame's buffer (if it is mapped, i.e. maybe_read_all)
-        self.copy_to_readable(encoder, timestamp);
+        self.copy_to_readable(encoder, timestamp + 1);
     }
 
     fn copy_to_readable(&self, encoder: &mut CommandEncoder, buffer_index: u32) {
@@ -176,29 +180,27 @@ impl LRUCache {
 
     /// tries to read the last frame's to
     /// to update its CPU local list of free cache entries.
-    pub fn update_local_lru(&mut self, input: &Input) {
-        /*
-        //  Maps the current frame's LRU read buffer for reading
-        self.lru_read_buffer.map_async(input.frame.number, wgpu::MapMode::Read, ..);
-        self.num_used_entries_read_buffer.map_async(input.frame.number, wgpu::MapMode::Read, ..);
+    pub fn update_local_lru(&mut self, timestamp: u32) {
+        let next_frame = timestamp + 1;
 
-        let last_lru_index = self.lru_read_buffer.to_previous_index(input.frame.number);
-        let last_num_entries_index = self.num_used_entries_read_buffer.to_previous_index(input.frame.number);
-        if self.lru_read_buffer.is_mapped(last_lru_index) && self.num_used_entries_read_buffer.is_mapped(last_num_entries_index) {
-            let lru = self.lru_read_buffer.maybe_read_all(last_lru_index);
-            let num_used_entries = self.num_used_entries_read_buffer.maybe_read_all(last_num_entries_index);
+        //  Maps the current frame's LRU read buffer for reading
+        self.lru_read_buffer.map_async(next_frame, wgpu::MapMode::Read, ..);
+        self.num_used_entries_read_buffer.map_async(next_frame, wgpu::MapMode::Read, ..);
+
+        if self.lru_read_buffer.is_mapped(timestamp) && self.num_used_entries_read_buffer.is_mapped(timestamp) {
+            let lru = self.lru_read_buffer.maybe_read_all(timestamp);
+            let num_used_entries = self.num_used_entries_read_buffer.maybe_read_all(timestamp);
 
             if lru.is_empty() || num_used_entries.is_empty() {
-                log::error!("Could not read LRU at frame {}", input.frame.number);
+                log::error!("Could not read LRU at frame {}", timestamp);
             } else {
                 self.lru_local = lru;
                 self.num_used_entries_local = num_used_entries[0].num;
                 self.next_empty_index = self.lru_local.len() as u32 - 1;
             }
         } else {
-            //log::warn!("Could not update LRU at frame {}", input.frame.number);
+            log::warn!("Could not update LRU at frame {}", timestamp);
         }
-         */
     }
 
     pub(crate) fn get_cache_as_binding_resource(&self) -> BindingResource {
@@ -222,7 +224,6 @@ impl LRUCache {
     pub fn add_cache_entry(
         &mut self,
         data: &Vec<u8>,
-        extent: Extent3d,
         input: &Input,
     ) -> Result<UVec3, CacheFullError> {
         for i in ((self.num_used_entries_local as usize)..(self.next_empty_index as usize)).rev() {
@@ -231,6 +232,13 @@ impl LRUCache {
             if last_written > input.frame.number
                 || (input.frame.number - last_written) > self.time_to_live
             {
+                let extent = uvec_to_extent(
+                    &(index_to_subscript(
+                        (data.len() as u32) - 1,
+                        &uvec_to_extent(&self.cache_entry_size),
+                    ) + UVec3::ONE)
+                );
+
                 let cache_entry_location = self.cache_entry_index_to_location(cache_entry_index);
                 self.cache.write_subregion(
                     data.as_slice(),
@@ -244,5 +252,9 @@ impl LRUCache {
             }
         }
         Err(CacheFullError {})
+    }
+
+    pub fn cache_entry_size(&self) -> UVec3 {
+        self.cache_entry_size
     }
 }

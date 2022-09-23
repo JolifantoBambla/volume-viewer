@@ -1,10 +1,15 @@
 pub mod meta;
 
 use glam::{UVec3, UVec4, Vec3};
-use wgpu::Buffer;
+use std::sync::Arc;
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu::{BindingResource, Buffer, BufferUsages, Extent3d};
 
 use crate::resource::Texture;
-use crate::volume::{BrickedMultiResolutionMultiVolumeMeta, ResolutionMeta};
+use crate::util::extent::{subscript_to_index, uvec_to_extent};
+use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta, ResolutionMeta};
+use crate::GPUContext;
+
 pub use meta::{PageDirectoryMeta, PageTableMeta};
 
 #[repr(u32)]
@@ -93,15 +98,135 @@ impl From<[u32; 4]> for PageTableAddress {
     }
 }
 
+// okay, so this is how this should look like:
+//   a page directory holds n page tables
+//   each page table belongs to a resolution and a channel
+//   a page directory can hold at most m channels
+
+// todo: rename to pagetablemeta
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ResMeta {
+    // note: brick size is just copied
+    brick_size: UVec4,
+    page_table_offset: UVec4,
+    page_table_extent: UVec4,
+    volume_size: UVec4,
+    // todo: I also need:
+    //   - volume to padded ratio
+    //   - linear offset in bricks
+    //   - a variable saying which channel this page table holds
+}
+
 pub struct PageTableDirectory {
+    ctx: Arc<GPUContext>,
     local_page_directory: Vec<UVec4>,
     page_table_meta_buffer: Buffer,
     page_directory: Texture,
     meta: PageDirectoryMeta,
+    max_visible_channels: u32,
+    volume_meta: BrickedMultiResolutionMultiVolumeMeta,
 }
 
 impl PageTableDirectory {
-    //pub fn new(volume_meta: &MultiResolutionMultiVolumeMeta) -> Self {
-    // Self {}
-    //}
+    pub fn new(
+        volume_meta: &BrickedMultiResolutionMultiVolumeMeta,
+        max_visible_channels: u32,
+        ctx: &Arc<GPUContext>,
+    ) -> Self {
+        let meta = PageDirectoryMeta::new(volume_meta);
+
+        let res_meta_data: Vec<ResMeta> = meta
+            .resolutions
+            .iter()
+            .map(|r| ResMeta {
+                brick_size: meta.brick_size.extend(0),
+                // todo: one page table per res and channel
+                page_table_offset: r.get_channel_offset(0).extend(0),
+                page_table_extent: r.extent.extend(0),
+                volume_size: UVec3::from_slice(r.volume_meta.volume_size.as_slice()).extend(0),
+            })
+            .collect();
+
+        for r in &res_meta_data {
+            log::info!("resolution meta data: {:?}", r);
+        }
+
+        let page_table_meta_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Page Table Meta"),
+            contents: bytemuck::cast_slice(res_meta_data.as_slice()),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        // 1 page table entry per brick
+        let (page_directory, local_page_directory) =
+            Texture::create_page_directory(&ctx.device, &ctx.queue, uvec_to_extent(&meta.extent));
+
+        Self {
+            ctx: ctx.clone(),
+            max_visible_channels,
+            volume_meta: volume_meta.clone(),
+            page_table_meta_buffer,
+            page_directory,
+            local_page_directory,
+            meta,
+        }
+    }
+
+    fn brick_address_to_page_index(&self, brick_address: &BrickAddress) -> usize {
+        // todo: compute page location
+        let level = brick_address.level as usize;
+        // todo: channel_offset!
+        let offset = self.meta.resolutions[level].get_channel_offset(0);
+        let location = UVec3::from_slice(brick_address.index.as_slice());
+        let page_index =
+            subscript_to_index(&(offset + location), &self.page_directory.extent) as usize;
+        page_index
+    }
+
+    pub fn mark_as_empty(&mut self, brick_address: &BrickAddress) {
+        let index = self.brick_address_to_page_index(brick_address);
+        self.local_page_directory[index] =
+            UVec3::ZERO.extend(PageTableEntryFlag::Empty as u32);
+    }
+
+    pub fn mark_as_mapped(&mut self, brick_address: &BrickAddress, brick_location: &UVec3) {
+        let index = self.brick_address_to_page_index(brick_address);
+        self.local_page_directory[index] =
+            brick_location.extend(PageTableEntryFlag::Mapped as u32);
+    }
+
+    pub fn invalidate_page_table(&mut self, resolution: u32, channel: u32) {
+        // todo:
+    }
+
+    pub fn commit_changes(&self) {
+        self.page_directory
+            .write(self.local_page_directory.as_slice(), &self.ctx);
+    }
+
+    pub fn volume_scale(&self) -> Vec3 {
+        let size = Vec3::new(
+            self.meta.resolutions[0].volume_meta.volume_size[0] as f32,
+            self.meta.resolutions[0].volume_meta.volume_size[1] as f32,
+            self.meta.resolutions[0].volume_meta.volume_size[2] as f32,
+        );
+        size * (self.meta.scale / self.meta.scale.max_element())
+    }
+
+    pub fn get_page_table_meta_as_binding_resource(&self) -> BindingResource {
+        self.page_table_meta_buffer.as_entire_binding()
+    }
+
+    pub fn get_page_directory_as_binding_resource(&self) -> BindingResource {
+        BindingResource::TextureView(&self.page_directory.view)
+    }
+
+    pub fn page_table_meta_buffer(&self) -> &Buffer {
+        &self.page_table_meta_buffer
+    }
+
+    pub fn extent(&self) -> Extent3d {
+        self.page_directory.extent
+    }
 }

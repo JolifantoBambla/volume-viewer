@@ -46,9 +46,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     // determine number of used entries to the left of the current entry including the current entry itself
     var even_pass = true;
-    for (var lookup_power_of_2 = 0u; lookup_power_of_2 <= num_entries; lookup_power_of_2 += 1u) {
+    for (var lookup = 1u; lookup <= num_entries; lookup *= 2u) {
+    //for (var lookup_power_of_2 = 0u; lookup_power_of_2 <= log2(num_entries); lookup_power_of_2 += 1u) {
         if (!OUT_OF_BOUNDS) {
-            let lookup = 1u << lookup_power_of_2;
+            //let lookup = 1u << lookup_power_of_2;
             if (even_pass) {
                 if (cache_entry_index <= lookup) {
                     scan_even.list[cache_entry_index] = scan_odd.list[cache_entry_index] + scan_odd.list[cache_entry_index - lookup];
