@@ -3,6 +3,7 @@
 
 mod lru_update;
 
+use std::collections::HashSet;
 use glam::UVec3;
 use std::mem::size_of;
 use std::sync::Arc;
@@ -194,6 +195,8 @@ impl LRUCache {
             if lru.is_empty() || num_used_entries.is_empty() {
                 log::error!("Could not read LRU at frame {}", timestamp);
             } else {
+                let h: HashSet<u32> = HashSet::from_iter(lru.iter().cloned());
+                assert_eq!(h.len(), lru.len(), "lru {:?}", lru);
                 self.lru_local = lru;
                 self.num_used_entries_local = num_used_entries[0].num;
                 self.next_empty_index = self.lru_local.len() as u32 - 1;
@@ -226,6 +229,7 @@ impl LRUCache {
         data: &Vec<u8>,
         input: &Input,
     ) -> Result<UVec3, CacheFullError> {
+        let mut last_i = (self.next_empty_index + 1) as usize;
         for i in ((self.num_used_entries_local as usize)..(self.next_empty_index as usize)).rev() {
             let cache_entry_index = self.lru_local[i];
             let last_written = self.lru_last_writes[cache_entry_index as usize];

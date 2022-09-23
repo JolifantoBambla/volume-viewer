@@ -21,15 +21,16 @@ struct NumUsedEntries {
 @workgroup_size(4, 4, 4)
 fn main(@builtin(global_invocation_id) global_id: uint3) {
     let buffer_size = uint3(textureDimensions(usage_buffer));
-    
+
     // note: we can't return here because then storageBarrier calls would be outside of uniform control flow, so what we
     // do instead is that we wrap all operations in if-else blocks checking for `OUT_OF_BOUNDS`
     let OUT_OF_BOUNDS = any(buffer_size < global_id);
-    
+
     let num_entries = buffer_size.x * buffer_size.y * buffer_size.z;
     let cache_entry_index = subscript_to_index(global_id, buffer_size);
+    var lru_entry = 0u;
 
-    // initialize mask and number of used entries
+    // initialize mask & number of used entries
     let used = !OUT_OF_BOUNDS && timestamp.now == u32(textureLoad(usage_buffer, int3(global_id), 0).r);
     let used_storable = u32(used);
     if (used) {
@@ -38,6 +39,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     if (!OUT_OF_BOUNDS) {
         mask.list[cache_entry_index] = used_storable;
         scan_odd.list[cache_entry_index] = used_storable;
+        lru_entry = lru_cache.list[cache_entry_index];
     }
     
     storageBarrier();
@@ -47,9 +49,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     // determine number of used entries to the left of the current entry including the current entry itself
     var even_pass = true;
     for (var lookup = 1u; lookup <= num_entries; lookup *= 2u) {
-    //for (var lookup_power_of_2 = 0u; lookup_power_of_2 <= log2(num_entries); lookup_power_of_2 += 1u) {
         if (!OUT_OF_BOUNDS) {
-            //let lookup = 1u << lookup_power_of_2;
             if (even_pass) {
                 if (cache_entry_index <= lookup) {
                     scan_even.list[cache_entry_index] = scan_odd.list[cache_entry_index] + scan_odd.list[cache_entry_index - lookup];
@@ -69,7 +69,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     }
 
     if (!OUT_OF_BOUNDS) {
-        // rearrange lru entries into temporary storage based on usage
+        // rearrange lru entries
         var index = 0u;
         if (even_pass) {
             if (used) {
@@ -77,27 +77,13 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             } else {
                 index = cache_entry_index + (num_used_total - scan_odd.list[cache_entry_index]);
             }
-            scan_even.list[cache_entry_index] = lru_cache.list[index];
         } else {
             if (used) {
                 index = scan_even.list[cache_entry_index] - 1u;
             } else {
                 index = cache_entry_index + (num_used_total - scan_even.list[cache_entry_index]);
             }
-            scan_odd.list[cache_entry_index] = lru_cache.list[index];
         }
-    }
-
-    storageBarrier();
-
-    if (OUT_OF_BOUNDS) {
-        return;
-    }
-
-    // copy result back to lru_cache
-    if (even_pass) {
-        lru_cache.list[cache_entry_index] = scan_even.list[cache_entry_index];
-    } else {
-        lru_cache.list[cache_entry_index] = scan_odd.list[cache_entry_index];
+        lru_cache.list[index] = lru_entry;
     }
 }
