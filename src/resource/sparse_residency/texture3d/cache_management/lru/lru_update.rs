@@ -56,18 +56,14 @@ impl LRUUpdate {
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
-        let scan_even = ctx.device.create_buffer(&BufferDescriptor {
+        let scan_buffer_descriptor = BufferDescriptor {
             label: None,
             size: (size_of::<u32>() * num_entries as usize) as BufferAddress,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            usage: BufferUsages::STORAGE,
             mapped_at_creation: false,
-        });
-        let scan_odd = ctx.device.create_buffer(&BufferDescriptor {
-            label: None,
-            size: (size_of::<u32>() * num_entries as usize) as BufferAddress,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
+        };
+        let scan_even = ctx.device.create_buffer(&scan_buffer_descriptor);
+        let scan_odd = ctx.device.create_buffer(&scan_buffer_descriptor);
 
         let shader_module = ctx
             .device
