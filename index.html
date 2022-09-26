@@ -14,10 +14,19 @@
 <script src="https://cdn.jsdelivr.net/npm/tweakpane@3.1.0/dist/tweakpane.min.js"></script>
 <script src="js/external/tweakpane-plugin-essentials-0.1.5.min.js"></script>
 <script type="module">
-    import { createOffscreenRenderer, Config } from './js/src/offscreen_renderer.js';
-    import { VolumeDataSourceConfig, DataStoreConfig, BrickConfig, PreprocessConfig, PREPROCESS_METHOD_CAST } from "./js/src/volume-data-source.js";
+    import { createOffscreenRenderer, Config, } from './js/src/offscreen_renderer.js';
+    import {
+        VolumeDataSourceConfig,
+        DataStoreConfig,
+        BrickConfig,
+        PreprocessConfig,
+        PREPROCESS_METHOD_CAST,
+        PREPROCESS_METHOD_SCALE_TO_MAX,
+        PREPROCESS_METHOD_LOG,
+        PREPROCESS_METHOD_LOG_SCALE,
+    } from "./js/src/volume-data-source.js";
+    import { VolumeRendererCreateOptions, } from './js/src/volume-renderer.js';
 
-    // todo: this should come from the user
     const dataSourceConfig = new VolumeDataSourceConfig(
         new DataStoreConfig({
             store: 'http://localhost:8005/',
@@ -32,6 +41,10 @@
             maxSize: [256, 256, 256],
         }),
     );
+    const rendererCreateOptions = new VolumeRendererCreateOptions({
+        maxVisibleChannels: 17,
+        maxResolutions: 15
+    });
 
     async function start() {
         try {
@@ -41,13 +54,73 @@
                 },
                 logging: 'debug',
                 dataSource: dataSourceConfig,
+                rendererCreateOptions,
             }));
             offscreenRenderer.run(volumeRendererSettings);
         } catch (e) {
             console.error(e);
         }
     }
-    start();
+
+    const pane = new Tweakpane.Pane({
+        title: 'Dataset',
+        expanded: true,
+    });
+    pane.registerPlugin(TweakpaneEssentialsPlugin);
+
+    const dataSetUI = pane.addFolder({
+        title: 'Data source',
+        expanded: true,
+    });
+    dataSetUI.addInput(dataSourceConfig.dataStore, 'store', {title: 'Store'});
+    dataSetUI.addInput(dataSourceConfig.dataStore, 'path', {title: 'Path'});
+
+    const preprocessingUI = pane.addFolder({
+        title: 'Preprocessing',
+        expanded: true,
+    });
+    preprocessingUI.addInput(dataSourceConfig.preprocessing, 'preprocessingMethod', {
+        title: 'Method',
+        options: {
+            'Cast to uint8': PREPROCESS_METHOD_CAST,
+            'Scale to maximum': PREPROCESS_METHOD_SCALE_TO_MAX,
+            'Log': PREPROCESS_METHOD_LOG,
+            'Scale to max. log.': PREPROCESS_METHOD_LOG_SCALE,
+        }
+    });
+    preprocessingUI.addInput(dataSourceConfig.preprocessing, 'isZeroThreshold', {
+        title: 'Zero threshold',
+        min: 0.0, max: 1.0, step: 0.0001,
+    });
+
+    const rendererUI = pane.addFolder({
+        title: 'Renderer',
+        expanded: true,
+    });
+    const maxChannelsInput = rendererUI.addInput(rendererCreateOptions, 'maxVisibleChannels', {
+        title: 'Max. no. visible channels',
+        min: 1, max: 255, step: 1,
+    });
+    const maxResolutionsInput = rendererUI.addInput(rendererCreateOptions, 'maxResolutions', {
+        title: 'Max no. resolutions',
+        min: 1, max: 255, step: 1,
+    });
+    maxChannelsInput.on('change', (e) => {
+        rendererCreateOptions.maxResolutions = Math.floor(255 / e.value);
+        maxResolutionsInput.refresh();
+    });
+    maxResolutionsInput.on('change', (e) => {
+        rendererCreateOptions.maxVisibleChannels = Math.floor(255 / e.value);
+        maxChannelsInput.refresh();
+    });
+
+    const createRendererButton = pane.addButton({
+        title: 'Create Renderer',
+    });
+    createRendererButton.on('click', () => {
+        pane.hidden = true;
+        start();
+    });
 </script>
 
 <div>

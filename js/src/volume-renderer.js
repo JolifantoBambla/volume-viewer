@@ -54,15 +54,27 @@ export class ChannelSettings {
     }
 }
 
+export class VolumeRendererCreateOptions {
+    maxVisibleChannels;
+    maxResolutions;
+
+    constructor({maxVisibleChannels = 17, maxResolutions = 15}) {
+        this.maxVisibleChannels = maxVisibleChannels;
+        this.maxResolutions = maxResolutions;
+    }
+}
+
 export class VolumeRendererSettings {
+    createOptions;
     renderMode;
     stepScale;
     maxSteps;
     backgroundColor;
     channelSettings;
 
-    constructor({renderMode = RENDER_MODE_DIRECT, stepScale = 1.0, maxSteps = 300, backgroundColor = new Color({}),channelSettings = [new ChannelSettings({})]}) {
+    constructor({createOptions = new VolumeRendererCreateOptions({}), renderMode = RENDER_MODE_DIRECT, stepScale = 1.0, maxSteps = 300, backgroundColor = new Color({}),channelSettings = [new ChannelSettings({})]}) {
         // todo: validation
+        this.createOptions = createOptions;
         this.renderMode = renderMode;
         this.stepScale = stepScale;
         this.maxSteps = maxSteps;

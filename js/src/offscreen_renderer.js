@@ -9,7 +9,7 @@ import {
 } from './volume-renderer.js';
 
 export class Config {
-    constructor({canvas, numThreads, logging, dataSource,}) {
+    constructor({canvas, numThreads, logging, dataSource, rendererCreateOptions}) {
         this.canvas = canvas || {
             width: 800,
             height: 600,
@@ -20,6 +20,7 @@ export class Config {
         if (!this.dataSource) {
             throw new Error("No datasource given!");
         }
+        this.rendererCreateOptions = rendererCreateOptions;
     }
 }
 
@@ -36,7 +37,7 @@ function getOrCreateCanvas(canvasConfig) {
     }
 }
 
-async function createUI(offscreenRenderer) {
+async function createUI(offscreenRenderer, config) {
     const volumeMetaData = await offscreenRenderer.volumeMeta;
     const dispatchGlobalSettingsChange = e => {
         offscreenRenderer.dispatchUIEvent(JSON.stringify({
@@ -59,13 +60,14 @@ async function createUI(offscreenRenderer) {
     }
 
     const volumeRendererSettings = new VolumeRendererSettings({
+        createOptions: config.rendererCreateOptions,
         channelSettings: volumeMetaData.channels.map((_, channelIndex) => {
             return new ChannelSettings({
                 channelIndex,
                 visible: channelIndex === 0,
                 minLoD: volumeMetaData.resolutions.length,
             });
-        })
+        }),
     });
 
     // TODO: clean this up
@@ -185,7 +187,7 @@ export async function createOffscreenRenderer(config) {
         window.onkeyup = dispatchToWorker;
         window.onkeypress = dispatchToWorker;
 
-        const volumeRendererSettings = await createUI(offscreenRenderer);
+        const volumeRendererSettings = await createUI(offscreenRenderer, config);
 
         return {
             offscreenRenderer,

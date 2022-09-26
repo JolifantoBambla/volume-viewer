@@ -1,6 +1,15 @@
 use glam::Vec4;
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CreateOptions {
+    #[serde(rename = "maxVisibleChannels")]
+    pub max_visible_channels: u32,
+
+    #[serde(rename = "maxResolutions")]
+    pub max_resolutions: u32,
+}
+
 #[repr(u32)]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum RenderMode {
@@ -72,6 +81,9 @@ pub struct ChannelSettings {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MultiChannelVolumeRendererSettings {
+    #[serde(rename = "createOptions")]
+    pub create_options: CreateOptions,
+
     #[serde(rename = "renderMode")]
     pub render_mode: RenderMode,
 

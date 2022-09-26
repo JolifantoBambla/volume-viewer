@@ -30,6 +30,7 @@ use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::ray_guided_dvr::{ChannelSettings, RayGuidedDVR, Resources};
 use crate::{MultiChannelVolumeRendererSettings, SparseResidencyTexture3D, VolumeDataSource};
 pub use trivial_volume_renderer::TrivialVolumeRenderer;
+use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
 
 pub struct MultiChannelVolumeRenderer {
     pub(crate) ctx: Arc<GPUContext>,
@@ -66,7 +67,16 @@ impl MultiChannelVolumeRenderer {
         };
 
         let wgsl_preprocessor = create_wgsl_preprocessor();
-        let volume_texture = SparseResidencyTexture3D::new(volume_source, &wgsl_preprocessor, &ctx);
+        let volume_texture = SparseResidencyTexture3D::new(
+            volume_source,
+            SparseResidencyTexture3DOptions {
+                max_visible_channels: render_settings.create_options.max_visible_channels,
+                max_resolutions: render_settings.create_options.max_resolutions,
+                ..Default::default()
+            },
+            &wgsl_preprocessor,
+            &ctx
+        );
 
         let volume_render_result_extent = Extent3d {
             width: window_size.width,

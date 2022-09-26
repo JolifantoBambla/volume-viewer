@@ -16,7 +16,7 @@ use wgsl_preprocessor::WGSLPreprocessor;
 
 use crate::renderer::pass::GPUPass;
 use crate::resource::Texture;
-use crate::util::extent::{box_volume, index_to_subscript, uvec_to_extent, uvec_to_origin};
+use crate::util::extent::{box_volume, extent_to_uvec, index_to_subscript, uvec_to_extent, uvec_to_origin};
 use crate::{GPUContext, Input};
 
 use crate::resource::buffer::MultiBufferedMappableBuffer;
@@ -30,6 +30,13 @@ pub struct NumUsedEntries {
 }
 
 pub struct CacheFullError {}
+
+pub struct LRUCacheSettings {
+    pub cache_size: Extent3d,
+    pub cache_entry_size: UVec3,
+    pub num_multi_buffering: u32,
+    pub time_to_live: u32,
+}
 
 pub struct LRUCache {
     ctx: Arc<GPUContext>,
@@ -64,18 +71,15 @@ pub struct LRUCache {
 
 impl LRUCache {
     pub fn new(
-        cache_size: UVec3,
-        cache_entry_size: UVec3,
+        settings: LRUCacheSettings,
         timestamp_uniform_buffer: &Buffer,
-        num_multi_buffering: u32,
-        time_to_live: u32,
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
         // todo: make configurable
-        let cache = Texture::create_brick_cache(&ctx.device, uvec_to_extent(&cache_size));
+        let cache = Texture::create_brick_cache(&ctx.device, settings.cache_size);
 
-        let usage_buffer_size = cache_size / cache_entry_size;
+        let usage_buffer_size = extent_to_uvec(&settings.cache_size) / settings.cache_entry_size;
         let num_entries = box_volume(&usage_buffer_size);
         let num_unused_entries = NumUsedEntries { num: num_entries };
 
@@ -104,9 +108,9 @@ impl LRUCache {
         });
 
         let lru_read_buffer =
-            MultiBufferedMappableBuffer::new(num_multi_buffering, &lru_local, &ctx.device);
+            MultiBufferedMappableBuffer::new(settings.num_multi_buffering, &lru_local, &ctx.device);
         let num_used_entries_read_buffer = MultiBufferedMappableBuffer::new(
-            num_multi_buffering,
+            settings.num_multi_buffering,
             &vec![num_unused_entries],
             &ctx.device,
         );
@@ -122,10 +126,10 @@ impl LRUCache {
         Self {
             ctx: ctx.clone(),
             cache,
-            cache_entry_size,
+            cache_entry_size: settings.cache_entry_size,
             usage_buffer,
             lru_last_writes: lru_last_update,
-            time_to_live,
+            time_to_live: settings.time_to_live,
             next_empty_index,
             lru_local,
             lru_buffer,

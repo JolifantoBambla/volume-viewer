@@ -28,6 +28,33 @@ use cache_management::{
     Timestamp,
 };
 use page_table::{PageDirectoryMeta, PageTableEntryFlag};
+use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
+
+pub struct SparseResidencyTexture3DOptions {
+    pub max_visible_channels: u32,
+    pub max_resolutions: u32,
+    pub brick_request_limit: u32,
+    pub cache_size: Extent3d,
+    pub num_multi_buffering: u32,
+    pub cache_time_to_live: u32,
+}
+
+impl Default for SparseResidencyTexture3DOptions {
+    fn default() -> Self {
+        Self {
+            max_visible_channels: 17,
+            max_resolutions: 15,
+            brick_request_limit: 32,
+            cache_size: Extent3d {
+                width: 1024,
+                height: 1024,
+                depth_or_array_layers: 1024,
+            },
+            num_multi_buffering: 3,
+            cache_time_to_live: u32::MAX,
+        }
+    }
+}
 
 /// Manages a 3D sparse residency texture.
 /// A sparse residency texture is not necessarily present in GPU memory as a whole.
@@ -56,6 +83,7 @@ pub struct SparseResidencyTexture3D {
 impl SparseResidencyTexture3D {
     pub fn new(
         source: Box<dyn VolumeDataSource>,
+        settings: SparseResidencyTexture3DOptions,
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
@@ -74,21 +102,13 @@ impl SparseResidencyTexture3D {
 
         let page_table_directory = PageTableDirectory::new(volume_meta, max_visible_channels, ctx);
 
-        // todo: make configurable
-        let cache_size = Extent3d {
-            width: 1024,
-            height: 1024,
-            depth_or_array_layers: 1024,
-        };
-        let num_multi_buffering = 3;
-        let time_to_live = u32::MAX;
-
         let lru_cache = LRUCache::new(
-            extent_to_uvec(&cache_size),
-            brick_size,
-            &timestamp_uniform_buffer,
-            num_multi_buffering,
-            time_to_live,
+            LRUCacheSettings {
+                cache_size: settings.cache_size,
+                cache_entry_size: brick_size,
+                num_multi_buffering: settings.num_multi_buffering,
+                time_to_live: settings.cache_time_to_live,
+            },&timestamp_uniform_buffer,
             wgsl_preprocessor,
             ctx,
         );
