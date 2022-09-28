@@ -72,24 +72,24 @@
         title: 'Data source',
         expanded: true,
     });
-    dataSetUI.addInput(dataSourceConfig.dataStore, 'store', {title: 'Store'});
-    dataSetUI.addInput(dataSourceConfig.dataStore, 'path', {title: 'Path'});
+    dataSetUI.addInput(dataSourceConfig.dataStore, 'store', {label: 'Store'});
+    dataSetUI.addInput(dataSourceConfig.dataStore, 'path', {label: 'Path'});
 
     const preprocessingUI = pane.addFolder({
         title: 'Preprocessing',
         expanded: true,
     });
     preprocessingUI.addInput(dataSourceConfig.preprocessing, 'preprocessingMethod', {
-        title: 'Method',
+        label: 'Method',
         options: {
-            'Cast to uint8': PREPROCESS_METHOD_CAST,
+            'Scale to uint8': PREPROCESS_METHOD_CAST,
             'Scale to maximum': PREPROCESS_METHOD_SCALE_TO_MAX,
             'Log': PREPROCESS_METHOD_LOG,
             'Scale to max. log.': PREPROCESS_METHOD_LOG_SCALE,
         }
     });
     preprocessingUI.addInput(dataSourceConfig.preprocessing, 'isZeroThreshold', {
-        title: 'Zero threshold',
+        label: 'Zero threshold',
         min: 0.0, max: 1.0, step: 0.0001,
     });
 
@@ -98,11 +98,11 @@
         expanded: true,
     });
     const maxChannelsInput = rendererUI.addInput(rendererCreateOptions, 'maxVisibleChannels', {
-        title: 'Max. no. visible channels',
+        label: 'Max. no. visible channels',
         min: 1, max: 255, step: 1,
     });
     const maxResolutionsInput = rendererUI.addInput(rendererCreateOptions, 'maxResolutions', {
-        title: 'Max no. resolutions',
+        label: 'Max no. resolutions',
         min: 1, max: 255, step: 1,
     });
     maxChannelsInput.on('change', (e) => {

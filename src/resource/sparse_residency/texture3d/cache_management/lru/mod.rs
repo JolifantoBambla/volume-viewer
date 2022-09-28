@@ -202,13 +202,9 @@ impl LRUCache {
                 log::error!("Could not read LRU at frame {}", timestamp);
             } else {
                 let h: HashSet<u32> = HashSet::from_iter(lru.iter().cloned());
-                assert_eq!(
-                    h.len(),
-                    lru.len(),
-                    "lru {:?}, num_used: {}",
-                    lru,
-                    num_used_entries[0].num
-                );
+
+                //assert_eq!(h.len(), lru.len(), "lru {:?}, num_used: {}", lru, num_used_entries[0].num);
+
                 //log::info!("updated lru {:?}", lru);
                 self.lru_local = lru;
                 self.num_used_entries_local = num_used_entries[0].num;
@@ -269,6 +265,7 @@ impl LRUCache {
                 return Ok(cache_entry_location);
             }
         }
+        log::info!("next empty index {}, num used {}", self.next_empty_index, self.num_used_entries_local);
         Err(CacheFullError {})
     }
 

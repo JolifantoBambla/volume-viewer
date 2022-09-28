@@ -50,6 +50,7 @@ const isZero = (data, dtypeDescriptor, threshold) => {
     }
 };
 
+// todo: this actually scales - should add a simple cast as well
 const castToU8 = (data, dtypeDescriptor) => {
     switch (dtypeDescriptor.type) {
         case 'u1':
@@ -379,6 +380,8 @@ export class OmeZarrDataSource extends VolumeDataSource {
                 raw.data,
                 dtypeDescriptor);
 
+            // todo: data is already uint8 here - don't pass dtypeDescriptor!
+            // todo: all values below isZeroThreshold should be set 0 - right now, only blocks containing only such data are set 0!
             if (isZero(data, dtypeDescriptor, this.isZeroThreshold)) {
                 this.#setBrickEmpty(brickAddress);
             } else {

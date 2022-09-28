@@ -91,8 +91,8 @@ impl MultiChannelVolumeRenderer {
             volume_render_result_extent.height,
         );
         let volume_sampler = ctx.device.create_sampler(&SamplerDescriptor {
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
 

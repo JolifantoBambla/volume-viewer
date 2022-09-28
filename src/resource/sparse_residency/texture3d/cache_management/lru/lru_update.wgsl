@@ -4,7 +4,7 @@
 @include(util)
 
 struct NumUsedEntries {
-    num: u32,
+    num: atomic<u32>,
 }
 
 @group(0) @binding(0) var usage_buffer: texture_3d<u32>;
@@ -27,6 +27,11 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     // do instead is that we wrap all operations in if-else blocks checking for `OUT_OF_BOUNDS`
     let OUT_OF_BOUNDS = cache_entry_index >= num_entries;
 
+    if (cache_entry_index == 0) {
+        atomicStore(&num_used_entries.num, 0u);
+    }
+    storageBarrier();
+
     // initialize number of used entries
     var lru_entry = 0u;
     var used = false;
@@ -34,6 +39,9 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         lru_entry = lru_cache.list[cache_entry_index];
         used = timestamp.now == u32(textureLoad(usage_buffer, int3(index_to_subscript(lru_entry, buffer_size)), 0).r);
         scan_odd.list[cache_entry_index] = u32(used);
+        if (used) {
+            atomicAdd(&num_used_entries.num, 1u);
+        }
     }
     
     storageBarrier();
@@ -60,14 +68,16 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         storageBarrier();
     }
 
+    let num_used_total = u32(atomicLoad(&num_used_entries.num));
+
     // rearrange lru entries
     if (!OUT_OF_BOUNDS) {
         // determine number of used entries
-        let last_entry_index = num_entries - 1u;
-        let num_used_total = get_max_count(last_entry_index);
-        if (cache_entry_index == last_entry_index) {
-            num_used_entries.num = num_used_total;
-        }
+        //let last_entry_index = num_entries - 1u;
+        //let num_used_total = get_max_count(last_entry_index);
+        //if (cache_entry_index == last_entry_index) {
+        //    num_used_entries.num = num_used_total;
+        //}
 
         // write LRU index to new location
         let count = get_max_count(cache_entry_index);
@@ -77,6 +87,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
         lru_cache.list[index] = lru_entry;
     }
+
+    storageBarrier();
 }
 
 fn get_max_count(index: u32) -> u32 {
