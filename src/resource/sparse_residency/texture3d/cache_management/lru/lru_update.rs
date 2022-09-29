@@ -82,9 +82,6 @@ impl LRUUpdate {
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         });
 
-
-
-
         let scan_buffer_descriptor = BufferDescriptor {
             label: None,
             size: (size_of::<u32>() * num_entries as usize) as BufferAddress,
@@ -107,7 +104,7 @@ impl LRUUpdate {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
                     &*wgsl_preprocessor
-                        .preprocess(include_str!("group_wise_scan.wgsl"))
+                        .preprocess(include_str!("lru_update.wgsl"))
                         .ok()
                         .unwrap(),
                 )),
