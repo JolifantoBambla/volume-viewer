@@ -1,0 +1,11 @@
+[build]
+target = "wasm32-unknown-unknown"
+
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg=web_sys_unstable_apis", "-C", "target-feature=+atomics,+bulk-memory,+mutable-globals"]
+
+[unstable]
+build-std = ["panic_abort", "std"]
+
+[env]
+WGSL_RELATIVE_INCLUDE_DIRS = { value = "renderer/wgsl;renderer/wgsl", relative = true }

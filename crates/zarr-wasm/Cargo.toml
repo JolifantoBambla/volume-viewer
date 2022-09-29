@@ -6,8 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+js-sys = "0.3.57"
+log = "0.4.17"
+serde = "1.0.137"
+serde_json = "1.0.81"
 wasm-bindgen = { version = "0.2.63" }
 wasm-bindgen-futures = "0.4.30"
+
+# todo: get from cargo.io as soon as it's there
+ome-ngff = { git = "https://github.com/JolifantoBambla/ome-ngff-metadata.git", features = ["log"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.13"

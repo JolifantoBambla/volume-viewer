@@ -15,7 +15,7 @@ pub async fn load_files_as_strings(
             handles.push((path, client.get(url).send().await));
         }
         for (path, handle) in handles.drain(..) {
-            let string = handle.map_err(|e| e)?.text().await.map_err(|e| e)?;
+            let string = handle?.text().await?;
             result.insert(path, string);
         }
     }
@@ -34,12 +34,7 @@ pub async fn load_files_as_bytes(
             handles.push((path, client.get(url).send().await));
         }
         for (path, handle) in handles.drain(..) {
-            let bytes = handle
-                .map_err(|e| e)?
-                .bytes()
-                .await
-                .map_err(|e| e)?
-                .to_vec();
+            let bytes = handle?.bytes().await?.to_vec();
             result.insert(path, bytes);
         }
     }
