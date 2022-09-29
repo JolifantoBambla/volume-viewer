@@ -64,7 +64,7 @@ pub struct LRUCache {
     num_used_entries_read_buffer: MultiBufferedMappableBuffer<NumUsedEntries>,
 
     lru_update_pass: LRUUpdate,
-    lru_update_bind_group: BindGroup,
+    lru_update_bind_group: Vec<BindGroup>,
 }
 
 impl LRUCache {
@@ -97,7 +97,7 @@ impl LRUCache {
         let lru_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(lru_local.as_slice()),
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
         });
         let num_used_entries_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
             label: None,
@@ -114,7 +114,7 @@ impl LRUCache {
         );
 
         let lru_update_pass = LRUUpdate::new(num_entries, wgsl_preprocessor, ctx);
-        let lru_update_bind_group = lru_update_pass.create_bind_group(Resources {
+        let lru_update_bind_group = lru_update_pass.create_bind_groups(&Resources {
             usage_buffer: &usage_buffer,
             timestamp: timestamp_uniform_buffer,
             lru_cache: &lru_buffer,
@@ -152,6 +152,7 @@ impl LRUCache {
         self.lru_update_pass.encode(
             encoder,
             &self.lru_update_bind_group,
+            &self.lru_buffer,
             &self.usage_buffer.extent,
         );
         self.copy_to_readable(encoder, timestamp + 1);

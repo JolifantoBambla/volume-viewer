@@ -88,9 +88,10 @@ fn accumulate_and_update_lru(@builtin(local_invocation_index) local_id: u32,
 
     // one workgroup only!
     let num_entries = arrayLength(&lru_cache.list);
-    let num_used_total = num_used_entries.num;
+    let num_used_total = atomicLoad(&num_used_entries.num);
     let block_size = 128u;
     let num_blocks = u32(ceil(f32(num_entries) / f32(block_size)));
+    let buffer_size = uint3(textureDimensions(usage_buffer));
 
     for (var block = 0u; block < num_blocks; block += 1u) {
         let block_offset = block_size * block;
