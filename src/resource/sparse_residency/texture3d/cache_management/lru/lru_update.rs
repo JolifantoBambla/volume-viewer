@@ -1,14 +1,16 @@
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
-use crate::resource::Texture;
+use crate::resource::{MappableBuffer, Texture};
 use crate::util::extent::extent_volume;
 use crate::GPUContext;
 use std::borrow::Cow;
 use std::mem::size_of;
+use std::process::Command;
 use std::sync::Arc;
 use wgpu::{
     BindGroup, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress, BufferDescriptor,
     BufferUsages, CommandEncoder,
 };
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgsl_preprocessor::WGSLPreprocessor;
 
 pub struct Resources<'a> {
@@ -48,6 +50,15 @@ pub(crate) struct LRUUpdate {
     internal_bind_group: BindGroup,
     scan_even: Buffer,
     scan_odd: Buffer,
+
+
+    // todo: remove (debug)
+    pub scan_even_read_buffer: MappableBuffer<u32>,
+    pub scan_odd_read_buffer: MappableBuffer<u32>,
+    pub num_entries: u32,
+
+    state_buffer: Buffer,
+    state_init: Vec<u32>,
 }
 
 impl LRUUpdate {
@@ -56,10 +67,26 @@ impl LRUUpdate {
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
+        let num_workgroups = (num_entries as f32 / 128.).ceil() as u32;
+        let state_init = vec![0u32; num_workgroups as usize];
+        let state_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(state_init.as_slice()),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+
         let scan_buffer_descriptor = BufferDescriptor {
             label: None,
             size: (size_of::<u32>() * num_entries as usize) as BufferAddress,
-            usage: BufferUsages::STORAGE,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, // todo: remove copy_src
+            mapped_at_creation: false,
+        };
+        // todo: remove (debug)
+        let scan_buffer_read_descriptor = BufferDescriptor {
+            label: None,
+            size: (size_of::<u32>() * num_entries as usize) as BufferAddress,
+            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         };
         let scan_even = ctx.device.create_buffer(&scan_buffer_descriptor);
@@ -100,6 +127,10 @@ impl LRUUpdate {
                     binding: 1,
                     resource: scan_odd.as_entire_binding(),
                 },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: state_buffer.as_entire_binding(),
+                },
             ],
         });
 
@@ -110,6 +141,13 @@ impl LRUUpdate {
             internal_bind_group,
             scan_even,
             scan_odd,
+
+            scan_even_read_buffer: MappableBuffer::new(ctx.device.create_buffer(&scan_buffer_read_descriptor)),
+            scan_odd_read_buffer: MappableBuffer::new(ctx.device.create_buffer(&scan_buffer_read_descriptor)),
+            num_entries,
+
+            state_buffer,
+            state_init,
         }
     }
 
@@ -119,6 +157,8 @@ impl LRUUpdate {
         bind_group: &BindGroup,
         output_extent: &wgpu::Extent3d,
     ) {
+        self.ctx.queue.write_buffer(&self.state_buffer, 0, bytemuck::cast_slice(self.state_init.as_slice()));
+
         let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("LRU Update"),
         });
@@ -131,6 +171,27 @@ impl LRUUpdate {
             1,
             1,
         );
+    }
+
+    // todo: remove(debug)
+    pub fn encode_copy(&self, command_encoder: &mut CommandEncoder) {
+        if self.scan_even_read_buffer.is_ready() && self.scan_odd_read_buffer.is_ready() {
+            let buffer_size = (size_of::<u32>() as u32 * self.num_entries) as BufferAddress;
+            command_encoder.copy_buffer_to_buffer(
+                &self.scan_even,
+                0,
+                self.scan_even_read_buffer.as_buffer_ref(),
+                0,
+                buffer_size,
+            );
+            command_encoder.copy_buffer_to_buffer(
+                &self.scan_odd,
+                0,
+                self.scan_odd_read_buffer.as_buffer_ref(),
+                0,
+                buffer_size,
+            );
+        }
     }
 }
 

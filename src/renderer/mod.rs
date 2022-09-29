@@ -90,6 +90,7 @@ impl MultiChannelVolumeRenderer {
             volume_render_result_extent.width,
             volume_render_result_extent.height,
         );
+        // todo: the actual render pass should provide this sampler
         let volume_sampler = ctx.device.create_sampler(&SamplerDescriptor {
             mag_filter: wgpu::FilterMode::Nearest,
             min_filter: wgpu::FilterMode::Nearest,

@@ -9,9 +9,7 @@ use std::mem::size_of;
 use std::sync::Arc;
 use web_sys::console::time;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{
-    BindGroup, BindingResource, Buffer, BufferAddress, BufferUsages, CommandEncoder, Extent3d,
-};
+use wgpu::{BindGroup, BindingResource, Buffer, BufferAddress, BufferUsages, CommandEncoder, Extent3d, MapMode};
 use wgsl_preprocessor::WGSLPreprocessor;
 
 use crate::renderer::pass::GPUPass;
@@ -157,6 +155,9 @@ impl LRUCache {
             &self.usage_buffer.extent,
         );
         self.copy_to_readable(encoder, timestamp + 1);
+
+        // todo: remove(debug)
+        self.lru_update_pass.encode_copy(encoder);
     }
 
     fn copy_to_readable(&self, encoder: &mut CommandEncoder, buffer_index: u32) {
@@ -188,12 +189,19 @@ impl LRUCache {
 
         //  Maps the current frame's LRU read buffer for reading
         self.lru_read_buffer
-            .map_async(next_frame, wgpu::MapMode::Read, ..);
+            .map_async(next_frame, MapMode::Read, ..);
         self.num_used_entries_read_buffer
-            .map_async(next_frame, wgpu::MapMode::Read, ..);
+            .map_async(next_frame, MapMode::Read, ..);
+
+        // todo: remove(debug)
+        self.lru_update_pass.scan_even_read_buffer.map_async(MapMode::Read, ..);
+        self.lru_update_pass.scan_odd_read_buffer.map_async(MapMode::Read, ..);
 
         if self.lru_read_buffer.is_mapped(timestamp)
             && self.num_used_entries_read_buffer.is_mapped(timestamp)
+
+            && self.lru_update_pass.scan_even_read_buffer.is_mapped()
+            && self.lru_update_pass.scan_odd_read_buffer.is_mapped()
         {
             let lru = self.lru_read_buffer.maybe_read_all(timestamp);
             let num_used_entries = self.num_used_entries_read_buffer.maybe_read_all(timestamp);
@@ -203,7 +211,10 @@ impl LRUCache {
             } else {
                 let h: HashSet<u32> = HashSet::from_iter(lru.iter().cloned());
 
-                //assert_eq!(h.len(), lru.len(), "lru {:?}, num_used: {}", lru, num_used_entries[0].num);
+                let scan_even = self.lru_update_pass.scan_even_read_buffer.maybe_read_all();
+                let scan_odd = self.lru_update_pass.scan_odd_read_buffer.maybe_read_all();
+
+                assert_eq!(h.len(), lru.len(), "lru {:?},\n num_used: {},\n scan_odd: {:?},\n scan_even: {:?}", lru, num_used_entries[0].num, scan_odd, scan_even);
 
                 //log::info!("updated lru {:?}", lru);
                 self.lru_local = lru;
