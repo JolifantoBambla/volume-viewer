@@ -1,8 +1,8 @@
 #![feature(proc_macro_span)]
 #![feature(proc_macro_diagnostic)]
 
+use proc_macro::{Diagnostic, Level, Span, TokenStream, TokenTree};
 use std::path::PathBuf;
-use proc_macro::{Diagnostic, Level, Span, TokenTree, TokenStream};
 
 use wgsl_preprocessor::WGSLPreprocessor;
 
@@ -10,7 +10,11 @@ fn read_file(file_path: PathBuf) -> String {
     match std::fs::read_to_string(file_path.clone()) {
         Ok(source) => source,
         Err(e) => {
-            Diagnostic::spanned(Span::call_site(), Level::Error, format!("couldn't read {}: {}", file_path.display(), e));
+            Diagnostic::spanned(
+                Span::call_site(),
+                Level::Error,
+                format!("couldn't read {}: {}", file_path.display(), e),
+            );
             panic!("Failed to preprocess WGSL source.");
         }
     }
@@ -23,7 +27,7 @@ pub fn include_preprocessed(input: TokenStream) -> TokenStream {
         Some(TokenTree::Literal(literal)) => {
             let str_literal = literal.to_string();
             literal.to_string().as_str()[1..str_literal.len() - 1].to_string()
-        },
+        }
         _ => {
             panic!("Expected literal!")
         }
@@ -65,7 +69,9 @@ pub fn include_preprocessed(input: TokenStream) -> TokenStream {
 
     println!("env: {}!!!", env!("WGSL_RELATIVE_INCLUDE_DIRS"));
 
-    format!("{{ include_str!(\"{}\"); {:?} }}", file_path, preprocessed).parse().expect("Cannot format return preprocessed WGSL source")
+    format!("{{ include_str!(\"{}\"); {:?} }}", file_path, preprocessed)
+        .parse()
+        .expect("Cannot format return preprocessed WGSL source")
 }
 
 // todo: maybe add macro that generates spv if feature is activated
