@@ -100,6 +100,10 @@ fn sample_volume(x: float3) -> f32 {
     return f32(textureSampleLevel(brick_cache, volume_sampler, x, 0.).x);
 }
 
+fn load_voxel(x: uint3) -> f32 {
+    return f32(textureLoad(brick_cache, int3(x), 0).x);
+}
+
 /// Reports usage of a cached brick by storing the current frame's timestamp in the `brick_usage_buffer`.
 ///
 /// # Arguments
