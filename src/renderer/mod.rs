@@ -117,9 +117,12 @@ impl MultiChannelVolumeRenderer {
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
 
+        // todo: filter & use only visible channels
+        //  also: propagate list of visible channel indices to sparseresidencytexture3d
         let channel_settings: Vec<ChannelSettings> = render_settings
             .channel_settings
             .iter()
+            //.filter(|cs| cs.visible)
             .map(|cs| ChannelSettings::from(cs))
             .collect();
         let volume_render_channel_settings_buffer =
@@ -172,9 +175,13 @@ impl MultiChannelVolumeRenderer {
             input.frame.number,
             settings,
         );
+
+        // todo: filter & use only visible channels
+        //  also: propagate list of visible channel indices to sparseresidencytexture3d
         let channel_settings: Vec<ChannelSettings> = settings
             .channel_settings
             .iter()
+            //.filter(|cs| cs.visible)
             .map(|cs| ChannelSettings::from(cs))
             .collect();
 
