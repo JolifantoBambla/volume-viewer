@@ -75,9 +75,9 @@ pub struct SparseResidencyTexture3D {
     process_requests_pass: ProcessRequests,
     process_requests_bind_group: BindGroup,
     request_buffer: Texture,
-    requested_bricks: HashSet<u32>,
+    requested_bricks: HashSet<u64>,
     // todo: needs to be updated when cache entries are overridden
-    cached_bricks: HashSet<u32>,
+    cached_bricks: HashSet<u64>,
 }
 
 impl SparseResidencyTexture3D {
@@ -171,6 +171,9 @@ impl SparseResidencyTexture3D {
     }
 
     fn process_requests(&mut self) {
+        // todo: this needs the frame number if not all channels & resolution levels can be represented by a u8
+        let timestamp = 0;
+
         // read back requests from the GPU
         self.process_requests_pass.map_for_reading();
         let requested_ids = self.process_requests_pass.read();
@@ -180,8 +183,10 @@ impl SparseResidencyTexture3D {
             let mut brick_addresses =
                 Vec::with_capacity(min(requested_ids.len(), self.brick_request_limit));
             for id in requested_ids {
-                if !self.cached_bricks.contains(&id) && self.requested_bricks.insert(id) {
-                    brick_addresses.push(BrickAddress::from(id));
+                let brick_address = self.page_table_directory.page_index_to_address(id, timestamp);
+                let brick_id = brick_address.into();
+                if !self.cached_bricks.contains(&brick_id) && self.requested_bricks.insert(brick_id) {
+                    brick_addresses.push(brick_address);
                 }
                 if brick_addresses.len() >= self.brick_request_limit {
                     break;

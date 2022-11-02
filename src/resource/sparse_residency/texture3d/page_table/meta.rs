@@ -1,4 +1,4 @@
-use crate::volume::{BrickedMultiResolutionMultiVolumeMeta, ResolutionMeta};
+use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta, ResolutionMeta};
 use glam::{UVec2, UVec3, Vec3};
 use crate::util::extent::{SubscriptToIndex};
 
@@ -92,9 +92,14 @@ impl PageDirectoryMeta {
         }
     }
 
+    // todo: find a better name
+    pub fn get_page_table_size(&self) -> UVec2 {
+        UVec2::new(self.num_channels as u32, self.num_resolutions as u32)
+    }
+
     pub fn get_page_table(&self, resolution: u32, channel: u32) -> &PageTableMeta {
         let subscript = UVec2::new(channel, resolution);
-        let size = UVec2::new(self.num_channels as u32, self.num_resolutions as u32);
+        let size = self.get_page_table_size();
         &self.page_tables[subscript.to_index(&size) as usize]
     }
 }

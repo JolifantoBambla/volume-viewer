@@ -11,33 +11,49 @@ pub struct Brick {
 }
 
 #[readonly::make]
-#[derive(Deserialize, Serialize)]
+#[derive(Copy, Clone, Deserialize, Serialize)]
 pub struct BrickAddress {
     /// x,y,z
+    // todo: refactor into x,y,z
+    // todo: change type to u16
     pub index: [u32; 3],
-    pub level: u32,
+    // todo: change type to u8
     pub channel: u32,
+    // todo: rename to `resolution` (requires changes in JS code as well)
+    // todo: change type to u8
+    pub level: u32,
 }
 
-impl From<u32> for BrickAddress {
-    fn from(id: u32) -> Self {
-        // todo: find out why these are in big endian - my system is little endian AND webgpu ensures little endian
-        let bytes: [u8; 4] = id.to_be_bytes();
-        Self {
-            index: [bytes[0] as u32, bytes[1] as u32, bytes[2] as u32],
-            level: bytes[3] as u32,
-            // todo: figure out how to handle channels
-            channel: 0,
-        }
+impl BrickAddress {
+    pub fn new(index: [u32; 3], channel: u32, resolution: u32) -> Self {
+       Self {
+           index,
+           channel,
+           level: resolution,
+       }
     }
 }
 
-impl From<BrickAddress> for u32 {
+impl From<BrickAddress> for u64 {
+    /// A `BrickAddress` can be represented as a `u64`.
+    /// Each spatial coordinate
+    ///
+    /// # Arguments
+    ///
+    /// * `brick_address`:
+    ///
+    /// returns: u64
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///
+    /// ```
     fn from(brick_address: BrickAddress) -> Self {
-        // todo: figure out how to handle channels
-        (brick_address.index[0] << 24)
-            + (brick_address.index[1] << 16)
-            + (brick_address.index[2] << 8)
-            + brick_address.level
+        ((brick_address.index[0] as u64) << 48)
+            + ((brick_address.index[1] as u64) << 32)
+            + ((brick_address.index[2] as u64) << 16)
+            + ((brick_address.channel as u64) << 8)
+            + brick_address.level as u64
     }
 }

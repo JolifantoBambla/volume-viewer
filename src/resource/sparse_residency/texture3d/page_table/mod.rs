@@ -6,7 +6,7 @@ use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{BindingResource, Buffer, BufferUsages, Extent3d};
 
 use crate::resource::Texture;
-use crate::util::extent::{subscript_to_index, uvec_to_extent};
+use crate::util::extent::{IndexToSubscript, subscript_to_index, uvec_to_extent};
 use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta, ResolutionMeta};
 use crate::GPUContext;
 
@@ -170,6 +170,37 @@ impl PageTableDirectory {
             local_page_directory,
             meta,
         }
+    }
+
+    /// Translates a `page_index` created at time `timestamp` for the GPU-resident cache to an
+    /// address in the bricked multi-resolution muli-volume hierarchy represented by this page
+    /// directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `page_index`:
+    /// * `timestamp`: CURRENTLY UNUSED! - later this will be used to map an index to the active channel-level configuration in the time interval containing the timestamp
+    ///
+    /// returns: BrickAddress
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///
+    /// ```
+    pub fn page_index_to_address(&self, page_index: u32, timestamp: u32) -> BrickAddress {
+        // todo: find out why these are in big endian - my system is little endian AND webgpu ensures little endian
+        let bytes: [u8; 4] = page_index.to_be_bytes();
+
+        // todo: as soon as timestamp is used, `size` should come from a map of timestamps to channel-resolution configurations
+        let size = self.meta.get_page_table_size();
+        let subscript = size.index_to_subscript(bytes[3] as u32);
+
+        BrickAddress::new(
+            [bytes[0] as u32, bytes[1] as u32, bytes[2] as u32],
+            subscript.x,
+            subscript.y,
+        )
     }
 
     fn brick_address_to_page_index(&self, brick_address: &BrickAddress) -> usize {
