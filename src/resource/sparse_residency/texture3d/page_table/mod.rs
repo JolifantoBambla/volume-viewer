@@ -137,14 +137,13 @@ impl PageTableDirectory {
         let meta = PageDirectoryMeta::new(volume_meta);
 
         let res_meta_data: Vec<ResMeta> = meta
-            .resolutions
+            .page_tables
             .iter()
-            .map(|r| ResMeta {
+            .map(|pt| ResMeta {
                 brick_size: meta.brick_size.extend(0),
-                // todo: one page table per res and channel
-                page_table_offset: r.get_channel_offset(0).extend(0),
-                page_table_extent: r.extent.extend(0),
-                volume_size: UVec3::from_slice(r.volume_meta.volume_size.as_slice()).extend(0),
+                page_table_offset: pt.offset.extend(0),
+                page_table_extent: pt.extent.extend(0),
+                volume_size: UVec3::from_slice(pt.volume_meta.volume_size.as_slice()).extend(0),
             })
             .collect();
 
@@ -174,10 +173,8 @@ impl PageTableDirectory {
     }
 
     fn brick_address_to_page_index(&self, brick_address: &BrickAddress) -> usize {
-        // todo: compute page location
-        let level = brick_address.level as usize;
-        // todo: channel_offset!
-        let offset = self.meta.resolutions[level].get_channel_offset(0);
+        let page_table = self.meta.get_page_table(brick_address.level, brick_address.channel);
+        let offset = page_table.offset;
         let location = UVec3::from_slice(brick_address.index.as_slice());
         let page_index =
             subscript_to_index(&(offset + location), &self.page_directory.extent) as usize;
@@ -205,9 +202,9 @@ impl PageTableDirectory {
 
     pub fn volume_scale(&self) -> Vec3 {
         let size = Vec3::new(
-            self.meta.resolutions[0].volume_meta.volume_size[0] as f32,
-            self.meta.resolutions[0].volume_meta.volume_size[1] as f32,
-            self.meta.resolutions[0].volume_meta.volume_size[2] as f32,
+            self.meta.page_tables[0].volume_meta.volume_size[0] as f32,
+            self.meta.page_tables[0].volume_meta.volume_size[1] as f32,
+            self.meta.page_tables[0].volume_meta.volume_size[2] as f32,
         );
         size * (self.meta.scale / self.meta.scale.max_element())
     }

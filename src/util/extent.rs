@@ -1,4 +1,4 @@
-use glam::UVec3;
+use glam::{UVec2, UVec3};
 use wgpu::{Extent3d, Origin3d};
 
 pub fn origin_to_uvec(origin: &Origin3d) -> UVec3 {
@@ -42,4 +42,47 @@ pub fn index_to_subscript(index: u32, extent: &Extent3d) -> UVec3 {
 
 pub fn subscript_to_index(subscript: &UVec3, extent: &Extent3d) -> u32 {
     subscript.x + extent.width * (subscript.y + extent.height * subscript.z)
+}
+
+pub trait IndexToSubscript {
+    type Size;
+
+    fn index_to_subscript(&self, index: u32) -> Self::Size;
+}
+
+pub trait SubscriptToIndex<Size=Self> {
+    fn to_index(&self, size: &Size) -> u32;
+}
+
+impl IndexToSubscript for UVec2 {
+    type Size = Self;
+
+    fn index_to_subscript(&self, index: u32) -> Self::Size {
+        let x = index % self.x;
+        let y = (index - x) / self.x % self.y;
+        UVec2::new(x, y)
+    }
+}
+
+impl SubscriptToIndex for UVec2 {
+    fn to_index(&self, size: &Self) -> u32 {
+        self.x + size.x * self.y
+    }
+}
+
+impl IndexToSubscript for UVec3 {
+    type Size = Self;
+
+    fn index_to_subscript(&self, index: u32) -> Self::Size {
+        let x = index % self.x;
+        let y = (index - x) / self.x % self.y;
+        let z = ((index - x) / self.x - y) / self.y;
+        UVec3::new(x, y, z)
+    }
+}
+
+impl SubscriptToIndex for UVec3 {
+    fn to_index(&self, size: &Self) -> u32 {
+        self.x + size.x * (self.y + size.y * self.z)
+    }
 }
