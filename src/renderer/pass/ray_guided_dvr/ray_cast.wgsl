@@ -71,13 +71,9 @@ struct ChannelSettingsList {
 }
 
 struct ChannelState {
-    settings: ChannelSettings,
-    lowest_res: u32,
-    highest_res: u32,
     page_table: PageTableMeta,
     page: PageTableEntry,
     requested_brick: bool,
-    last_lod: u32,
     last_page_address: uint3,
 }
 
@@ -232,17 +228,16 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var last_lod = 0u;
     var steps_taken = 0u;
 
-    var channel_states: array<ChannelState, 10>;
+    // todo: this requires far too much memory -> reduce to a minimum
+    //  - replace field page_table with index
+    //  - requested_brick could be one u32 used as bitmask (hard limit: 32 channels)
+    //  - maybe page_address & page don't have to be cached -> depends on textureLoad performance...
+    var channel_states: array<ChannelState, 2>;
     for (var channel = 0u; channel < num_channels; channel += 1u) {
-        let cs1 = clone_channel_settings(channel);
         channel_states[channel] = ChannelState(
-            cs1, // settings
-            min(cs1.min_lod, num_resolutions), // lowest_res
-            min(cs1.max_lod, lowest_res), // highest_res
             clone_page_table_meta(channel), // page_table
             PageTableEntry(), // page
             false, // requested_brick
-            0u, //last_lod
             uint3(textureDimensions(page_directory)) + uint3(1u)// last_page_address
         );
     }
@@ -323,10 +318,11 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             }
         }
     } else {
-        let dt_vec = 1. / (float3(channel_states[0].page_table.volume_size) * abs(ray_os.direction));
-        let dt_scale = uniforms.settings.step_scale;
-        let dt = dt_scale * min_component(dt_vec);
         let offset = wang_hash(pixel.x + 640 * pixel.y);
+        let dt_scale = uniforms.settings.step_scale;
+
+        var dt_vec = 1. / (float3(page_table_meta.resolutions[last_lod].volume_size) * abs(ray_os.direction));
+        var dt = dt_scale * min_component(dt_vec);
         var p = ray_at(ray_os, t_min + offset * dt);
 
         //var last_page_address = uint3(textureDimensions(page_directory)) + uint3(1u);
@@ -334,26 +330,22 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
         for (var t = t_min; t < t_max; t += dt) {
             let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
+            let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res);
+            let lod_changed = lod != last_lod;
+            if (lod_changed) {
+                last_lod = lod;
+                dt_vec = 1. / (float3(page_table_meta.resolutions[lod * num_channels].volume_size) * abs(ray_os.direction));
+                dt = dt_scale * min_component(dt_vec);
+            }
 
             for (var channel = 0u; channel < num_channels; channel += 1u) {
-                let lod = select_level_of_detail(
-                    distance_to_camera,
-                    channel_states[channel].highest_res,
-                    channel_states[channel].lowest_res
-                );
-                if (lod != channel_states[channel].last_lod) {
-                    channel_states[channel].last_lod = lod;
+                if (lod_changed) {
                     channel_states[channel].page_table = clone_page_table_meta(channel + lod * num_channels);
-                    // todo: this is old & doesn't make sense if lod may differ between channels
-                    //step = unscaled_step / float3(page_table.volume_size);
                 }
 
-                let page_table = channel_states[channel].page_table;
-                let cs1 = channel_states[channel].settings;
-
                 // todo: think about this more carefully - does that change the ray or not?
-                let position_corrected = p * compute_volume_to_padded(page_table);
-                let page_address = compute_page_address(page_table, position_corrected);
+                let position_corrected = p * compute_volume_to_padded(channel_states[channel].page_table);
+                let page_address = compute_page_address(channel_states[channel].page_table, position_corrected);
                 if (any(channel_states[channel].last_page_address != page_address)) {
                     channel_states[channel].last_page_address = page_address;
                     channel_states[channel].page = get_page(page_address);
@@ -380,8 +372,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     let value = sample_volume(sample_location);
 
                     // todo: make minimum threshold configurable
-                    if (value >= channel_states[channel].settings.threshold_lower && value <= channel_states[channel].settings.threshold_upper) {
-                        let trans_sample = channel_states[channel].settings.color;
+                    if (value >= channel_settings_list.channels[channel].threshold_lower && value <= channel_settings_list.channels[channel].threshold_upper) {
+                        let trans_sample = channel_settings_list.channels[channel].color;
                         var val_color = float4(trans_sample.rgb, value * trans_sample.a);
                         val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
                         color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
@@ -400,7 +392,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             }
 
             p += ray_os.direction * dt;
-
         }
 
         /*
@@ -489,34 +480,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     debug(pixel, color);
 }
-
-/*
-	vec3 ray_dir = normalize(vray_dir);
-	vec2 t_hit = intersect_box(transformed_eye, ray_dir);
-	if (t_hit.x > t_hit.y) {
-		discard;
-	}
-	t_hit.x = max(t_hit.x, 0.0);
-	vec3 dt_vec = 1.0 / (vec3(volume_dims) * abs(ray_dir));
-	float dt = dt_scale * min(dt_vec.x, min(dt_vec.y, dt_vec.z));
-	// with offset is bad for flat surfaces, without has wood grain
-	float offset = wang_hash(int(gl_FragCoord.x + 640.0 * gl_FragCoord.y));
-	// float offset = 0.0;
-	vec3 p = transformed_eye + (t_hit.x + offset * dt) * ray_dir;
-	for (float t = t_hit.x; t < t_hit.y; t += dt) {
-		float val = texture(volume, p).r;
-		vec4 trans_sample = texture(colormap, vec2(val, 0.5));
-		vec4 val_color = vec4(trans_sample.rgb, val * trans_sample.a);
-		// Opacity correction
-		val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
-		color.rgb += (1.0 - color.a) * val_color.a * val_color.rgb;
-		color.a += (1.0 - color.a) * val_color.a;
-		if (color.a >= 0.95) {
-			break;
-		}
-		p += ray_dir * dt;
-	}
-*/
 
 fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32, channel_settings: ChannelSettings) -> float4 {
     let view_direction = normalize(step);
