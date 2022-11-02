@@ -5,9 +5,12 @@ use crate::util::extent::{SubscriptToIndex};
 #[repr(C)]
 #[derive(Clone)]
 pub struct PageTableMeta {
-    /// The offset of this resolution's page table in the page directory.
+    /// The offset of this page table in the page directory.
     pub(crate) offset: UVec3,
 
+    /// The extent of this page table in the page directory.
+    /// The extent of the full volume represented by this page table is the component-wise product
+    /// `self.extent * brick_size`, where `brick_size` is the size of one page in cache.
     pub(crate) extent: UVec3,
 
     ///
