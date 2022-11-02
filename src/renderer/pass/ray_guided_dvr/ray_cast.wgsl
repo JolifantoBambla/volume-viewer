@@ -71,10 +71,7 @@ struct ChannelSettingsList {
 }
 
 struct ChannelState {
-    page_table: PageTableMeta,
-    page: PageTableEntry,
     requested_brick: bool,
-    last_page_address: uint3,
 }
 
 // Bindings
@@ -232,13 +229,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     //  - replace field page_table with index
     //  - requested_brick could be one u32 used as bitmask (hard limit: 32 channels)
     //  - maybe page_address & page don't have to be cached -> depends on textureLoad performance...
-    var channel_states: array<ChannelState, 2>;
+    var channel_states: array<ChannelState, 10>;
     for (var channel = 0u; channel < num_channels; channel += 1u) {
         channel_states[channel] = ChannelState(
-            clone_page_table_meta(channel), // page_table
-            PageTableEntry(), // page
-            false, // requested_brick
-            uint3(textureDimensions(page_directory)) + uint3(1u)// last_page_address
+            false // requested_brick
         );
     }
 
@@ -339,22 +333,22 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             }
 
             for (var channel = 0u; channel < num_channels; channel += 1u) {
-                if (lod_changed) {
-                    channel_states[channel].page_table = clone_page_table_meta(channel + lod * num_channels);
-                }
+                let page_table = clone_page_table_meta(channel + lod * num_channels);
 
                 // todo: think about this more carefully - does that change the ray or not?
-                let position_corrected = p * compute_volume_to_padded(channel_states[channel].page_table);
-                let page_address = compute_page_address(channel_states[channel].page_table, position_corrected);
-                if (any(channel_states[channel].last_page_address != page_address)) {
-                    channel_states[channel].last_page_address = page_address;
-                    channel_states[channel].page = get_page(page_address);
-                }
+                let position_corrected = p * compute_volume_to_padded(page_table);
+                let page_address = compute_page_address(page_table, position_corrected);
+                let page = get_page(page_address);
+
+                //if (any(channel_states[channel].last_page_address != page_address)) {
+                //    channel_states[channel].last_page_address = page_address;
+                //    channel_states[channel].page = get_page(page_address);
+                //}
 
                 // todo: remove (debug)
                 let page_color = float3(page_address) / float3(7., 7., 1.);
 
-                if (channel_states[channel].page.flag == UNMAPPED) {
+                if (page.flag == UNMAPPED) {
                     // todo: remove this (debug)
                     color = float4(page_color, 1.);
 
@@ -363,11 +357,11 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                         request_brick(int3(page_address));
                         channel_states[channel].requested_brick = true;
                     }
-                } else if (channel_states[channel].page.flag == MAPPED) {
-                    report_usage(int3(channel_states[channel].page.location / brick_size));
+                } else if (page.flag == MAPPED) {
+                    report_usage(int3(page.location / brick_size));
 
                     let sample_location = normalize_cache_address(
-                        compute_cache_address(channel_states[channel].page_table, p, channel_states[channel].page)
+                        compute_cache_address(page_table, p, page)
                     );
                     let value = sample_volume(sample_location);
 
