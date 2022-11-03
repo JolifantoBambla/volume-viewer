@@ -225,20 +225,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var last_lod = 0u;
     var steps_taken = 0u;
 
-    // todo: this requires far too much memory -> reduce to a minimum
-    //  - replace field page_table with index
-    //  - requested_brick could be one u32 used as bitmask (hard limit: 32 channels)
-    //  - maybe page_address & page don't have to be cached -> depends on textureLoad performance...
-    var channel_states: array<ChannelState, 10>;
-    for (var channel = 0u; channel < num_channels; channel += 1u) {
-        channel_states[channel] = ChannelState(
-            false // requested_brick
-        );
-    }
-
-    // todo: remove this (debug)
-    var request_bricks = true;
-
     if (uniforms.settings.render_mode == GRID_TRAVERSAL) {
         // todo: use active_page_tables instead
         var page_table = clone_page_table_meta(0u);
@@ -270,7 +256,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 // todo: remove this (debug)
                 color = float4(page_color, 1.);
 
-                if (!requested_brick && request_bricks) {
+                if (!requested_brick) {
                     // todo: maybe request lower res as well?
                     request_brick(int3(page_address));
                     requested_brick = true;
@@ -352,10 +338,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     // todo: remove this (debug)
                     color = float4(page_color, 1.);
 
-                    if (!channel_states[channel].requested_brick && request_bricks) {
+                    if (!requested_brick) {
                         // todo: maybe request lower res as well?
                         request_brick(int3(page_address));
-                        channel_states[channel].requested_brick = true;
+                        requested_brick = true;
                     }
                 } else if (page.flag == MAPPED) {
                     report_usage(int3(page.location / brick_size));
@@ -441,7 +427,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 // todo: remove this (debug)
                 color = float4(page_color, 1.);
 
-                if (!requested_brick && request_bricks) {
+                if (!requested_brick) {
                     // todo: maybe request lower res as well?
                     request_brick(int3(page_address));
                     requested_brick = true;
