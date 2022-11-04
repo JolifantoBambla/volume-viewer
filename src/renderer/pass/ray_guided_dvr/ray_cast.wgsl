@@ -70,10 +70,6 @@ struct ChannelSettingsList {
     channels: array<ChannelSettings>,
 }
 
-struct ChannelState {
-    requested_brick: bool,
-}
-
 // Bindings
 
 // The bindings in group 0 should never change (except maybe the result image for double buffering?)
@@ -305,9 +301,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         var dt = dt_scale * min_component(dt_vec);
         var p = ray_at(ray_os, t_min + offset * dt);
 
-        //var last_page_address = uint3(textureDimensions(page_directory)) + uint3(1u);
-        //var page = PageTableEntry();
-
         for (var t = t_min; t < t_max; t += dt) {
             let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
             let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res);
@@ -325,11 +318,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 let position_corrected = p * compute_volume_to_padded(page_table);
                 let page_address = compute_page_address(page_table, position_corrected);
                 let page = get_page(page_address);
-
-                //if (any(channel_states[channel].last_page_address != page_address)) {
-                //    channel_states[channel].last_page_address = page_address;
-                //    channel_states[channel].page = get_page(page_address);
-                //}
 
                 // todo: remove (debug)
                 let page_color = float3(page_address) / float3(7., 7., 1.);
@@ -373,89 +361,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
             p += ray_os.direction * dt;
         }
-
-        /*
-        let entry_os = clamp_to_one(ray_at(ray_os, t_min));
-        let exit_os = clamp_to_one(ray_at(ray_os, t_max));
-        let unscaled_step = (exit_os - entry_os) * uniforms.settings.step_scale;
-        let view_direction = normalize(unscaled_step);
-
-        let dist = distance(exit_os, entry_os);
-
-        var step = unscaled_step / float3(page_table.volume_size);
-        var last_page_address = uint3(textureDimensions(page_directory)) + uint3(1u);
-        var page = PageTableEntry();
-
-        var i = 0;
-
-        for (
-            var position = entry_os;
-            aabb_contains(volume_bounds_os, position);
-            position += step
-        ) {
-            //let steps_per_dim = dist / abs(step);
-            //let num_steps = min(100., steps_per_dim[min_dimension(steps_per_dim)]) / 100.;
-            //if (num_steps > 0.) {
-            //    color = float4(float3(num_steps), 1.);
-            //    break;
-            //}
-            //if (any(int3(sign(ray_os.direction)) != int3(sign(view_direction)))) {
-            //    color = RED;
-            //    break;
-            //}
-
-            let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
-            let lod = select_level_of_detail(distance_to_camera, lowest_res);
-            if (lod != last_lod) {
-                last_lod = lod;
-                page_table = clone_page_table_meta(lod);
-                step = unscaled_step / float3(page_table.volume_size);
-            }
-
-            // todo: think about this more carefully - does that change the ray or not?
-            let position_corrected = position * compute_volume_to_padded(page_table);
-            let page_address = compute_page_address(page_table, position_corrected);
-            if (any(last_page_address != page_address)) {
-                last_page_address = page_address;
-                page = get_page(page_address);
-            }
-
-            // todo: remove (debug)
-            let page_color = float3(page_address) / float3(7., 7., 1.);
-
-            if (page.flag == UNMAPPED) {
-                // todo: remove this (debug)
-                color = float4(page_color, 1.);
-
-                if (!requested_brick) {
-                    // todo: maybe request lower res as well?
-                    request_brick(int3(page_address));
-                    requested_brick = true;
-                }
-            } else if (page.flag == MAPPED) {
-                report_usage(int3(page.location / brick_size));
-
-                let sample_location = normalize_cache_address(compute_cache_address(page_table, position, page));
-                let value = sample_volume(sample_location);
-
-                // todo: make minimum threshold configurable
-                if (value > uniforms.settings.threshold) {
-                    var lighting = compute_lighting(value, sample_location, step, view_direction);
-                    lighting.a = value;
-                    color += lighting;
-                }
-
-                if (is_saturated(color)) {
-                    break;
-                }
-            }
-            i += 1;
-            if (i >= 100) {
-                color = GREEN;
-                break;
-            }
-        }
-        */
     }
 
     debug(pixel, color);
