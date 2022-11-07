@@ -5,6 +5,7 @@ use glam::{UVec3, UVec4, Vec3};
 use std::cmp::min;
 use std::collections::HashSet;
 use std::sync::Arc;
+use web_sys::console::time;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroup, BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferUsages,
@@ -87,12 +88,16 @@ impl ChannelConfigurationState {
         }
     }
 
-    pub fn map_channel_index(&self, channel_index: u32) -> Option<usize> {
+    pub fn dataset_to_page_table(&self, channel_index: u32) -> Option<usize> {
         self.page_table_to_data_set.iter().position(|&i| i == channel_index)
     }
 
+    pub fn page_table_to_dataset(&self, channel_index: u32) -> u32 {
+        self.page_table_to_data_set[channel_index as usize]
+    }
+
     pub fn map_channel_indices(&self, channel_indices: &Vec<u32>) -> Vec<Option<usize>> {
-        channel_indices.iter().map(|&i| self.map_channel_index(i)).collect()
+        channel_indices.iter().map(|&i| self.dataset_to_page_table(i)).collect()
     }
 }
 
@@ -101,8 +106,9 @@ impl Default for ChannelConfigurationState {
     /// It is the only channel represented in the page table.
     fn default() -> Self {
         Self {
-            page_table_to_data_set: vec![0],
-            represented_channels: HashSet::from([0]),
+            // todo: change to [0] for both
+            page_table_to_data_set: vec![0, 1],
+            represented_channels: HashSet::from([0, 1]),
             created_at: 0
         }
     }
@@ -241,7 +247,11 @@ impl SparseResidencyTexture3D {
             let mut brick_addresses =
                 Vec::with_capacity(min(requested_ids.len(), self.brick_request_limit));
             for id in requested_ids {
-                let brick_address = self.page_table_directory.page_index_to_address(id, timestamp);
+                let brick_address =
+                    self.map_from_page_table(
+                        self.page_table_directory.page_index_to_address(id),
+                        timestamp
+                    );
                 let brick_id = brick_address.into();
                 if !self.cached_bricks.contains(&brick_id) && self.requested_bricks.insert(brick_id) {
                     brick_addresses.push(brick_address);
@@ -266,27 +276,32 @@ impl SparseResidencyTexture3D {
         // write bricks to cache
         if !bricks.is_empty() {
             for (address, brick) in bricks {
-                if brick.data.is_empty() {
-                    self.page_table_directory.mark_as_empty(&address);
-                } else {
-                    // write brick to cache
-                    let brick_location = self.lru_cache.add_cache_entry(&brick.data, input);
+                if let Some(local_address) = self.map_to_page_table(&address, None) {
+                    if brick.data.is_empty() {
+                        self.page_table_directory.mark_as_empty(&local_address);
+                    } else {
+                        // write brick to cache
+                        let brick_location = self.lru_cache.add_cache_entry(&brick.data, input);
 
-                    match brick_location {
-                        Ok(brick_location) => {
-                            // mark brick as mapped
-                            self.page_table_directory
-                                .mark_as_mapped(&address, &brick_location);
-                        }
-                        Err(_) => {
-                            // todo: error handling
-                            log::error!("Could not add brick to cache");
+                        match brick_location {
+                            Ok(brick_location) => {
+                                // mark brick as mapped
+                                self.page_table_directory
+                                    .mark_as_mapped(&local_address, &brick_location);
+                            }
+                            Err(_) => {
+                                // todo: error handling
+                                log::error!("Could not add brick to cache");
+                            }
                         }
                     }
+                    let brick_id = address.into();
+                    self.cached_bricks.insert(brick_id);
+                    self.requested_bricks.remove(&brick_id);
+                } else {
+                    let brick_id = address.into();
+                    self.requested_bricks.remove(&brick_id);
                 }
-                let brick_id = address.into();
-                self.cached_bricks.insert(brick_id);
-                self.requested_bricks.remove(&brick_id);
             }
 
             // update the page directory
@@ -306,6 +321,28 @@ impl SparseResidencyTexture3D {
         }
     }
 
+    fn map_to_page_table(&self, brick_address: &BrickAddress, timestamp: Option<u32>) -> Option<BrickAddress> {
+        let channel_configuration = if let Some(timestamp) = timestamp {
+            self.get_channel_configuration(timestamp)
+        } else {
+            self.channel_configuration.last().unwrap()
+        };
+        if let Some(channel) = channel_configuration
+            .dataset_to_page_table(brick_address.channel) {
+            Some(BrickAddress::new(brick_address.index, channel as u32, brick_address.level))
+        } else {
+            None
+        }
+    }
+
+    fn map_from_page_table(&self, brick_address: BrickAddress, timestamp: u32) -> BrickAddress {
+        BrickAddress::new(
+            brick_address.index,
+            self.get_channel_configuration(timestamp)
+                .page_table_to_dataset(brick_address.channel),
+            brick_address.level,
+        )
+    }
 
     ///
     ///
@@ -343,7 +380,7 @@ impl SparseResidencyTexture3D {
             for i in 0..new_selected.len() {
                 if i <= no_longer_selected.len() {
                     let idx = last_configuration
-                        .map_channel_index(no_longer_selected[i])
+                        .dataset_to_page_table(no_longer_selected[i])
                         .unwrap();
                     new_pt2d[idx] = new_selected[i];
                     self.page_table_directory.invalidate_channel_page_tables(idx as u32);

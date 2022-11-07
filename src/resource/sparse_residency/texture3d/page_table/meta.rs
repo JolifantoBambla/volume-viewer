@@ -1,3 +1,4 @@
+use std::cmp::min;
 use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta, ResolutionMeta};
 use glam::{UVec2, UVec3, Vec3};
 use crate::util::extent::{SubscriptToIndex};
@@ -51,7 +52,10 @@ pub struct PageDirectoryMeta {
 impl PageDirectoryMeta {
     // todo: configure how many channels the page table can hold
     // todo: more efficient packing strategy
-    pub fn new(volume_meta: &BrickedMultiResolutionMultiVolumeMeta) -> Self {
+    pub fn new(volume_meta: &BrickedMultiResolutionMultiVolumeMeta, max_channels: usize, max_resolutions: usize) -> Self {
+        let num_channels = min(max_channels, volume_meta.channels.len());
+        let num_resolutions = min(max_resolutions, volume_meta.resolutions.len());
+
         let mut page_tables: Vec<PageTableMeta> = Vec::new();
         let high_res_extent = volume_meta.bricks_per_dimension(0);
 
@@ -65,16 +69,24 @@ impl PageDirectoryMeta {
         let mut last_offset = UVec3::ZERO;
         let mut last_extent = UVec3::ZERO;
         for (level, volume_resolution) in volume_meta.resolutions.iter().enumerate() {
-            let extent= volume_meta.bricks_per_dimension(level);
-            for _ in 0..volume_meta.channels.len() {
-                let offset = last_offset + last_extent * packing_axis;
-                page_tables.push(PageTableMeta::new(
-                    offset,
-                    extent,
-                    volume_resolution.clone(),
-                ));
-                last_offset = offset;
-                last_extent = extent;
+            // todo: currently, all channels share the same resolution. however, it might be that
+            //   channel a should be present in resolutions 1-6 and channel b in resolutions 4-10,
+            //   and only 6 resolutions can be represented at once.
+            //   this construction still works if resolutions are strictly decreasing all dimensions
+            //   which is typically a safe assumption to make. then only the extent has to be
+            //   updated for rendering
+            if level < num_resolutions {
+                let extent = volume_meta.bricks_per_dimension(level);
+                for _ in 0..num_channels {
+                    let offset = last_offset + last_extent * packing_axis;
+                    page_tables.push(PageTableMeta::new(
+                        offset,
+                        extent,
+                        volume_resolution.clone(),
+                    ));
+                    last_offset = offset;
+                    last_extent = extent;
+                }
             }
         }
 
@@ -87,8 +99,8 @@ impl PageDirectoryMeta {
             scale: Vec3::from(volume_meta.scale),
             extent,
             page_tables,
-            num_channels: volume_meta.channels.len(),
-            num_resolutions: volume_meta.resolutions.len(),
+            num_channels,
+            num_resolutions,
         }
     }
 

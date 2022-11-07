@@ -136,7 +136,11 @@ impl PageTableDirectory {
         max_resolutions: u32,
         ctx: &Arc<GPUContext>,
     ) -> Self {
-        let meta = PageDirectoryMeta::new(volume_meta);
+        let meta = PageDirectoryMeta::new(
+            volume_meta,
+            max_visible_channels as usize,
+            max_resolutions as usize
+        );
 
         let res_meta_data: Vec<ResMeta> = meta
             .page_tables
@@ -175,27 +179,10 @@ impl PageTableDirectory {
         }
     }
 
-    /// Translates a `page_index` created at time `timestamp` for the GPU-resident cache to an
-    /// address in the bricked multi-resolution muli-volume hierarchy represented by this page
-    /// directory.
-    ///
-    /// # Arguments
-    ///
-    /// * `page_index`:
-    /// * `timestamp`: CURRENTLY UNUSED! - later this will be used to map an index to the active channel-level configuration in the time interval containing the timestamp
-    ///
-    /// returns: BrickAddress
-    ///
-    /// # Examples
-    ///
-    /// ```
-    ///
-    /// ```
-    pub fn page_index_to_address(&self, page_index: u32, timestamp: u32) -> BrickAddress {
+    pub fn page_index_to_address(&self, page_index: u32) -> BrickAddress {
         // todo: find out why these are in big endian - my system is little endian AND webgpu ensures little endian
         let bytes: [u8; 4] = page_index.to_be_bytes();
 
-        // todo: as soon as timestamp is used, `size` should come from a map of timestamps to channel-resolution configurations
         let size = self.meta.get_page_table_size();
         let subscript = size.index_to_subscript(bytes[3] as u32);
 
@@ -232,7 +219,18 @@ impl PageTableDirectory {
     }
 
     pub fn invalidate_page_table(&mut self, resolution: u32, channel: u32) {
-        // todo:
+        let page_table = self.meta.get_page_table(resolution, channel);
+        let offset = page_table.offset;
+        let last = offset + page_table.extent;
+
+        let begin =
+            subscript_to_index(&(offset), &self.page_directory.extent) as usize;
+        let end =
+            subscript_to_index(&last, &self.page_directory.extent) as usize;
+
+        for index in begin..end {
+            self.local_page_directory[index] = UVec3::ZERO.extend(PageTableEntryFlag::Unmapped as u32);
+        }
     }
 
     pub fn commit_changes(&self) {
