@@ -125,6 +125,7 @@ pub struct PageTableDirectory {
     page_directory: Texture,
     meta: PageDirectoryMeta,
     max_visible_channels: u32,
+    max_resolutions: u32,
     volume_meta: BrickedMultiResolutionMultiVolumeMeta,
 }
 
@@ -132,6 +133,7 @@ impl PageTableDirectory {
     pub fn new(
         volume_meta: &BrickedMultiResolutionMultiVolumeMeta,
         max_visible_channels: u32,
+        max_resolutions: u32,
         ctx: &Arc<GPUContext>,
     ) -> Self {
         let meta = PageDirectoryMeta::new(volume_meta);
@@ -164,6 +166,7 @@ impl PageTableDirectory {
         Self {
             ctx: ctx.clone(),
             max_visible_channels,
+            max_resolutions,
             volume_meta: volume_meta.clone(),
             page_table_meta_buffer,
             page_directory,
@@ -222,6 +225,12 @@ impl PageTableDirectory {
         self.local_page_directory[index] = brick_location.extend(PageTableEntryFlag::Mapped as u32);
     }
 
+    pub fn invalidate_channel_page_tables(&mut self, channel_index: u32) {
+        for resolution in 0..self.max_resolutions {
+            self.invalidate_page_table(resolution, channel_index);
+        }
+    }
+
     pub fn invalidate_page_table(&mut self, resolution: u32, channel: u32) {
         // todo:
     }
@@ -254,5 +263,9 @@ impl PageTableDirectory {
 
     pub fn extent(&self) -> Extent3d {
         self.page_directory.extent
+    }
+
+    pub fn channel_capacity(&self) -> usize {
+        self.max_visible_channels as usize
     }
 }
