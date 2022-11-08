@@ -64,10 +64,6 @@ pub struct GlobalSettings {
 
 impl From<&MultiChannelVolumeRendererSettings> for GlobalSettings {
     fn from(settings: &MultiChannelVolumeRendererSettings) -> Self {
-        if settings.channel_settings.iter().filter(|c| c.visible).count() == 0 {
-            panic!("no visible channels");
-        }
-
         Self {
             render_mode: settings.render_mode as u32,
             step_scale: settings.step_scale,
