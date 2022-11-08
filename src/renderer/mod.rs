@@ -6,6 +6,7 @@ pub mod settings;
 pub mod trivial_volume_renderer;
 pub mod volume;
 
+use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
 use crate::resource;
@@ -19,6 +20,7 @@ use crate::wgsl::create_wgsl_preprocessor;
 
 use bytemuck;
 use std::sync::Arc;
+use bytemuck::Contiguous;
 use wasm_bindgen::JsCast;
 use web_sys::OffscreenCanvas;
 use wgpu::util::DeviceExt;
@@ -31,6 +33,17 @@ use crate::renderer::pass::ray_guided_dvr::{ChannelSettings, RayGuidedDVR, Resou
 use crate::{MultiChannelVolumeRendererSettings, SparseResidencyTexture3D, VolumeDataSource};
 pub use trivial_volume_renderer::TrivialVolumeRenderer;
 use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
+
+struct ChannelConfiguration {
+    visible_channel_indices: Vec<u32>,
+    channel_mapping: Vec<u32>,
+}
+
+impl ChannelConfiguration {
+    pub fn num_visible_channels(&self) -> usize {
+        self.visible_channel_indices.len()
+    }
+}
 
 pub struct MultiChannelVolumeRenderer {
     pub(crate) ctx: Arc<GPUContext>,
@@ -46,6 +59,8 @@ pub struct MultiChannelVolumeRenderer {
 
     present_to_screen_pass: PresentToScreen,
     present_to_screen_bind_group: BindGroup,
+
+    channel_configuration: ChannelConfiguration,
 }
 
 impl MultiChannelVolumeRenderer {
@@ -66,17 +81,40 @@ impl MultiChannelVolumeRenderer {
             height: canvas.height(),
         };
 
+        // todo: sort by channel importance
+        // channel settings are created for all channels s.t. the initial buffer size is large enough
+        // (could also be achieved by just allocating for max visible channels -> maybe later during cleanup)
+        // filtered channel settings are uploaded to gpu during update
+        let visible_channel_indices: Vec<u32> = render_settings
+            .channel_settings
+            .iter()
+            .filter(|c| c.visible)
+            .map(|cs| cs.channel_index)
+            .collect();
+
         let wgsl_preprocessor = create_wgsl_preprocessor();
         let volume_texture = SparseResidencyTexture3D::new(
             volume_source,
             SparseResidencyTexture3DOptions {
                 max_visible_channels: render_settings.create_options.max_visible_channels,
                 max_resolutions: render_settings.create_options.max_resolutions,
+                visible_channel_indices: visible_channel_indices.clone(),
                 ..Default::default()
             },
             &wgsl_preprocessor,
             &ctx
         );
+
+        let channel_mapping = volume_texture
+            .get_channel_configuration(0)
+            .map_channel_indices(&visible_channel_indices)
+            .iter()
+            .map(|c| c.unwrap() as u32)
+            .collect();
+        let channel_configuration = ChannelConfiguration {
+            visible_channel_indices,
+            channel_mapping,
+        };
 
         let volume_render_result_extent = Extent3d {
             width: window_size.width,
@@ -103,6 +141,7 @@ impl MultiChannelVolumeRenderer {
             ..Default::default()
         });
 
+        // todo: refactor multi-volume into scene object or whatever
         // the volume is a unit cube ([0,1]^3)
         // we translate it s.t. its center is the origin and scale it to its original dimensions
         let volume_transform = glam::Mat4::from_scale(volume_texture.volume_scale()).mul_mat4(
@@ -117,12 +156,12 @@ impl MultiChannelVolumeRenderer {
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
 
-        // todo: filter & use only visible channels
-        //  also: propagate list of visible channel indices to sparseresidencytexture3d
+        // channel settings are created for all channels s.t. the initial buffer size is large enough
+        // (could also be achieved by just allocating for max visible channels -> maybe later during cleanup)
+        // filtered channel settings are uploaded to gpu during update
         let channel_settings: Vec<ChannelSettings> = render_settings
             .channel_settings
             .iter()
-            //.filter(|cs| cs.visible)
             .map(|cs| ChannelSettings::from(cs))
             .collect();
         let volume_render_channel_settings_buffer =
@@ -160,7 +199,18 @@ impl MultiChannelVolumeRenderer {
             volume_render_result_extent,
             present_to_screen_pass,
             present_to_screen_bind_group,
+            channel_configuration,
         }
+    }
+
+    fn map_channel_settings(&self, settings: &MultiChannelVolumeRendererSettings) -> Vec<ChannelSettings> {
+        let mut channel_settings = Vec::new();
+        for (i, &channel) in self.channel_configuration.visible_channel_indices.iter().enumerate() {
+            let mut cs = ChannelSettings::from(&settings.channel_settings[channel as usize]);
+            cs.page_table_index = self.channel_configuration.channel_mapping[i];
+            channel_settings.push(cs);
+        }
+        channel_settings
     }
 
     pub fn update(
@@ -169,21 +219,23 @@ impl MultiChannelVolumeRenderer {
         input: &Input,
         settings: &MultiChannelVolumeRendererSettings,
     ) {
+        let channel_settings = self.map_channel_settings(&settings);
+
+        // todo: do this properly
+        // a new channel selection might not have been propagated at this point -> remove some channel settings
+        let mut settings = settings.clone();
+        let mut c_settings = Vec::new();
+        for &channel in self.channel_configuration.visible_channel_indices.iter() {
+            c_settings.push(settings.channel_settings[channel as usize].clone());
+        }
+        settings.channel_settings = c_settings;
+
         let uniforms = ray_guided_dvr::Uniforms::new(
             camera.create_uniform(),
             self.volume_transform,
             input.frame.number,
-            settings,
+            &settings,
         );
-
-        // todo: filter & use only visible channels
-        //  also: propagate list of visible channel indices to sparseresidencytexture3d
-        let channel_settings: Vec<ChannelSettings> = settings
-            .channel_settings
-            .iter()
-            //.filter(|cs| cs.visible)
-            .map(|cs| ChannelSettings::from(cs))
-            .collect();
 
         self.ctx.queue.write_buffer(
             &self.volume_render_global_settings_buffer,
@@ -221,6 +273,18 @@ impl MultiChannelVolumeRenderer {
     }
 
     pub fn post_render(&mut self, input: &Input) {
+        // todo: both of these should go into volume_texture's post_render & add_channel_configuration should not be exposed
+        if let Some(new_channel_selection) = input.new_channel_selection.as_ref() {
+            let channel_mapping = self.volume_texture
+                .add_channel_configuration(new_channel_selection, input.frame.number)
+                .iter()
+                .map(|c| c.unwrap() as u32)
+                .collect();
+            self.channel_configuration = ChannelConfiguration {
+                visible_channel_indices: new_channel_selection.clone(),
+                channel_mapping,
+            };
+        }
         self.volume_texture.update_cache(input);
     }
 }

@@ -34,6 +34,7 @@ use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCach
 pub struct SparseResidencyTexture3DOptions {
     pub max_visible_channels: u32,
     pub max_resolutions: u32,
+    pub visible_channel_indices: Vec<u32>,
     pub brick_request_limit: u32,
     pub cache_size: Extent3d,
     pub num_multi_buffering: u32,
@@ -45,6 +46,7 @@ impl Default for SparseResidencyTexture3DOptions {
         Self {
             max_visible_channels: 17,
             max_resolutions: 15,
+            visible_channel_indices: vec![0],
             brick_request_limit: 32,
             cache_size: Extent3d {
                 width: 1024,
@@ -106,9 +108,8 @@ impl Default for ChannelConfigurationState {
     /// It is the only channel represented in the page table.
     fn default() -> Self {
         Self {
-            // todo: change to [0] for both
-            page_table_to_data_set: vec![0, 1],
-            represented_channels: HashSet::from([0, 1]),
+            page_table_to_data_set: vec![0],
+            represented_channels: HashSet::from([0]),
             created_at: 0
         }
     }
@@ -207,7 +208,10 @@ impl SparseResidencyTexture3D {
             process_requests_bind_group,
             requested_bricks: HashSet::new(),
             cached_bricks: HashSet::new(),
-            channel_configuration: vec![ChannelConfigurationState::default()],
+            channel_configuration: vec![ChannelConfigurationState::from_mapping(
+                settings.visible_channel_indices,
+                0
+            )],
         }
     }
 
@@ -235,15 +239,13 @@ impl SparseResidencyTexture3D {
     }
 
     fn process_requests(&mut self) {
-        // todo: this needs the frame number if not all channels & resolution levels can be represented by a u8
-        let timestamp = 0;
-
         // read back requests from the GPU
         self.process_requests_pass.map_for_reading();
-        let requested_ids = self.process_requests_pass.read();
+        let brick_requests = self.process_requests_pass.read();
 
         // request bricks from data source
-        if !requested_ids.is_empty() {
+        if let Some(request) = brick_requests {
+            let (requested_ids, timestamp) = request.into();
             let mut brick_addresses =
                 Vec::with_capacity(min(requested_ids.len(), self.brick_request_limit));
             for id in requested_ids {

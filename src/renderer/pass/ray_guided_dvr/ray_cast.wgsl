@@ -40,7 +40,7 @@ struct GlobalSettings {
     render_mode: u32,
     step_scale: f32,
     max_steps: u32,
-    padding: u32,
+    num_visible_channels: u32,
     background_color: float4,
 }
 
@@ -62,7 +62,7 @@ struct ChannelSettings {
     threshold_lower: f32,
     threshold_upper: f32,
     visible: u32,
-    padding1: u32,
+    page_table_index: u32,
     padding2: u32,
 }
 
@@ -141,7 +141,7 @@ fn clone_channel_settings(channel_index: u32) -> ChannelSettings {
         channel_settings.threshold_lower,
         channel_settings.threshold_upper,
         channel_settings.visible,
-        0u, // padding1,
+        channel_settings.page_table_index, // page_table_index,
         0u  // padding2,
      );
 }
@@ -204,7 +204,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let timestamp = uniforms.timestamp;
 
-    let num_channels = arrayLength(&channel_settings_list.channels);
+    let num_channels = uniforms.settings.num_visible_channels;// arrayLength(&channel_settings_list.channels);
     let num_resolutions = arrayLength(&page_table_meta.resolutions) / num_channels;
 
     // todo: look for visible channels as soon as multiple channels are supported

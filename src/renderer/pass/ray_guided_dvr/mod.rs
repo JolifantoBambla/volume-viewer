@@ -7,6 +7,7 @@ use crate::renderer::{
 use crate::{MultiChannelVolumeRendererSettings, SparseResidencyTexture3D};
 use glam::{UVec4, Vec4};
 use std::{borrow::Cow, sync::Arc};
+use bytemuck::Contiguous;
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use wgsl_preprocessor::WGSLPreprocessor;
 
@@ -20,8 +21,19 @@ pub struct ChannelSettings {
     pub threshold_lower: f32,
     pub threshold_upper: f32,
     pub visible: u32,
-    padding1: u32,
+    pub page_table_index: u32,
     padding2: u32,
+}
+
+impl ChannelSettings {
+    pub fn from_channel_settings_with_mapping(settings: &crate::renderer::settings::ChannelSettings, mapping: Vec<Option<usize>>) -> Self {
+        let mut s = Self::from(settings);
+        //if s.visible {
+            //mapping.in
+            //s.page_table_index = mapping[]
+        //}
+        s
+    }
 }
 
 impl From<&crate::renderer::settings::ChannelSettings> for ChannelSettings {
@@ -34,7 +46,7 @@ impl From<&crate::renderer::settings::ChannelSettings> for ChannelSettings {
             threshold_lower: settings.threshold_lower,
             threshold_upper: settings.threshold_upper,
             visible: settings.visible as u32,
-            padding1: 0,
+            page_table_index: u32::MAX_VALUE,
             padding2: 0,
         }
     }
@@ -46,18 +58,22 @@ pub struct GlobalSettings {
     pub render_mode: u32,
     pub step_scale: f32,
     pub max_steps: u32,
-    padding1: u32,
+    pub num_visible_channels: u32,
     pub background_color: Vec4,
 }
 
 impl From<&MultiChannelVolumeRendererSettings> for GlobalSettings {
     fn from(settings: &MultiChannelVolumeRendererSettings) -> Self {
+        if settings.channel_settings.iter().filter(|c| c.visible).count() == 0 {
+            panic!("no visible channels");
+        }
+
         Self {
             render_mode: settings.render_mode as u32,
             step_scale: settings.step_scale,
             max_steps: settings.max_steps,
+            num_visible_channels: settings.channel_settings.iter().filter(|c| c.visible).count() as u32,
             background_color: Vec4::from(settings.background_color),
-            padding1: 0,
         }
     }
 }

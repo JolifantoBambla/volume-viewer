@@ -46,6 +46,7 @@ use crate::window::window_builder_without_size;
 // todo: remove this (this is for testing the preprocessor macro)
 #[allow(unused)]
 use include_preprocessed_wgsl::include_preprocessed;
+use crate::util::vec::vec_equals;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -202,6 +203,7 @@ pub fn run_event_loop(
 ) {
     let renderer = Rc::new(RefCell::new(renderer));
     let mut settings = render_settings.clone();
+    let mut last_channel_selection = settings.get_sorted_visible_channel_indices();
     let mut last_input = Input::new();
 
     // TODO: refactor these params
@@ -374,7 +376,17 @@ pub fn run_event_loop(
             },
             // todo: refactor this
             winit::event::Event::RedrawRequested(_) => {
-                let input = Input::from_last(&last_input);
+                let channel_selection = settings.get_sorted_visible_channel_indices();
+
+                let input = if vec_equals(&channel_selection, &last_channel_selection) {
+                    Input::from_last(&last_input)
+                } else {
+                    last_channel_selection = channel_selection.clone();
+                    Input::from_last_with_channel_selection(
+                        &last_input,
+                        channel_selection,
+                    )
+                };
 
                 renderer
                     .as_ref()

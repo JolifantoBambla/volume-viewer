@@ -16,6 +16,18 @@ use wgpu::{
 pub struct GpuListMeta {
     capacity: u32,
     fill_pointer: u32,
+    written_at: u32,
+}
+
+pub struct GpuListReadResult<T: bytemuck::Pod + bytemuck::Zeroable> {
+    list: Vec<T>,
+    written_at: u32,
+}
+
+impl<T: bytemuck::Pod + bytemuck::Zeroable> From<GpuListReadResult<T>> for (Vec<T>, u32) {
+    fn from(read_result: GpuListReadResult<T>) -> Self {
+        (read_result.list, read_result.written_at)
+    }
 }
 
 pub struct GpuList<T: bytemuck::Pod + bytemuck::Zeroable> {
@@ -35,6 +47,7 @@ impl<T: bytemuck::Pod> GpuList<T> {
         let meta = GpuListMeta {
             capacity,
             fill_pointer: 0,
+            written_at: 0,
         };
         let list_buffer = ctx.device.create_buffer(&BufferDescriptor {
             label: None,
@@ -102,20 +115,23 @@ impl<T: bytemuck::Pod> GpuList<T> {
     /// read and unmaps buffer
     /// panics if `GpuList::map_for_reading` has not been called and device has not been polled until
     /// mapping finished
-    pub fn read_mapped(&self) -> Vec<T> {
+    pub fn read_mapped(&self) -> Option<GpuListReadResult<T>> {
         if self.list_read_buffer.is_mapped() && self.meta_read_buffer.is_mapped() {
             let meta = self.meta_read_buffer.maybe_read_all()[0];
             let mut list = self.list_read_buffer.maybe_read_all();
 
             list.truncate(min(meta.fill_pointer, self.capacity) as usize);
 
-            list
+            Some(GpuListReadResult {
+                list,
+                written_at: meta.written_at
+            })
         } else {
-            Vec::new()
+            None
         }
     }
 
-    pub fn read(&self) -> Vec<T> {
+    pub fn read(&self) -> Option<GpuListReadResult<T>> {
         self.map_for_reading();
         self.ctx.device.poll(Maintain::Wait);
         self.read_mapped()
@@ -126,6 +142,7 @@ impl<T: bytemuck::Pod> GpuList<T> {
         let meta = GpuListMeta {
             capacity,
             fill_pointer: 0,
+            written_at: 0,
         };
         self.ctx.queue.write_buffer(
             &self.meta_buffer,
