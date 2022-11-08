@@ -44,9 +44,9 @@ use crate::volume::{
 use crate::window::window_builder_without_size;
 
 // todo: remove this (this is for testing the preprocessor macro)
+use crate::util::vec::vec_equals;
 #[allow(unused)]
 use include_preprocessed_wgsl::include_preprocessed;
-use crate::util::vec::vec_equals;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -382,10 +382,7 @@ pub fn run_event_loop(
                     Input::from_last(&last_input)
                 } else {
                     last_channel_selection = channel_selection.clone();
-                    Input::from_last_with_channel_selection(
-                        &last_input,
-                        channel_selection,
-                    )
+                    Input::from_last_with_channel_selection(&last_input, channel_selection)
                 };
 
                 renderer

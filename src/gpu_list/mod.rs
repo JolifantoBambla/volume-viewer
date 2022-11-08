@@ -124,7 +124,7 @@ impl<T: bytemuck::Pod> GpuList<T> {
 
             Some(GpuListReadResult {
                 list,
-                written_at: meta.written_at
+                written_at: meta.written_at,
             })
         } else {
             None

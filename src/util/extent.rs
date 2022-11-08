@@ -50,7 +50,7 @@ pub trait IndexToSubscript {
     fn index_to_subscript(&self, index: u32) -> Self::Size;
 }
 
-pub trait SubscriptToIndex<Size=Self> {
+pub trait SubscriptToIndex<Size = Self> {
     fn to_index(&self, size: &Size) -> u32;
 }
 

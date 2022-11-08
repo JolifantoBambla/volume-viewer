@@ -22,6 +22,7 @@ use crate::util::extent::{
 };
 use crate::volume::{Brick, BrickAddress, VolumeDataSource};
 
+use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
 use crate::resource::sparse_residency::texture3d::page_table::PageTableDirectory;
 use cache_management::{
     lru::LRUCache,
@@ -29,7 +30,6 @@ use cache_management::{
     Timestamp,
 };
 use page_table::{PageDirectoryMeta, PageTableEntryFlag};
-use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
 
 pub struct SparseResidencyTexture3DOptions {
     pub max_visible_channels: u32,
@@ -91,7 +91,9 @@ impl ChannelConfigurationState {
     }
 
     pub fn dataset_to_page_table(&self, channel_index: u32) -> Option<usize> {
-        self.page_table_to_data_set.iter().position(|&i| i == channel_index)
+        self.page_table_to_data_set
+            .iter()
+            .position(|&i| i == channel_index)
     }
 
     pub fn page_table_to_dataset(&self, channel_index: u32) -> u32 {
@@ -99,7 +101,10 @@ impl ChannelConfigurationState {
     }
 
     pub fn map_channel_indices(&self, channel_indices: &Vec<u32>) -> Vec<Option<usize>> {
-        channel_indices.iter().map(|&i| self.dataset_to_page_table(i)).collect()
+        channel_indices
+            .iter()
+            .map(|&i| self.dataset_to_page_table(i))
+            .collect()
     }
 }
 
@@ -110,7 +115,7 @@ impl Default for ChannelConfigurationState {
         Self {
             page_table_to_data_set: vec![0],
             represented_channels: HashSet::from([0]),
-            created_at: 0
+            created_at: 0,
         }
     }
 }
@@ -163,7 +168,7 @@ impl SparseResidencyTexture3D {
             volume_meta,
             settings.max_visible_channels,
             settings.max_resolutions,
-            ctx
+            ctx,
         );
 
         let lru_cache = LRUCache::new(
@@ -172,7 +177,8 @@ impl SparseResidencyTexture3D {
                 cache_entry_size: brick_size,
                 num_multi_buffering: settings.num_multi_buffering,
                 time_to_live: settings.cache_time_to_live,
-            },&timestamp_uniform_buffer,
+            },
+            &timestamp_uniform_buffer,
             wgsl_preprocessor,
             ctx,
         );
@@ -210,7 +216,7 @@ impl SparseResidencyTexture3D {
             cached_bricks: HashSet::new(),
             channel_configuration: vec![ChannelConfigurationState::from_mapping(
                 settings.visible_channel_indices,
-                0
+                0,
             )],
         }
     }
@@ -249,13 +255,13 @@ impl SparseResidencyTexture3D {
             let mut brick_addresses =
                 Vec::with_capacity(min(requested_ids.len(), self.brick_request_limit));
             for id in requested_ids {
-                let brick_address =
-                    self.map_from_page_table(
-                        self.page_table_directory.page_index_to_address(id),
-                        timestamp
-                    );
+                let brick_address = self.map_from_page_table(
+                    self.page_table_directory.page_index_to_address(id),
+                    timestamp,
+                );
                 let brick_id = brick_address.into();
-                if !self.cached_bricks.contains(&brick_id) && self.requested_bricks.insert(brick_id) {
+                if !self.cached_bricks.contains(&brick_id) && self.requested_bricks.insert(brick_id)
+                {
                     brick_addresses.push(brick_address);
                 }
                 if brick_addresses.len() >= self.brick_request_limit {
@@ -323,15 +329,22 @@ impl SparseResidencyTexture3D {
         }
     }
 
-    fn map_to_page_table(&self, brick_address: &BrickAddress, timestamp: Option<u32>) -> Option<BrickAddress> {
+    fn map_to_page_table(
+        &self,
+        brick_address: &BrickAddress,
+        timestamp: Option<u32>,
+    ) -> Option<BrickAddress> {
         let channel_configuration = if let Some(timestamp) = timestamp {
             self.get_channel_configuration(timestamp)
         } else {
             self.channel_configuration.last().unwrap()
         };
-        if let Some(channel) = channel_configuration
-            .dataset_to_page_table(brick_address.channel) {
-            Some(BrickAddress::new(brick_address.index, channel as u32, brick_address.level))
+        if let Some(channel) = channel_configuration.dataset_to_page_table(brick_address.channel) {
+            Some(BrickAddress::new(
+                brick_address.index,
+                channel as u32,
+                brick_address.level,
+            ))
         } else {
             None
         }
@@ -360,7 +373,11 @@ impl SparseResidencyTexture3D {
     /// ```
     ///
     /// ```
-    pub fn add_channel_configuration(&mut self, selected_channel_indices: &Vec<u32>, timestamp: u32) -> Vec<Option<usize>> {
+    pub fn add_channel_configuration(
+        &mut self,
+        selected_channel_indices: &Vec<u32>,
+        timestamp: u32,
+    ) -> Vec<Option<usize>> {
         let last_configuration = self.channel_configuration.last().unwrap();
         let selected_channels = HashSet::from_iter(selected_channel_indices.iter().copied());
 
@@ -368,7 +385,8 @@ impl SparseResidencyTexture3D {
             .difference(&last_configuration.represented_channels)
             .copied()
             .collect();
-        let no_longer_selected: Vec<u32> = last_configuration.represented_channels
+        let no_longer_selected: Vec<u32> = last_configuration
+            .represented_channels
             .difference(&selected_channels)
             .copied()
             .collect();
@@ -385,7 +403,8 @@ impl SparseResidencyTexture3D {
                         .dataset_to_page_table(no_longer_selected[i])
                         .unwrap();
                     new_pt2d[idx] = new_selected[i];
-                    self.page_table_directory.invalidate_channel_page_tables(idx as u32);
+                    self.page_table_directory
+                        .invalidate_channel_page_tables(idx as u32);
                 } else {
                     new_pt2d.push(new_selected[i]);
                 }
@@ -402,7 +421,7 @@ impl SparseResidencyTexture3D {
     pub fn get_channel_configuration(&self, timestamp: u32) -> &ChannelConfigurationState {
         for c in self.channel_configuration.iter().rev() {
             if timestamp >= c.created_at {
-                return c
+                return c;
             }
         }
         panic!("SparseResidencyTexture3D has no channel configuration");

@@ -6,7 +6,7 @@ use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{BindingResource, Buffer, BufferUsages, Extent3d};
 
 use crate::resource::Texture;
-use crate::util::extent::{IndexToSubscript, subscript_to_index, uvec_to_extent};
+use crate::util::extent::{subscript_to_index, uvec_to_extent, IndexToSubscript};
 use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta, ResolutionMeta};
 use crate::GPUContext;
 
@@ -139,7 +139,7 @@ impl PageTableDirectory {
         let meta = PageDirectoryMeta::new(
             volume_meta,
             max_visible_channels as usize,
-            max_resolutions as usize
+            max_resolutions as usize,
         );
 
         let res_meta_data: Vec<ResMeta> = meta
@@ -194,7 +194,9 @@ impl PageTableDirectory {
     }
 
     fn brick_address_to_page_index(&self, brick_address: &BrickAddress) -> usize {
-        let page_table = self.meta.get_page_table(brick_address.level, brick_address.channel);
+        let page_table = self
+            .meta
+            .get_page_table(brick_address.level, brick_address.channel);
         let offset = page_table.offset;
         let location = UVec3::from_slice(brick_address.index.as_slice());
         let page_index =
@@ -223,13 +225,12 @@ impl PageTableDirectory {
         let offset = page_table.offset;
         let last = offset + page_table.extent;
 
-        let begin =
-            subscript_to_index(&(offset), &self.page_directory.extent) as usize;
-        let end =
-            subscript_to_index(&last, &self.page_directory.extent) as usize;
+        let begin = subscript_to_index(&(offset), &self.page_directory.extent) as usize;
+        let end = subscript_to_index(&last, &self.page_directory.extent) as usize;
 
         for index in begin..end {
-            self.local_page_directory[index] = UVec3::ZERO.extend(PageTableEntryFlag::Unmapped as u32);
+            self.local_page_directory[index] =
+                UVec3::ZERO.extend(PageTableEntryFlag::Unmapped as u32);
         }
     }
 

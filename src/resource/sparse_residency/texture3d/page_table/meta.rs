@@ -1,7 +1,7 @@
-use std::cmp::min;
+use crate::util::extent::SubscriptToIndex;
 use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta, ResolutionMeta};
 use glam::{UVec2, UVec3, Vec3};
-use crate::util::extent::{SubscriptToIndex};
+use std::cmp::min;
 
 #[repr(C)]
 #[derive(Clone)]
@@ -52,7 +52,11 @@ pub struct PageDirectoryMeta {
 impl PageDirectoryMeta {
     // todo: configure how many channels the page table can hold
     // todo: more efficient packing strategy
-    pub fn new(volume_meta: &BrickedMultiResolutionMultiVolumeMeta, max_channels: usize, max_resolutions: usize) -> Self {
+    pub fn new(
+        volume_meta: &BrickedMultiResolutionMultiVolumeMeta,
+        max_channels: usize,
+        max_resolutions: usize,
+    ) -> Self {
         let num_channels = min(max_channels, volume_meta.channels.len());
         let num_resolutions = min(max_resolutions, volume_meta.resolutions.len());
 

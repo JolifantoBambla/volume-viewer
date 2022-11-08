@@ -19,8 +19,8 @@ use crate::renderer::pass::{ray_guided_dvr, GPUPass};
 use crate::wgsl::create_wgsl_preprocessor;
 
 use bytemuck;
-use std::sync::Arc;
 use bytemuck::Contiguous;
+use std::sync::Arc;
 use wasm_bindgen::JsCast;
 use web_sys::OffscreenCanvas;
 use wgpu::util::DeviceExt;
@@ -30,9 +30,9 @@ use winit::dpi::PhysicalSize;
 use crate::input::Input;
 use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::ray_guided_dvr::{ChannelSettings, RayGuidedDVR, Resources};
+use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
 use crate::{MultiChannelVolumeRendererSettings, SparseResidencyTexture3D, VolumeDataSource};
 pub use trivial_volume_renderer::TrivialVolumeRenderer;
-use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
 
 struct ChannelConfiguration {
     visible_channel_indices: Vec<u32>,
@@ -102,7 +102,7 @@ impl MultiChannelVolumeRenderer {
                 ..Default::default()
             },
             &wgsl_preprocessor,
-            &ctx
+            &ctx,
         );
 
         let channel_mapping = volume_texture
@@ -203,9 +203,17 @@ impl MultiChannelVolumeRenderer {
         }
     }
 
-    fn map_channel_settings(&self, settings: &MultiChannelVolumeRendererSettings) -> Vec<ChannelSettings> {
+    fn map_channel_settings(
+        &self,
+        settings: &MultiChannelVolumeRendererSettings,
+    ) -> Vec<ChannelSettings> {
         let mut channel_settings = Vec::new();
-        for (i, &channel) in self.channel_configuration.visible_channel_indices.iter().enumerate() {
+        for (i, &channel) in self
+            .channel_configuration
+            .visible_channel_indices
+            .iter()
+            .enumerate()
+        {
             let mut cs = ChannelSettings::from(&settings.channel_settings[channel as usize]);
             cs.page_table_index = self.channel_configuration.channel_mapping[i];
             channel_settings.push(cs);
@@ -275,7 +283,8 @@ impl MultiChannelVolumeRenderer {
     pub fn post_render(&mut self, input: &Input) {
         // todo: both of these should go into volume_texture's post_render & add_channel_configuration should not be exposed
         if let Some(new_channel_selection) = input.new_channel_selection.as_ref() {
-            let channel_mapping = self.volume_texture
+            let channel_mapping = self
+                .volume_texture
                 .add_channel_configuration(new_channel_selection, input.frame.number)
                 .iter()
                 .map(|c| c.unwrap() as u32)

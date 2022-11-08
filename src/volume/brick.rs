@@ -26,11 +26,11 @@ pub struct BrickAddress {
 
 impl BrickAddress {
     pub fn new(index: [u32; 3], channel: u32, resolution: u32) -> Self {
-       Self {
-           index,
-           channel,
-           level: resolution,
-       }
+        Self {
+            index,
+            channel,
+            level: resolution,
+        }
     }
 }
 

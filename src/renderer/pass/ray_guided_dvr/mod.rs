@@ -5,9 +5,9 @@ use crate::renderer::{
     pass::{AsBindGroupEntries, GPUPass},
 };
 use crate::{MultiChannelVolumeRendererSettings, SparseResidencyTexture3D};
+use bytemuck::Contiguous;
 use glam::{UVec4, Vec4};
 use std::{borrow::Cow, sync::Arc};
-use bytemuck::Contiguous;
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use wgsl_preprocessor::WGSLPreprocessor;
 
@@ -23,17 +23,6 @@ pub struct ChannelSettings {
     pub visible: u32,
     pub page_table_index: u32,
     padding2: u32,
-}
-
-impl ChannelSettings {
-    pub fn from_channel_settings_with_mapping(settings: &crate::renderer::settings::ChannelSettings, mapping: Vec<Option<usize>>) -> Self {
-        let mut s = Self::from(settings);
-        //if s.visible {
-            //mapping.in
-            //s.page_table_index = mapping[]
-        //}
-        s
-    }
 }
 
 impl From<&crate::renderer::settings::ChannelSettings> for ChannelSettings {
@@ -68,7 +57,11 @@ impl From<&MultiChannelVolumeRendererSettings> for GlobalSettings {
             render_mode: settings.render_mode as u32,
             step_scale: settings.step_scale,
             max_steps: settings.max_steps,
-            num_visible_channels: settings.channel_settings.iter().filter(|c| c.visible).count() as u32,
+            num_visible_channels: settings
+                .channel_settings
+                .iter()
+                .filter(|c| c.visible)
+                .count() as u32,
             background_color: Vec4::from(settings.background_color),
         }
     }
