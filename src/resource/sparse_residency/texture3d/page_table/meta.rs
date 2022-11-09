@@ -1,5 +1,5 @@
 use crate::util::extent::SubscriptToIndex;
-use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta, ResolutionMeta};
+use crate::volume::{BrickedMultiResolutionMultiVolumeMeta, ResolutionMeta};
 use glam::{UVec2, UVec3, Vec3};
 use std::cmp::min;
 

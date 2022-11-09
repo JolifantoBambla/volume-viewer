@@ -36,15 +36,6 @@ pub struct Input {
 }
 
 impl Input {
-    pub fn new() -> Self {
-        let now = now() as f32;
-        Self {
-            frame: Frame::new(0),
-            time: Time::new(now, now),
-            new_channel_selection: None,
-        }
-    }
-
     pub fn from_last(last: &Input) -> Self {
         let now = now() as f32;
         Self {
@@ -58,5 +49,16 @@ impl Input {
         let mut input = Self::from_last(last);
         input.new_channel_selection = Some(channel_selection);
         input
+    }
+}
+
+impl Default for Input{
+    fn default() -> Self {
+        let now = now() as f32;
+        Self {
+            frame: Frame::new(0),
+            time: Time::new(now, now),
+            new_channel_selection: None,
+        }
     }
 }

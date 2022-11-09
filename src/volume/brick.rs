@@ -1,5 +1,3 @@
-use crate::util::extent::box_volume;
-use glam::UVec3;
 use serde::{Deserialize, Serialize};
 
 #[readonly::make]

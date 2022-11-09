@@ -7,7 +7,7 @@ use wgpu::{BindingResource, Buffer, BufferUsages, Extent3d};
 
 use crate::resource::Texture;
 use crate::util::extent::{subscript_to_index, uvec_to_extent, IndexToSubscript};
-use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta, ResolutionMeta};
+use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 use crate::GPUContext;
 
 pub use meta::{PageDirectoryMeta, PageTableMeta};

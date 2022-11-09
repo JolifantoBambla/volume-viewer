@@ -6,7 +6,6 @@ pub mod settings;
 pub mod trivial_volume_renderer;
 pub mod volume;
 
-use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
 use crate::resource;
@@ -19,7 +18,6 @@ use crate::renderer::pass::{ray_guided_dvr, GPUPass};
 use crate::wgsl::create_wgsl_preprocessor;
 
 use bytemuck;
-use bytemuck::Contiguous;
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
 use web_sys::OffscreenCanvas;
@@ -162,7 +160,7 @@ impl MultiChannelVolumeRenderer {
         let channel_settings: Vec<ChannelSettings> = render_settings
             .channel_settings
             .iter()
-            .map(|cs| ChannelSettings::from(cs))
+            .map(ChannelSettings::from)
             .collect();
         let volume_render_channel_settings_buffer =
             ctx.device

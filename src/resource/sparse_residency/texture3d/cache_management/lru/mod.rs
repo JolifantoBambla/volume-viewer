@@ -4,10 +4,8 @@
 mod lru_update;
 
 use glam::UVec3;
-use std::collections::HashSet;
 use std::mem::size_of;
 use std::sync::Arc;
-use web_sys::console::time;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroup, BindingResource, Buffer, BufferAddress, BufferUsages, CommandEncoder, Extent3d,
@@ -15,7 +13,6 @@ use wgpu::{
 };
 use wgsl_preprocessor::WGSLPreprocessor;
 
-use crate::renderer::pass::GPUPass;
 use crate::resource::Texture;
 use crate::util::extent::{
     box_volume, extent_to_uvec, index_to_subscript, uvec_to_extent, uvec_to_origin,

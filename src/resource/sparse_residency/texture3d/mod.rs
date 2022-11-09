@@ -1,11 +1,10 @@
 mod cache_management;
 mod page_table;
 
-use glam::{UVec3, UVec4, Vec3};
+use glam::{UVec3, Vec3};
 use std::cmp::min;
 use std::collections::HashSet;
 use std::sync::Arc;
-use web_sys::console::time;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroup, BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferUsages,
@@ -17,10 +16,7 @@ use crate::input::Input;
 use crate::renderer::context::GPUContext;
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use crate::resource::Texture;
-use crate::util::extent::{
-    extent_to_uvec, index_to_subscript, subscript_to_index, uvec_to_extent, uvec_to_origin,
-};
-use crate::volume::{Brick, BrickAddress, VolumeDataSource};
+use crate::volume::{BrickAddress, VolumeDataSource};
 
 use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
 use crate::resource::sparse_residency::texture3d::page_table::PageTableDirectory;
@@ -29,7 +25,6 @@ use cache_management::{
     process_requests::{ProcessRequests, Resources},
     Timestamp,
 };
-use page_table::{PageDirectoryMeta, PageTableEntryFlag};
 
 pub struct SparseResidencyTexture3DOptions {
     pub max_visible_channels: u32,

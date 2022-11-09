@@ -1,10 +1,9 @@
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
-use crate::resource::{MappableBuffer, Texture};
+use crate::resource::Texture;
 use crate::util::extent::extent_volume;
 use crate::GPUContext;
 use std::borrow::Cow;
 use std::mem::size_of;
-use std::process::Command;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{

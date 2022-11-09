@@ -204,7 +204,7 @@ pub fn run_event_loop(
     let renderer = Rc::new(RefCell::new(renderer));
     let mut settings = render_settings.clone();
     let mut last_channel_selection = settings.get_sorted_visible_channel_indices();
-    let mut last_input = Input::new();
+    let mut last_input = Input::default();
 
     // TODO: refactor these params
     let distance_from_center = 500.;
