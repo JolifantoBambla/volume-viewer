@@ -394,9 +394,8 @@ export class OmeZarrDataSource extends VolumeDataSource {
                 dtypeDescriptor,
                 brickAddress);
 
-            // todo: data is already uint8 here - don't pass dtypeDescriptor!
             // todo: all values below isZeroThreshold should be set 0 - right now, only blocks containing only such data are set 0!
-            if (isZero(data, dtypeDescriptor, this.isZeroThreshold)) {
+            if (isZero(data, { type: 'u1' }, this.isZeroThreshold)) {
                 this.#setBrickEmpty(brickAddress);
             } else {
                 return data;
