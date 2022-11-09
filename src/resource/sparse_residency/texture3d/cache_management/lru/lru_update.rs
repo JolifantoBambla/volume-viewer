@@ -58,10 +58,7 @@ pub(crate) struct LRUUpdate {
     scan_even: Buffer,
     scan_odd: Buffer,
 
-    // todo: remove (debug)
-    pub scan_even_read_buffer: MappableBuffer<u32>,
-    pub scan_odd_read_buffer: MappableBuffer<u32>,
-    pub num_entries: u32,
+    num_entries: u32,
 
     state_buffer: Buffer,
     state_init: Vec<u32>,
@@ -85,13 +82,6 @@ impl LRUUpdate {
             label: None,
             size: (size_of::<u32>() * num_entries as usize) as BufferAddress,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, // todo: remove copy_src
-            mapped_at_creation: false,
-        };
-        // todo: remove (debug)
-        let scan_buffer_read_descriptor = BufferDescriptor {
-            label: None,
-            size: (size_of::<u32>() * num_entries as usize) as BufferAddress,
-            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         };
         let scan_even = ctx.device.create_buffer(&scan_buffer_descriptor);
@@ -181,12 +171,6 @@ impl LRUUpdate {
             scan_even,
             scan_odd,
 
-            scan_even_read_buffer: MappableBuffer::new(
-                ctx.device.create_buffer(&scan_buffer_read_descriptor),
-            ),
-            scan_odd_read_buffer: MappableBuffer::new(
-                ctx.device.create_buffer(&scan_buffer_read_descriptor),
-            ),
             num_entries,
 
             state_buffer,
@@ -250,27 +234,6 @@ impl LRUUpdate {
         cpass.set_bind_group(1, &self.accumulate_and_update_lru_internal_bind_group, &[]);
         cpass.insert_debug_marker(self.label());
         cpass.dispatch_workgroups(1, 1, 1);
-    }
-
-    // todo: remove(debug)
-    pub fn encode_copy(&self, command_encoder: &mut CommandEncoder) {
-        if self.scan_even_read_buffer.is_ready() && self.scan_odd_read_buffer.is_ready() {
-            let buffer_size = (size_of::<u32>() as u32 * self.num_entries) as BufferAddress;
-            command_encoder.copy_buffer_to_buffer(
-                &self.scan_even,
-                0,
-                self.scan_even_read_buffer.as_buffer_ref(),
-                0,
-                buffer_size,
-            );
-            command_encoder.copy_buffer_to_buffer(
-                &self.scan_odd,
-                0,
-                self.scan_odd_read_buffer.as_buffer_ref(),
-                0,
-                buffer_size,
-            );
-        }
     }
 
     pub fn create_bind_groups(&self, resources: &Resources) -> Vec<BindGroup> {

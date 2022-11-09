@@ -161,9 +161,6 @@ impl LRUCache {
             &self.usage_buffer.extent,
         );
         self.copy_to_readable(encoder, timestamp + 1);
-
-        // todo: remove(debug)
-        self.lru_update_pass.encode_copy(encoder);
     }
 
     fn copy_to_readable(&self, encoder: &mut CommandEncoder, buffer_index: u32) {
@@ -199,18 +196,8 @@ impl LRUCache {
         self.num_used_entries_read_buffer
             .map_async(next_frame, MapMode::Read, ..);
 
-        // todo: remove(debug)
-        self.lru_update_pass
-            .scan_even_read_buffer
-            .map_async(MapMode::Read, ..);
-        self.lru_update_pass
-            .scan_odd_read_buffer
-            .map_async(MapMode::Read, ..);
-
         if self.lru_read_buffer.is_mapped(timestamp)
             && self.num_used_entries_read_buffer.is_mapped(timestamp)
-            && self.lru_update_pass.scan_even_read_buffer.is_mapped()
-            && self.lru_update_pass.scan_odd_read_buffer.is_mapped()
         {
             let lru = self.lru_read_buffer.maybe_read_all(timestamp);
             let num_used_entries = self.num_used_entries_read_buffer.maybe_read_all(timestamp);
@@ -218,22 +205,6 @@ impl LRUCache {
             if lru.is_empty() || num_used_entries.is_empty() {
                 log::error!("Could not read LRU at frame {}", timestamp);
             } else {
-                let h: HashSet<u32> = HashSet::from_iter(lru.iter().cloned());
-
-                let scan_even = self.lru_update_pass.scan_even_read_buffer.maybe_read_all();
-                let scan_odd = self.lru_update_pass.scan_odd_read_buffer.maybe_read_all();
-
-                assert_eq!(
-                    h.len(),
-                    lru.len(),
-                    "lru {:?},\n num_used: {},\n scan_odd: {:?},\n scan_even: {:?}",
-                    lru,
-                    num_used_entries[0].num,
-                    scan_odd,
-                    scan_even
-                );
-
-                //log::info!("updated lru {:?}", lru);
                 self.lru_local = lru;
                 self.num_used_entries_local = num_used_entries[0].num;
                 self.next_empty_index = self.lru_local.len() as u32;
@@ -266,14 +237,12 @@ impl LRUCache {
         data: &Vec<u8>,
         input: &Input,
     ) -> Result<UVec3, CacheFullError> {
-        let mut last_i = (self.next_empty_index + 1) as usize;
         for i in ((self.num_used_entries_local as usize)..(self.next_empty_index as usize)).rev() {
             let cache_entry_index = self.lru_local[i];
             let last_written = self.lru_last_writes[cache_entry_index as usize];
             if last_written > input.frame.number
                 || (input.frame.number - last_written) > self.time_to_live
             {
-                log::info!("writing idx {}", cache_entry_index);
                 let extent = uvec_to_extent(
                     &(index_to_subscript(
                         (data.len() as u32) - 1,
@@ -293,11 +262,13 @@ impl LRUCache {
                 return Ok(cache_entry_location);
             }
         }
+        /*
         log::info!(
             "next empty index {}, num used {}",
             self.next_empty_index,
             self.num_used_entries_local
         );
+         */
         Err(CacheFullError {})
     }
 
