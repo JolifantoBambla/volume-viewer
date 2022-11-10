@@ -24,6 +24,19 @@ const splitDtype = dtype => {
     }
 };
 
+const maxValue = (data, dtypeDescriptor) => {
+    switch (dtypeDescriptor.type) {
+        case 'u1':
+            return maxU8(data);
+        case 'u2':
+            return maxU16(data);
+        case 'f4':
+            return maxF32(data);
+        default:
+            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+    }
+}
+
 const getMaxValueForDataTypeDescriptor = dtypeDescriptor => {
     switch (dtypeDescriptor.type) {
         case 'u1':
@@ -198,7 +211,7 @@ export class VolumeDataSource extends BrickLoader {
         throw new Error("not implemented");
     }
 
-    async getMaxValue() {
+    async getMaxValue(brickAddress, dtypeDescriptor) {
         throw new Error("not implemented");
     }
 
@@ -210,8 +223,8 @@ export class VolumeDataSource extends BrickLoader {
         return this.#config.preprocessing.preprocessingMethod || PREPROCESS_METHOD_CAST;
     }
 
-    async #scaleToMax(data, dtypeDescriptor) {
-        const maxValue = await this.getMaxValue();
+    async #scaleToMax(data, dtypeDescriptor, brickAddress) {
+        const maxValue = await this.getMaxValue(brickAddress, dtypeDescriptor);
         switch (dtypeDescriptor.type) {
             case 'u1':
                 return scaleU8ToU8(data, maxValue);
@@ -224,8 +237,8 @@ export class VolumeDataSource extends BrickLoader {
         }
     }
 
-    async #logScale(data, dtypeDescriptor) {
-        const maxValue = await this.getMaxValue();
+    async #logScale(data, dtypeDescriptor, brickAddress) {
+        const maxValue = await this.getMaxValue(brickAddress, dtypeDescriptor);
         switch (dtypeDescriptor.type) {
             case 'u1':
                 return logScaleU8(data, maxValue);
@@ -238,12 +251,12 @@ export class VolumeDataSource extends BrickLoader {
         }
     }
 
-    async preprocess(data, dtypeDescriptor) {
+    async preprocess(data, dtypeDescriptor, brickAddress) {
         switch (this.preprocessingMethod) {
             case PREPROCESS_METHOD_LOG_SCALE:
-                return this.#logScale(data, dtypeDescriptor);
+                return this.#logScale(data, dtypeDescriptor, brickAddress);
             case PREPROCESS_METHOD_SCALE_TO_MAX:
-                return this.#scaleToMax(data, dtypeDescriptor);
+                return this.#scaleToMax(data, dtypeDescriptor, brickAddress);
             case PREPROCESS_METHOD_LOG:
                 return logTransformToU8(data, dtypeDescriptor);
             case PREPROCESS_METHOD_CAST:
@@ -378,11 +391,11 @@ export class OmeZarrDataSource extends VolumeDataSource {
                 .getRaw([0, brickAddress.channel, ...brickSelection]);
             const data = await this.preprocess(
                 raw.data,
-                dtypeDescriptor);
+                dtypeDescriptor,
+                brickAddress);
 
-            // todo: data is already uint8 here - don't pass dtypeDescriptor!
             // todo: all values below isZeroThreshold should be set 0 - right now, only blocks containing only such data are set 0!
-            if (isZero(data, dtypeDescriptor, this.isZeroThreshold)) {
+            if (isZero(data, { type: 'u1' }, this.isZeroThreshold)) {
                 this.#setBrickEmpty(brickAddress);
             } else {
                 return data;
@@ -391,17 +404,18 @@ export class OmeZarrDataSource extends VolumeDataSource {
         return new Uint8Array(0);
     }
 
-    async getMaxValue(brickAddress) {
+    async getMaxValue(brickAddress, dtypeDescriptor) {
         if (!this.#maxValues[brickAddress.channel]) {
-            this.#maxValues[channel] = maxValue(
+            this.#maxValues[brickAddress.channel] = maxValue(
                 (await this.#zarrArrays
                         .slice()
                         .reverse()[0]
-                        .getRaw([0, channel])
-                ).data
+                        .getRaw([0, brickAddress.channel])
+                ).data,
+                dtypeDescriptor
             );
         }
-        return this.#maxValues[channel];
+        return this.#maxValues[brickAddress.channel];
     }
 }
 
@@ -448,7 +462,7 @@ export class BrickConfig {
             }
         }
         this.minimumSize = minSize;
-        this.maximumSize = minSize;
+        this.maximumSize = maxSize;
     }
 }
 

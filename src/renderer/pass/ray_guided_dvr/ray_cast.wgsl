@@ -40,7 +40,7 @@ struct GlobalSettings {
     render_mode: u32,
     step_scale: f32,
     max_steps: u32,
-    padding: u32,
+    num_visible_channels: u32,
     background_color: float4,
 }
 
@@ -62,7 +62,7 @@ struct ChannelSettings {
     threshold_lower: f32,
     threshold_upper: f32,
     visible: u32,
-    padding1: u32,
+    page_table_index: u32,
     padding2: u32,
 }
 
@@ -141,7 +141,7 @@ fn clone_channel_settings(channel_index: u32) -> ChannelSettings {
         channel_settings.threshold_lower,
         channel_settings.threshold_upper,
         channel_settings.visible,
-        0u, // padding1,
+        channel_settings.page_table_index, // page_table_index,
         0u  // padding2,
      );
 }
@@ -204,10 +204,13 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let timestamp = uniforms.timestamp;
 
+    let num_channels = uniforms.settings.num_visible_channels;// arrayLength(&channel_settings_list.channels);
+    let num_resolutions = arrayLength(&page_table_meta.resolutions) / num_channels;
+
     // todo: look for visible channels as soon as multiple channels are supported
     let cs = clone_channel_settings(0);
-    
-    let lowest_res = min(cs.min_lod, arrayLength(&page_table_meta.resolutions));
+
+    let lowest_res = min(cs.min_lod, num_resolutions);
     let highest_res = min(cs.max_lod, lowest_res);
     
     let brick_size = page_table_meta.resolutions[0].brick_size;
@@ -216,13 +219,12 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var color = float4();
     var requested_brick = false;
     var last_lod = 0u;
-    var page_table = clone_page_table_meta(0u);
     var steps_taken = 0u;
 
-    // todo: remove this (debug)
-    var request_bricks = true;
-
     if (uniforms.settings.render_mode == GRID_TRAVERSAL) {
+        // todo: use active_page_tables instead
+        var page_table = clone_page_table_meta(0u);
+
         for (
             var grid_traversal = create_grid_traversal(ray_os, t_min, t_max, page_table);
             in_grid(grid_traversal);
@@ -250,7 +252,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 // todo: remove this (debug)
                 color = float4(page_color, 1.);
 
-                if (!requested_brick && request_bricks) {
+                if (!requested_brick) {
                     // todo: maybe request lower res as well?
                     request_brick(int3(page_address));
                     requested_brick = true;
@@ -292,61 +294,63 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             }
         }
     } else {
-        let dt_vec = 1. / (float3(page_table.volume_size) * abs(ray_os.direction));
-        let dt_scale = uniforms.settings.step_scale;
-        let dt = dt_scale * min_component(dt_vec);
         let offset = wang_hash(pixel.x + 640 * pixel.y);
-        var p = ray_at(ray_os, t_min + offset * dt);
+        let dt_scale = uniforms.settings.step_scale;
 
-        var last_page_address = uint3(textureDimensions(page_directory)) + uint3(1u);
-        var page = PageTableEntry();
+        var dt_vec = 1. / (float3(page_table_meta.resolutions[last_lod].volume_size) * abs(ray_os.direction));
+        var dt = dt_scale * min_component(dt_vec);
+        var p = ray_at(ray_os, t_min + offset * dt);
 
         for (var t = t_min; t < t_max; t += dt) {
             let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
             let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res);
-            if (lod != last_lod) {
+            let lod_changed = lod != last_lod;
+            if (lod_changed) {
                 last_lod = lod;
-                page_table = clone_page_table_meta(lod);
-                //step = unscaled_step / float3(page_table.volume_size);
+                dt_vec = 1. / (float3(page_table_meta.resolutions[lod * num_channels].volume_size) * abs(ray_os.direction));
+                dt = dt_scale * min_component(dt_vec);
             }
 
-            // todo: think about this more carefully - does that change the ray or not?
-            let position_corrected = p * compute_volume_to_padded(page_table);
-            let page_address = compute_page_address(page_table, position_corrected);
-            if (any(last_page_address != page_address)) {
-                last_page_address = page_address;
-                page = get_page(page_address);
-            }
+            for (var channel = 0u; channel < num_channels; channel += 1u) {
+                let page_table = clone_page_table_meta(channel + lod * num_channels);
 
-            // todo: remove (debug)
-            let page_color = float3(page_address) / float3(7., 7., 1.);
+                // todo: think about this more carefully - does that change the ray or not?
+                let position_corrected = p * compute_volume_to_padded(page_table);
+                let page_address = compute_page_address(page_table, position_corrected);
+                let page = get_page(page_address);
 
-            if (page.flag == UNMAPPED) {
-                // todo: remove this (debug)
-                color = float4(page_color, 1.);
+                // todo: remove (debug)
+                let page_color = float3(page_address) / float3(7., 7., 1.);
 
-                if (!requested_brick && request_bricks) {
-                    // todo: maybe request lower res as well?
-                    request_brick(int3(page_address));
-                    requested_brick = true;
-                }
-            } else if (page.flag == MAPPED) {
-                report_usage(int3(page.location / brick_size));
+                if (page.flag == UNMAPPED) {
+                    // todo: remove this (debug)
+                    color = float4(page_color, 1.);
 
-                let sample_location = normalize_cache_address(compute_cache_address(page_table, p, page));
-                let value = sample_volume(sample_location);
+                    if (!requested_brick) {
+                        // todo: maybe request lower res as well?
+                        request_brick(int3(page_address));
+                        requested_brick = true;
+                    }
+                } else if (page.flag == MAPPED) {
+                    report_usage(int3(page.location / brick_size));
 
-                // todo: make minimum threshold configurable
-                if (value >= cs.threshold_lower && value <= cs.threshold_upper) {
-                    let trans_sample = cs.color;
-                    var val_color = float4(trans_sample.rgb, value * trans_sample.a);
-                    val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
-                    color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
-                    color.a += (1.0 - color.a) * val_color.a;
-                }
+                    let sample_location = normalize_cache_address(
+                        compute_cache_address(page_table, p, page)
+                    );
+                    let value = sample_volume(sample_location);
 
-                if (is_saturated(color)) {
-                    break;
+                    // todo: make minimum threshold configurable
+                    if (value >= channel_settings_list.channels[channel].threshold_lower && value <= channel_settings_list.channels[channel].threshold_upper) {
+                        let trans_sample = channel_settings_list.channels[channel].color;
+                        var val_color = float4(trans_sample.rgb, value * trans_sample.a);
+                        val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
+                        color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
+                        color.a += (1.0 - color.a) * val_color.a;
+                    }
+
+                    if (is_saturated(color)) {
+                        break;
+                    }
                 }
             }
 
@@ -357,121 +361,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
             p += ray_os.direction * dt;
         }
-
-        /*
-        let entry_os = clamp_to_one(ray_at(ray_os, t_min));
-        let exit_os = clamp_to_one(ray_at(ray_os, t_max));
-        let unscaled_step = (exit_os - entry_os) * uniforms.settings.step_scale;
-        let view_direction = normalize(unscaled_step);
-
-        let dist = distance(exit_os, entry_os);
-
-        var step = unscaled_step / float3(page_table.volume_size);
-        var last_page_address = uint3(textureDimensions(page_directory)) + uint3(1u);
-        var page = PageTableEntry();
-
-        var i = 0;
-
-        for (
-            var position = entry_os;
-            aabb_contains(volume_bounds_os, position);
-            position += step
-        ) {
-            //let steps_per_dim = dist / abs(step);
-            //let num_steps = min(100., steps_per_dim[min_dimension(steps_per_dim)]) / 100.;
-            //if (num_steps > 0.) {
-            //    color = float4(float3(num_steps), 1.);
-            //    break;
-            //}
-            //if (any(int3(sign(ray_os.direction)) != int3(sign(view_direction)))) {
-            //    color = RED;
-            //    break;
-            //}
-
-            let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
-            let lod = select_level_of_detail(distance_to_camera, lowest_res);
-            if (lod != last_lod) {
-                last_lod = lod;
-                page_table = clone_page_table_meta(lod);
-                step = unscaled_step / float3(page_table.volume_size);
-            }
-
-            // todo: think about this more carefully - does that change the ray or not?
-            let position_corrected = position * compute_volume_to_padded(page_table);
-            let page_address = compute_page_address(page_table, position_corrected);
-            if (any(last_page_address != page_address)) {
-                last_page_address = page_address;
-                page = get_page(page_address);
-            }
-
-            // todo: remove (debug)
-            let page_color = float3(page_address) / float3(7., 7., 1.);
-
-            if (page.flag == UNMAPPED) {
-                // todo: remove this (debug)
-                color = float4(page_color, 1.);
-
-                if (!requested_brick && request_bricks) {
-                    // todo: maybe request lower res as well?
-                    request_brick(int3(page_address));
-                    requested_brick = true;
-                }
-            } else if (page.flag == MAPPED) {
-                report_usage(int3(page.location / brick_size));
-
-                let sample_location = normalize_cache_address(compute_cache_address(page_table, position, page));
-                let value = sample_volume(sample_location);
-
-                // todo: make minimum threshold configurable
-                if (value > uniforms.settings.threshold) {
-                    var lighting = compute_lighting(value, sample_location, step, view_direction);
-                    lighting.a = value;
-                    color += lighting;
-                }
-
-                if (is_saturated(color)) {
-                    break;
-                }
-            }
-            i += 1;
-            if (i >= 100) {
-                color = GREEN;
-                break;
-            }
-        }
-        */
     }
 
     debug(pixel, color);
 }
-
-/*
-	vec3 ray_dir = normalize(vray_dir);
-	vec2 t_hit = intersect_box(transformed_eye, ray_dir);
-	if (t_hit.x > t_hit.y) {
-		discard;
-	}
-	t_hit.x = max(t_hit.x, 0.0);
-	vec3 dt_vec = 1.0 / (vec3(volume_dims) * abs(ray_dir));
-	float dt = dt_scale * min(dt_vec.x, min(dt_vec.y, dt_vec.z));
-	// with offset is bad for flat surfaces, without has wood grain
-	float offset = wang_hash(int(gl_FragCoord.x + 640.0 * gl_FragCoord.y));
-	// float offset = 0.0;
-	vec3 p = transformed_eye + (t_hit.x + offset * dt) * ray_dir;
-	for (float t = t_hit.x; t < t_hit.y; t += dt) {
-		float val = texture(volume, p).r;
-		vec4 trans_sample = texture(colormap, vec2(val, 0.5));
-		vec4 val_color = vec4(trans_sample.rgb, val * trans_sample.a);
-		// Opacity correction
-		val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
-		color.rgb += (1.0 - color.a) * val_color.a * val_color.rgb;
-		color.a += (1.0 - color.a) * val_color.a;
-		if (color.a >= 0.95) {
-			break;
-		}
-		p += ray_dir * dt;
-	}
-*/
 
 fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32, channel_settings: ChannelSettings) -> float4 {
     let view_direction = normalize(step);

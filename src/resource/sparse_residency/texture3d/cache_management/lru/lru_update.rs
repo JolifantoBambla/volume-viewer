@@ -1,16 +1,15 @@
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
-use crate::resource::{MappableBuffer, Texture};
+use crate::resource::Texture;
 use crate::util::extent::extent_volume;
 use crate::GPUContext;
 use std::borrow::Cow;
 use std::mem::size_of;
-use std::process::Command;
 use std::sync::Arc;
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroup, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress, BufferDescriptor,
     BufferUsages, CommandEncoder,
 };
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgsl_preprocessor::WGSLPreprocessor;
 
 pub struct Resources<'a> {
@@ -58,11 +57,7 @@ pub(crate) struct LRUUpdate {
     scan_even: Buffer,
     scan_odd: Buffer,
 
-
-    // todo: remove (debug)
-    pub scan_even_read_buffer: MappableBuffer<u32>,
-    pub scan_odd_read_buffer: MappableBuffer<u32>,
-    pub num_entries: u32,
+    num_entries: u32,
 
     state_buffer: Buffer,
     state_init: Vec<u32>,
@@ -88,13 +83,6 @@ impl LRUUpdate {
             usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, // todo: remove copy_src
             mapped_at_creation: false,
         };
-        // todo: remove (debug)
-        let scan_buffer_read_descriptor = BufferDescriptor {
-            label: None,
-            size: (size_of::<u32>() * num_entries as usize) as BufferAddress,
-            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        };
         let scan_even = ctx.device.create_buffer(&scan_buffer_descriptor);
         let scan_odd = ctx.device.create_buffer(&scan_buffer_descriptor);
 
@@ -109,58 +97,63 @@ impl LRUUpdate {
                         .unwrap(),
                 )),
             });
-        let group_wise_scan_pipeline = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: None,
-                layout: None,
-                module: &shader_module,
-                entry_point: "group_wise_scan",
-            });
+        let group_wise_scan_pipeline =
+            ctx.device
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: None,
+                    layout: None,
+                    module: &shader_module,
+                    entry_point: "group_wise_scan",
+                });
 
         let group_wise_scan_bind_group_layout = group_wise_scan_pipeline.get_bind_group_layout(0);
 
-        let group_wise_scan_internal_bind_group_layout = group_wise_scan_pipeline.get_bind_group_layout(1);
-        let group_wise_scan_internal_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &group_wise_scan_internal_bind_group_layout,
-            entries: &vec![
-                BindGroupEntry {
-                    binding: 0,
-                    resource: scan_even.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: scan_odd.as_entire_binding(),
-                },
-            ],
-        });
-
-        let accumulate_and_update_lru_pipeline = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        let group_wise_scan_internal_bind_group_layout =
+            group_wise_scan_pipeline.get_bind_group_layout(1);
+        let group_wise_scan_internal_bind_group =
+            ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
-                layout: None,
-                module: &shader_module,
-                entry_point: "accumulate_and_update_lru",
+                layout: &group_wise_scan_internal_bind_group_layout,
+                entries: &vec![
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: scan_even.as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: scan_odd.as_entire_binding(),
+                    },
+                ],
             });
-        let accumulate_and_update_lru_bind_group_layout = accumulate_and_update_lru_pipeline.get_bind_group_layout(0);
 
-        let accumulate_and_update_lru_internal_bind_group_layout = accumulate_and_update_lru_pipeline.get_bind_group_layout(1);
-        let accumulate_and_update_lru_internal_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &accumulate_and_update_lru_internal_bind_group_layout,
-            entries: &vec![
-                BindGroupEntry {
-                    binding: 0,
-                    resource: scan_even.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: scan_odd.as_entire_binding(),
-                },
-            ],
-        });
+        let accumulate_and_update_lru_pipeline =
+            ctx.device
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: None,
+                    layout: None,
+                    module: &shader_module,
+                    entry_point: "accumulate_and_update_lru",
+                });
+        let accumulate_and_update_lru_bind_group_layout =
+            accumulate_and_update_lru_pipeline.get_bind_group_layout(0);
+
+        let accumulate_and_update_lru_internal_bind_group_layout =
+            accumulate_and_update_lru_pipeline.get_bind_group_layout(1);
+        let accumulate_and_update_lru_internal_bind_group =
+            ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &accumulate_and_update_lru_internal_bind_group_layout,
+                entries: &vec![
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: scan_even.as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: scan_odd.as_entire_binding(),
+                    },
+                ],
+            });
 
         Self {
             ctx: ctx.clone(),
@@ -177,8 +170,6 @@ impl LRUUpdate {
             scan_even,
             scan_odd,
 
-            scan_even_read_buffer: MappableBuffer::new(ctx.device.create_buffer(&scan_buffer_read_descriptor)),
-            scan_odd_read_buffer: MappableBuffer::new(ctx.device.create_buffer(&scan_buffer_read_descriptor)),
             num_entries,
 
             state_buffer,
@@ -193,7 +184,11 @@ impl LRUUpdate {
         lru_buffer: &Buffer,
         output_extent: &wgpu::Extent3d,
     ) {
-        self.ctx.queue.write_buffer(&self.state_buffer, 0, bytemuck::cast_slice(self.state_init.as_slice()));
+        self.ctx.queue.write_buffer(
+            &self.state_buffer,
+            0,
+            bytemuck::cast_slice(self.state_init.as_slice()),
+        );
 
         self.encode_group_wise_scan(command_encoder, &bind_groups[0], output_extent);
         self.encode_accumulate_and_update_lru(command_encoder, &bind_groups[1]);
@@ -202,19 +197,14 @@ impl LRUUpdate {
 
     fn encode_copy_lru(&self, command_encoder: &mut CommandEncoder, lru_buffer: &Buffer) {
         let buffer_size = (size_of::<u32>() as u32 * self.num_entries) as BufferAddress;
-        command_encoder.copy_buffer_to_buffer(
-            &self.scan_odd,
-            0,
-            lru_buffer,
-            0,
-            buffer_size,
-        );
+        command_encoder.copy_buffer_to_buffer(&self.scan_odd, 0, lru_buffer, 0, buffer_size);
     }
 
-    fn encode_group_wise_scan(&self,
-                              command_encoder: &mut CommandEncoder,
-                              bind_group: &BindGroup,
-                              output_extent: &wgpu::Extent3d
+    fn encode_group_wise_scan(
+        &self,
+        command_encoder: &mut CommandEncoder,
+        bind_group: &BindGroup,
+        output_extent: &wgpu::Extent3d,
     ) {
         let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("LRU Update"),
@@ -230,9 +220,10 @@ impl LRUUpdate {
         );
     }
 
-    fn encode_accumulate_and_update_lru(&self,
-                                        command_encoder: &mut CommandEncoder,
-                                        bind_group: &BindGroup,
+    fn encode_accumulate_and_update_lru(
+        &self,
+        command_encoder: &mut CommandEncoder,
+        bind_group: &BindGroup,
     ) {
         let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("LRU Update"),
@@ -241,28 +232,7 @@ impl LRUUpdate {
         cpass.set_bind_group(0, bind_group, &[]);
         cpass.set_bind_group(1, &self.accumulate_and_update_lru_internal_bind_group, &[]);
         cpass.insert_debug_marker(self.label());
-        cpass.dispatch_workgroups(1, 1, 1, );
-    }
-
-    // todo: remove(debug)
-    pub fn encode_copy(&self, command_encoder: &mut CommandEncoder) {
-        if self.scan_even_read_buffer.is_ready() && self.scan_odd_read_buffer.is_ready() {
-            let buffer_size = (size_of::<u32>() as u32 * self.num_entries) as BufferAddress;
-            command_encoder.copy_buffer_to_buffer(
-                &self.scan_even,
-                0,
-                self.scan_even_read_buffer.as_buffer_ref(),
-                0,
-                buffer_size,
-            );
-            command_encoder.copy_buffer_to_buffer(
-                &self.scan_odd,
-                0,
-                self.scan_odd_read_buffer.as_buffer_ref(),
-                0,
-                buffer_size,
-            );
-        }
+        cpass.dispatch_workgroups(1, 1, 1);
     }
 
     pub fn create_bind_groups(&self, resources: &Resources) -> Vec<BindGroup> {

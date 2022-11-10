@@ -1,4 +1,4 @@
-use crate::gpu_list::GpuList;
+use crate::gpu_list::{GpuList, GpuListReadResult};
 use crate::renderer::{
     context::GPUContext,
     pass::{AsBindGroupEntries, GPUPass},
@@ -116,7 +116,7 @@ impl ProcessRequests {
         self.request_list.map_for_reading();
     }
 
-    pub fn read(&self) -> Vec<u32> {
+    pub fn read(&self) -> Option<GpuListReadResult<u32>> {
         self.request_list.read_mapped()
     }
 }

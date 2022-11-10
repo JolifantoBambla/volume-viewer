@@ -24,6 +24,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         return;
     }
 
+    ids_meta.written_at = timestamp.now;
+
     if timestamp.now == u32(textureLoad(request_buffer, int3(global_id), 0).r) {
         for (var i = 0u; i < arrayLength(&page_table_meta.resolutions); i += 1u) {
             let res = page_table_meta.resolutions[i];

@@ -104,3 +104,18 @@ pub struct MultiChannelVolumeRendererSettings {
     #[serde(rename = "channelSettings")]
     pub channel_settings: Vec<ChannelSettings>,
 }
+
+impl MultiChannelVolumeRendererSettings {
+    pub fn get_visible_channel_indices(&self) -> Vec<u32> {
+        self.channel_settings
+            .iter()
+            .filter(|c| c.visible)
+            .map(|c| c.channel_index)
+            .collect()
+    }
+
+    pub fn get_sorted_visible_channel_indices(&self) -> Vec<u32> {
+        // todo: sort by channel importance
+        self.get_visible_channel_indices()
+    }
+}

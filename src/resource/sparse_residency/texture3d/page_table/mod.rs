@@ -6,8 +6,8 @@ use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{BindingResource, Buffer, BufferUsages, Extent3d};
 
 use crate::resource::Texture;
-use crate::util::extent::{subscript_to_index, uvec_to_extent};
-use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta, ResolutionMeta};
+use crate::util::extent::{subscript_to_index, uvec_to_extent, IndexToSubscript};
+use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 use crate::GPUContext;
 
 pub use meta::{PageDirectoryMeta, PageTableMeta};
@@ -125,6 +125,7 @@ pub struct PageTableDirectory {
     page_directory: Texture,
     meta: PageDirectoryMeta,
     max_visible_channels: u32,
+    max_resolutions: u32,
     volume_meta: BrickedMultiResolutionMultiVolumeMeta,
 }
 
@@ -132,19 +133,23 @@ impl PageTableDirectory {
     pub fn new(
         volume_meta: &BrickedMultiResolutionMultiVolumeMeta,
         max_visible_channels: u32,
+        max_resolutions: u32,
         ctx: &Arc<GPUContext>,
     ) -> Self {
-        let meta = PageDirectoryMeta::new(volume_meta);
+        let meta = PageDirectoryMeta::new(
+            volume_meta,
+            max_visible_channels as usize,
+            max_resolutions as usize,
+        );
 
         let res_meta_data: Vec<ResMeta> = meta
-            .resolutions
+            .page_tables
             .iter()
-            .map(|r| ResMeta {
+            .map(|pt| ResMeta {
                 brick_size: meta.brick_size.extend(0),
-                // todo: one page table per res and channel
-                page_table_offset: r.get_channel_offset(0).extend(0),
-                page_table_extent: r.extent.extend(0),
-                volume_size: UVec3::from_slice(r.volume_meta.volume_size.as_slice()).extend(0),
+                page_table_offset: pt.offset.extend(0),
+                page_table_extent: pt.extent.extend(0),
+                volume_size: UVec3::from_slice(pt.volume_meta.volume_size.as_slice()).extend(0),
             })
             .collect();
 
@@ -165,6 +170,7 @@ impl PageTableDirectory {
         Self {
             ctx: ctx.clone(),
             max_visible_channels,
+            max_resolutions,
             volume_meta: volume_meta.clone(),
             page_table_meta_buffer,
             page_directory,
@@ -173,11 +179,25 @@ impl PageTableDirectory {
         }
     }
 
+    pub fn page_index_to_address(&self, page_index: u32) -> BrickAddress {
+        // todo: find out why these are in big endian - my system is little endian AND webgpu ensures little endian
+        let bytes: [u8; 4] = page_index.to_be_bytes();
+
+        let size = self.meta.get_page_table_size();
+        let subscript = size.index_to_subscript(bytes[3] as u32);
+
+        BrickAddress::new(
+            [bytes[0] as u32, bytes[1] as u32, bytes[2] as u32],
+            subscript.x,
+            subscript.y,
+        )
+    }
+
     fn brick_address_to_page_index(&self, brick_address: &BrickAddress) -> usize {
-        // todo: compute page location
-        let level = brick_address.level as usize;
-        // todo: channel_offset!
-        let offset = self.meta.resolutions[level].get_channel_offset(0);
+        let page_table = self
+            .meta
+            .get_page_table(brick_address.level, brick_address.channel);
+        let offset = page_table.offset;
         let location = UVec3::from_slice(brick_address.index.as_slice());
         let page_index =
             subscript_to_index(&(offset + location), &self.page_directory.extent) as usize;
@@ -194,8 +214,24 @@ impl PageTableDirectory {
         self.local_page_directory[index] = brick_location.extend(PageTableEntryFlag::Mapped as u32);
     }
 
+    pub fn invalidate_channel_page_tables(&mut self, channel_index: u32) {
+        for resolution in 0..self.max_resolutions {
+            self.invalidate_page_table(resolution, channel_index);
+        }
+    }
+
     pub fn invalidate_page_table(&mut self, resolution: u32, channel: u32) {
-        // todo:
+        let page_table = self.meta.get_page_table(resolution, channel);
+        let offset = page_table.offset;
+        let last = offset + page_table.extent;
+
+        let begin = subscript_to_index(&(offset), &self.page_directory.extent) as usize;
+        let end = subscript_to_index(&last, &self.page_directory.extent) as usize;
+
+        for index in begin..end {
+            self.local_page_directory[index] =
+                UVec3::ZERO.extend(PageTableEntryFlag::Unmapped as u32);
+        }
     }
 
     pub fn commit_changes(&self) {
@@ -205,9 +241,9 @@ impl PageTableDirectory {
 
     pub fn volume_scale(&self) -> Vec3 {
         let size = Vec3::new(
-            self.meta.resolutions[0].volume_meta.volume_size[0] as f32,
-            self.meta.resolutions[0].volume_meta.volume_size[1] as f32,
-            self.meta.resolutions[0].volume_meta.volume_size[2] as f32,
+            self.meta.page_tables[0].volume_meta.volume_size[0] as f32,
+            self.meta.page_tables[0].volume_meta.volume_size[1] as f32,
+            self.meta.page_tables[0].volume_meta.volume_size[2] as f32,
         );
         size * (self.meta.scale / self.meta.scale.max_element())
     }
@@ -226,5 +262,9 @@ impl PageTableDirectory {
 
     pub fn extent(&self) -> Extent3d {
         self.page_directory.extent
+    }
+
+    pub fn channel_capacity(&self) -> usize {
+        self.max_visible_channels as usize
     }
 }

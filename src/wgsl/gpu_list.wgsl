@@ -5,4 +5,5 @@ struct ListU32 {
 struct ListMeta {
     capacity: u32,
     fill_pointer: atomic<u32>,
+    written_at: u32,
 }

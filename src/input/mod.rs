@@ -28,26 +28,37 @@ impl Time {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Input {
     pub frame: Frame,
     pub time: Time,
+    pub new_channel_selection: Option<Vec<u32>>,
 }
 
 impl Input {
-    pub fn new() -> Self {
-        let now = now() as f32;
-        Self {
-            frame: Frame::new(0),
-            time: Time::new(now, now),
-        }
-    }
-
     pub fn from_last(last: &Input) -> Self {
         let now = now() as f32;
         Self {
             frame: Frame::new(last.frame.number + 1),
             time: Time::new(now, last.time.now),
+            new_channel_selection: None,
+        }
+    }
+
+    pub fn from_last_with_channel_selection(last: &Input, channel_selection: Vec<u32>) -> Self {
+        let mut input = Self::from_last(last);
+        input.new_channel_selection = Some(channel_selection);
+        input
+    }
+}
+
+impl Default for Input{
+    fn default() -> Self {
+        let now = now() as f32;
+        Self {
+            frame: Frame::new(0),
+            time: Time::new(now, now),
+            new_channel_selection: None,
         }
     }
 }
