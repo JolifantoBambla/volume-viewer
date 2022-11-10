@@ -462,7 +462,7 @@ export class BrickConfig {
             }
         }
         this.minimumSize = minSize;
-        this.maximumSize = minSize;
+        this.maximumSize = maxSize;
     }
 }
 
