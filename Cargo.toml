@@ -44,9 +44,9 @@ wasm-bindgen = { version = "0.2.63", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4.30"
 wasm-bindgen-rayon = { version = "1.0.3", features = ["no-bundler"] }
 wasm-logger = "0.2.0"
-web-sys = { version = "=0.3.58", features = ["Document", "HtmlCanvasElement", "HtmlInputElement", "Gpu", "GpuDevice", "OffscreenCanvas", "Performance", "Window", "Event", "EventInit", "CustomEvent", "CustomEventInit","EventTarget", "WorkerNavigator"] }
-wgpu = { version = "0.13.1" }
-winit = { version = "0.26.1", features = [] }
+web-sys = { version = "=0.3.60", features = ["Document", "HtmlCanvasElement", "HtmlInputElement", "Gpu", "GpuDevice", "OffscreenCanvas", "Performance", "Window", "Event", "EventInit", "CustomEvent", "CustomEventInit","EventTarget", "WorkerNavigator"] }
+wgpu = "0.14.0"
+winit = "0.27.5"
 
 # todo: get from cargo.io as soon as it's there
 ome-ngff = { git = "https://github.com/JolifantoBambla/ome-ngff-metadata.git", features = ["log"] }
