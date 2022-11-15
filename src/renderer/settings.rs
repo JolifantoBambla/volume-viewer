@@ -11,7 +11,7 @@ pub struct CreateOptions {
 }
 
 #[repr(u32)]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub enum RenderMode {
     /// Renders a bricked volume by stepping from brick to brick in a voxel line, and sampling the
     /// fetched bricks.

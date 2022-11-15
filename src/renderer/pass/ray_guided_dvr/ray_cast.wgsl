@@ -33,8 +33,8 @@ fn black(pixel: int2) {
 }
 
 // RENDER MODES
-let GRID_TRAVERSAL = 0u;
-let DIRECT = 1u;
+const GRID_TRAVERSAL = 0u;
+const DIRECT = 1u;
 
 struct GlobalSettings {
     render_mode: u32,

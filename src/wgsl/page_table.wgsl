@@ -1,9 +1,9 @@
 @include(type_alias)
 
 type PageTableFlag = u32;
-let UNMAPPED = 0u;
-let MAPPED = 1u;
-let EMPTY = 2u;
+const UNMAPPED = 0u;
+const MAPPED = 1u;
+const EMPTY = 2u;
 
 struct PageTableEntry {
     // The 3D texture coordinate of the brick referenced by this `PageTableEntry` in the brick

@@ -4,8 +4,8 @@
 @include(type_alias)
 
 type CameraType = u32;
-let PERSPECTIVE = 0u;
-let ORTHOGRAPHIC = 1u;
+const PERSPECTIVE = 0u;
+const ORTHOGRAPHIC = 1u;
 
 struct Camera {
     // Maps points from/to the camera's space to/from a common world space.
@@ -56,7 +56,7 @@ fn generate_camera_ray(camera: Camera, pixel: float2, resolution: float2) -> Ray
     }
 
     return transform_ray(
-        Ray (origin, direction, 100000.),//positive_infinity()),
+        Ray (origin, direction, 100000.),//POSITIVE_INFINITY,
         camera.transform.object_to_world
     );
 }

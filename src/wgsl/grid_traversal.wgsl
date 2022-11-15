@@ -80,7 +80,7 @@ fn create_grid_traversal(ray: Ray, t_entry: f32, t_exit: f32, page_table: PageTa
     let last_voxel    = int3(compute_page_address(page_table, exit));
 
     // set up a new ray going from the current position in the grid to the point where it exits the grid w.r.t. padding
-    let r = Ray(entry, normalize(ray.direction * volume_to_padded), positive_infinity());
+    let r = Ray(entry, normalize(ray.direction * volume_to_padded), POSITIVE_INFINITY);
 
     // set up the step direction in voxel indices for each dimension
     let voxel_step = int3(sign(r.direction));
