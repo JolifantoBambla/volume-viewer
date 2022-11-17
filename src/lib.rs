@@ -9,6 +9,7 @@ use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
 };
 use winit::event_loop::EventLoop;
+use winit::platform::web::EventLoopExtWebSys;
 use winit::window::Window;
 
 pub use numcodecs_wasm::*;
@@ -242,7 +243,7 @@ pub fn run_event_loop(
 
     let window = Rc::new(window);
 
-    event_loop.run(move |event, _, control_flow| {
+    event_loop.spawn(move |event, _, control_flow| {
         // force ownership by the closure
         //let _ = (&renderer.as_ref().borrow().ctx.instance, &renderer.as_ref().borrow().ctx.adapter);
 
