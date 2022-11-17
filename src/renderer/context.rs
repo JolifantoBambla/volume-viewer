@@ -134,7 +134,17 @@ impl GPUContext {
         self.surface
             .as_ref()
             .unwrap()
-            .get_supported_modes(&self.adapter)[0]
+            .get_supported_present_modes(&self.adapter)[0]
+    }
+
+    fn choose_alpha_mode(&self) -> wgpu::CompositeAlphaMode {
+        if self.surface.is_none() {
+            panic!("No surface set!");
+        }
+        self.surface
+            .as_ref()
+            .unwrap()
+            .get_supported_alpha_modes(&self.adapter)[0]
     }
 
     fn configure_surface(&self) {
@@ -156,6 +166,7 @@ impl GPUContext {
             width: window.inner_size().width,
             height: window.inner_size().height,
             present_mode: self.choose_present_mode(),
+            alpha_mode: self.choose_alpha_mode(),
         });
 
         self.configure_surface();
@@ -173,6 +184,7 @@ impl GPUContext {
             width: canvas.width(),
             height: canvas.height(),
             present_mode: self.choose_present_mode(),
+            alpha_mode: self.choose_alpha_mode(),
         });
 
         self.configure_surface();
@@ -190,6 +202,7 @@ impl GPUContext {
             width: canvas.width(),
             height: canvas.height(),
             present_mode: self.choose_present_mode(),
+            alpha_mode: self.choose_alpha_mode(),
         });
 
         self.configure_surface();
