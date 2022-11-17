@@ -9,11 +9,37 @@ use web_sys::{CustomEvent, EventTarget};
 
 use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 
+/// A data source providing access to a bricked multi-resolution multi-channel volume data source.
 pub trait VolumeDataSource {
     fn get_meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta;
 
+    /// Stores a `brick` and it's `address` such that it may later be polled using `VolumeDataSource::poll_bricks`.
+    ///
+    /// # Arguments
+    ///
+    /// * `address`: the address of the given brick in the multi-resolution multi-channel volume.
+    /// * `brick`: the brick
+    ///
+    /// returns: ()
+    fn receive_brick(&mut self, address: BrickAddress, brick: Brick);
+
+    /// Requests the bricks at the given `brick_addresses`, their addresses in the multi-resolutions multi-channel volume.
+    ///
+    /// # Arguments
+    ///
+    /// * `brick_addresses`: the addresses of the bricks to request from the underlying data source.
+    ///
+    /// returns: ()
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>);
 
+    /// Receives up to `limit` bricks stored in this data source and their addresses in the multi-resolution multi-channel volume.
+    /// If the returned bricks are in the same order as they have been received is implementation-dependent.
+    ///
+    /// # Arguments
+    ///
+    /// * `limit`: the maximum number of bricks to poll from this data source.
+    ///
+    /// returns: Vec<(BrickAddress, Brick), Global>
     fn poll_bricks(&mut self, limit: usize) -> Vec<(BrickAddress, Brick)>;
 }
 
@@ -78,6 +104,10 @@ impl HtmlEventTargetVolumeDataSource {
 impl VolumeDataSource for HtmlEventTargetVolumeDataSource {
     fn get_meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta {
         &self.volume_meta
+    }
+
+    fn receive_brick(&mut self, address: BrickAddress, brick: Brick) {
+        self.brick_queue.borrow_mut().push_back((address, brick));
     }
 
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>) {
