@@ -1,6 +1,7 @@
 pub mod dvr;
 pub mod present_to_screen;
 pub mod ray_guided_dvr;
+pub mod scan;
 
 use crate::renderer::context::GPUContext;
 use std::sync::Arc;
