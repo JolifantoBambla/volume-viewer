@@ -132,7 +132,7 @@ mod tests {
     }
 
     fn include_foo() -> &str {
-        r"@include(foo.wgsl)"
+        r"@include(lru_update.wgsl)"
     }
 
     fn include_bar() -> &str {

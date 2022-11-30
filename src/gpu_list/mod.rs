@@ -10,6 +10,7 @@ use wgpu::{
     BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages,
     CommandEncoder, Maintain, MapMode,
 };
+use crate::resource::buffer::TypedBuffer;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -33,12 +34,11 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> From<GpuListReadResult<T>> for (Vec<
 pub struct GpuList<T: bytemuck::Pod + bytemuck::Zeroable> {
     ctx: Arc<GPUContext>,
     capacity: u32,
-    list_buffer: Buffer,
+    list_buffer: TypedBuffer<T>,
     list_read_buffer: MappableBuffer<T>,
     list_buffer_size: BufferAddress,
-    meta_buffer: Buffer,
+    meta_buffer: TypedBuffer<GpuListMeta>,
     meta_read_buffer: MappableBuffer<GpuListMeta>,
-    phantom_data: PhantomData<T>,
 }
 
 impl<T: bytemuck::Pod> GpuList<T> {
@@ -49,58 +49,48 @@ impl<T: bytemuck::Pod> GpuList<T> {
             fill_pointer: 0,
             written_at: 0,
         };
-        let list_buffer = ctx.device.create_buffer(&BufferDescriptor {
-            label: None,
-            size: list_buffer_size,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
-        let meta_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::bytes_of(&meta),
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
-        });
+        let list_buffer = TypedBuffer::new_zeroed(
+            "", // todo: use name
+            capacity as usize,
+            BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            &ctx.device
+        );
+        let meta_buffer = TypedBuffer::new_single_element(
+            "", // todo: use name
+            meta,
+            BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
+            &ctx.device,
+        );
 
-        let list_read_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: list_buffer_size,
-            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let meta_read_buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: size_of::<GpuListMeta>() as BufferAddress,
-            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let list_read_buffer = MappableBuffer::from_buffer(&list_buffer, &ctx.device);
+        let meta_read_buffer = MappableBuffer::from_buffer(&meta_buffer, &ctx.device);
 
         Self {
             ctx: ctx.clone(),
             capacity,
             list_buffer,
-            list_read_buffer: MappableBuffer::new(list_read_buffer),
+            list_read_buffer,
             list_buffer_size,
             meta_buffer,
-            meta_read_buffer: MappableBuffer::new(meta_read_buffer),
-            phantom_data: PhantomData,
+            meta_read_buffer,
         }
     }
 
     pub fn copy_to_readable(&self, encoder: &mut CommandEncoder) {
         if self.list_read_buffer.is_ready() && self.meta_read_buffer.is_ready() {
             encoder.copy_buffer_to_buffer(
-                &self.meta_buffer,
+                self.meta_buffer.buffer(),
                 0,
                 self.meta_read_buffer.buffer(),
                 0,
-                size_of::<GpuListMeta>() as BufferAddress,
+                self.meta_buffer.size(),
             );
             encoder.copy_buffer_to_buffer(
-                &self.list_buffer,
+                self.list_buffer.buffer(),
                 0,
                 self.list_read_buffer.buffer(),
                 0,
-                self.list_buffer_size,
+                self.list_buffer.size(),
             );
         }
     }
@@ -145,18 +135,18 @@ impl<T: bytemuck::Pod> GpuList<T> {
             written_at: 0,
         };
         self.ctx.queue.write_buffer(
-            &self.meta_buffer,
+            self.meta_buffer.buffer(),
             0 as BufferAddress,
             bytemuck::bytes_of(&meta),
         );
     }
 
     pub fn meta_as_binding(&self) -> BindingResource {
-        self.meta_buffer.as_entire_binding()
+        self.meta_buffer.buffer().as_entire_binding()
     }
 
     pub fn list_as_binding(&self) -> BindingResource {
-        self.list_buffer.as_entire_binding()
+        self.list_buffer.buffer().as_entire_binding()
     }
 }
 

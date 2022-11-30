@@ -38,8 +38,8 @@ impl<T: bytemuck::Pod> TypedBuffer<T> {
         }
     }
 
-    // todo: make this a readable buffer
-    pub fn create_read_buffer(&self, device: &Device) -> Self {
+    fn create_read_buffer(&self, device: &Device) -> Self {
+        assert!(self.supports(BufferUsages::COPY_SRC));
         let buffer = device.create_buffer(&BufferDescriptor {
             label: Label::from("map buffer"),
             size: self.size(),
@@ -104,24 +104,26 @@ pub struct MappableBufferState {
 }
 
 pub struct MappableBuffer<T: bytemuck::Pod> {
-    buffer: Buffer,
+    buffer: TypedBuffer<T>,
     state: Arc<Mutex<MappableBufferState>>,
-    phantom_data: PhantomData<T>,
 }
 
 impl<T: bytemuck::Pod> MappableBuffer<T> {
-    pub fn new(buffer: Buffer) -> Self {
+    pub fn from_buffer(buffer: &TypedBuffer<T>, device: &Device) -> Self {
         Self {
-            buffer,
+            buffer: buffer.create_read_buffer(device),
             state: Arc::new(Mutex::new(MappableBufferState {
                 state: BufferState::Ready,
             })),
-            phantom_data: PhantomData,
         }
     }
 
     pub fn buffer(&self) -> &Buffer {
-        &self.buffer
+        self.buffer.buffer()
+    }
+
+    pub fn size(&self) -> BufferAddress {
+        self.buffer.size()
     }
 
     /// Maps a mappable buffer if it is not already mapped or being mapped.
@@ -130,7 +132,7 @@ impl<T: bytemuck::Pod> MappableBuffer<T> {
         let s = self.state.clone();
         if self.is_ready() {
             s.lock().unwrap().state = BufferState::Mapping;
-            self.buffer.slice(bounds).map_async(mode, move |_| {
+            self.buffer().slice(bounds).map_async(mode, move |_| {
                 s.lock().unwrap().state = BufferState::Mapped;
             });
         }
@@ -146,7 +148,7 @@ impl<T: bytemuck::Pod> MappableBuffer<T> {
 
     pub fn maybe_read<S: RangeBounds<BufferAddress>>(&self, bounds: S) -> Vec<T> {
         if self.is_mapped() {
-            let mapped_range = self.buffer.slice(bounds).get_mapped_range();
+            let mapped_range = self.buffer().slice(bounds).get_mapped_range();
             let result: Vec<T> = bytemuck::cast_slice(&mapped_range).to_vec();
             drop(mapped_range);
             result
@@ -157,7 +159,7 @@ impl<T: bytemuck::Pod> MappableBuffer<T> {
 
     pub fn unmap(&self) {
         if self.is_mapped() {
-            self.buffer.unmap();
+            self.buffer().unmap();
             self.state.lock().unwrap().state = BufferState::Ready;
         }
     }
@@ -175,23 +177,14 @@ pub struct MultiBufferedMappableBuffer<T: bytemuck::Pod> {
 }
 
 impl<T: bytemuck::Pod> MultiBufferedMappableBuffer<T> {
-    pub fn new(num_buffers: u32, init_data: &Vec<T>, device: &Device) -> Self {
-        let num_entries = init_data.len();
-        let buffer_size = (size_of::<T>() * num_entries as usize) as BufferAddress;
-
-        let mut buffers: Vec<MappableBuffer<T>> = Vec::new();
-        for _ in 0..num_buffers {
-            let buffer = MappableBuffer::new(device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::cast_slice(init_data),
-                usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-            }));
-            buffers.push(buffer);
-        }
-
+    pub fn from_buffer(buffer: &TypedBuffer<T>, num_buffers: u32, device: &Device) -> Self {
+        assert!(num_buffers > 0);
+        let buffers = (0..num_buffers)
+            .map(|_| MappableBuffer::from_buffer(buffer, device))
+            .collect();
         Self {
             buffers,
-            buffer_size,
+            buffer_size: buffer.size(),
         }
     }
 

@@ -24,8 +24,8 @@ impl Scan {
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
-        if !input_buffer.supports(BufferUsages::STORAGE | BufferUsages::COPY_SRC) {
-            panic!("buffer to scan needs to support STORAGE and COPY_SRC");
+        if !input_buffer.supports(BufferUsages::STORAGE) {
+            panic!("buffer to scan needs to support STORAGE");
         }
 
         let scan_shader_module = ctx
@@ -184,7 +184,7 @@ pub async fn test_scan(ctx: &Arc<GPUContext>) {
     }
 
     let buffer = TypedBuffer::from_data("data", &data, BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST, &ctx.device);
-    let read_buffer = buffer.create_read_buffer(&ctx.device);
+    let read_buffer = MappableBuffer::from_buffer(&buffer, &ctx.device);
 
     let prep = WGSLPreprocessor::default();
     let scan = Scan::new(&buffer, &prep, ctx);
