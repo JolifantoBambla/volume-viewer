@@ -40,14 +40,15 @@ impl<T: bytemuck::Pod> TypedBuffer<T> {
 
     fn create_read_buffer(&self, device: &Device) -> Self {
         assert!(self.supports(BufferUsages::COPY_SRC));
+        let label = format!("map buffer [{}]", self.label.as_str());
         let buffer = device.create_buffer(&BufferDescriptor {
-            label: Label::from("map buffer"),
+            label: Label::from(label.as_str()),
             size: self.size(),
             usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
             mapped_at_creation: false
         });
         Self {
-            label: format!("Map buffer [{}]", self.label.as_str()),
+            label,
             buffer,
             num_elements: self.num_elements,
             phantom_data: PhantomData,

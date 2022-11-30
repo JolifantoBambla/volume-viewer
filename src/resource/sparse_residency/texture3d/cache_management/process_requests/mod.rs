@@ -47,7 +47,7 @@ impl ProcessRequests {
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
-        let request_list = GpuList::new(None, max_requests, ctx);
+        let request_list = GpuList::new("brick requests", max_requests, ctx);
         let shader_module = ctx
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {

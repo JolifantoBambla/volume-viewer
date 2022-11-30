@@ -42,7 +42,7 @@ pub struct GpuList<T: bytemuck::Pod + bytemuck::Zeroable> {
 }
 
 impl<T: bytemuck::Pod> GpuList<T> {
-    pub fn new(_name: Option<&str>, capacity: u32, ctx: &Arc<GPUContext>) -> Self {
+    pub fn new(label: &str, capacity: u32, ctx: &Arc<GPUContext>) -> Self {
         let list_buffer_size = (size_of::<T>() * capacity as usize) as BufferAddress;
         let meta = GpuListMeta {
             capacity,
@@ -50,13 +50,13 @@ impl<T: bytemuck::Pod> GpuList<T> {
             written_at: 0,
         };
         let list_buffer = TypedBuffer::new_zeroed(
-            "", // todo: use name
+            format!("{} [list]", label).as_str(),
             capacity as usize,
             BufferUsages::STORAGE | BufferUsages::COPY_SRC,
             &ctx.device
         );
         let meta_buffer = TypedBuffer::new_single_element(
-            "", // todo: use name
+            format!("{} [meta]", label).as_str(),
             meta,
             BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
             &ctx.device,
