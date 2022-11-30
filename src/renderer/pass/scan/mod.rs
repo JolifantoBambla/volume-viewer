@@ -13,6 +13,36 @@ use crate::resource::MappableBuffer;
 const WORKGROUP_SIZE: u32 = 256;
 const WORKGROUP_SIZE_DOUBLED: u32 = WORKGROUP_SIZE * 2;
 
+struct PipelineData<const N: usize> {
+    pipeline: Rc<ComputePipeline>,
+    bind_group_layouts: Vec<BindGroupLayout>,
+}
+
+impl<const N: usize> PipelineData<N> {
+    pub fn new(pipeline_descriptor: &ComputePipelineDescriptor, device: &Device) -> Self {
+        let pipeline = Rc::new(
+            device.create_compute_pipeline(pipeline_descriptor)
+        );
+        let mut bind_group_layouts = Vec::new();
+        for i in 0..N as u32 {
+            bind_group_layouts.push(pipeline.get_bind_group_layout(i));
+        }
+        Self {
+            pipeline,
+            bind_group_layouts
+        }
+    }
+
+    pub fn pipeline(&self) -> &Rc<ComputePipeline> {
+        &self.pipeline
+    }
+
+    pub fn bind_group_layout(&self, i: usize) -> &BindGroupLayout {
+        assert!(i < N);
+        &self.bind_group_layouts[i]
+    }
+}
+
 pub struct Scan {
     ctx: Arc<GPUContext>,
     passes: Vec<ComputePipelineData>,
@@ -31,7 +61,7 @@ impl Scan {
         let scan_shader_module = ctx
             .device
             .create_shader_module(ShaderModuleDescriptor {
-                label: Label::from("Scan"),
+                label: Label::from("Sum"),
                 source: ShaderSource::Wgsl(Cow::Borrowed(
                     &*wgsl_preprocessor
                         .preprocess(include_str!("scan.wgsl"))
@@ -39,15 +69,15 @@ impl Scan {
                         .unwrap()
                 )),
             });
-        let scan_pipeline = Rc::new(ctx
-            .device
-            .create_compute_pipeline(&ComputePipelineDescriptor {
+        let scan_pipeline = PipelineData::new(
+            &ComputePipelineDescriptor {
                 label: Label::from("Scan"),
                 layout: None,
                 module: &scan_shader_module,
                 entry_point: "main",
-            }));
-        let scan_bind_group_layout = scan_pipeline.get_bind_group_layout(0);
+            },
+            &ctx.device,
+        );
 
         let sum_shader_module = ctx
             .device
@@ -60,33 +90,21 @@ impl Scan {
                         .unwrap()
                 )),
             });
-        let sum_pipeline = Rc::new(ctx
-            .device
-            .create_compute_pipeline(&ComputePipelineDescriptor {
+        let sum_pipeline = PipelineData::new(
+            &ComputePipelineDescriptor {
                 label: Label::from("Sum"),
                 layout: None,
                 module: &sum_shader_module,
                 entry_point: "main",
-            }));
-        let sum_bind_group_layout = sum_pipeline.get_bind_group_layout(0);
-
-        let output_max = TypedBuffer::new_single_element(
-            "scan output",
-            0,
-            BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            &ctx.device
+            },
+            &ctx.device,
         );
 
         let mut passes = Vec::new();
         Scan::create_recursive_bind_groups(
+            &input_buffer,
             &scan_pipeline,
             &sum_pipeline,
-            &input_buffer,
-            input_buffer.num_elements(),
-            None,
-            &output_max,
-            &scan_bind_group_layout,
-            &sum_bind_group_layout,
             &mut passes,
             &ctx.device,
         );
@@ -97,64 +115,15 @@ impl Scan {
         }
     }
 
-    fn create_scan_bind_group(
-        scan_layout: &BindGroupLayout,
-        input: &TypedBuffer<u32>,
-        input_max: &TypedBuffer<u32>,
-        reduced_sum: &TypedBuffer<u32>,
-        reduced_max: &TypedBuffer<u32>,
-        use_max_input: &TypedBuffer<u32>,
-        device: &Device
-    ) -> BindGroup {
-        device.create_bind_group(&BindGroupDescriptor {
-            label: Label::from("scan bind group"),
-            layout: scan_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: input.buffer().as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: input_max.buffer().as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: reduced_sum.buffer().as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 3,
-                    resource: reduced_max.buffer().as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 4,
-                    resource: use_max_input.buffer().as_entire_binding(),
-                },
-            ]
-        })
-    }
-
     fn create_recursive_bind_groups(
-        scan_pipeline: &Rc<ComputePipeline>,
-        sum_pipeline: &Rc<ComputePipeline>,
         input: &TypedBuffer<u32>,
-        input_size: usize,
-        input_max: Option<&TypedBuffer<u32>>,
-        output_max: &TypedBuffer<u32>,
-        scan_layout: &BindGroupLayout,
-        sum_layout: &BindGroupLayout,
+        scan_pipeline: &PipelineData<1>,
+        sum_pipeline: &PipelineData<1>,
         passes: &mut Vec<ComputePipelineData>,
         device: &Device
     ) {
-        let reduced_size = f32::ceil(input_size as f32 / WORKGROUP_SIZE_DOUBLED as f32) as usize;
+        let reduced_size = f32::ceil(input.num_elements() as f32 / WORKGROUP_SIZE_DOUBLED as f32) as usize;
         let last_pass = reduced_size == 1;
-
-        let use_max_input: TypedBuffer<u32> = TypedBuffer::new_single_element(
-            "use max input",
-            if input_max.is_some() { 1 } else { 0 },
-            BufferUsages::UNIFORM,
-            device,
-        );
 
         let reduced_sum = TypedBuffer::<u32>::new_zeroed(
             "reduced sum",
@@ -163,69 +132,39 @@ impl Scan {
             device,
         );
 
-        let reduced_max = if last_pass {
-            None
-        } else {
-            Some(TypedBuffer::new_zeroed(
-                "reduced max",
-                reduced_size,
-                BufferUsages::STORAGE,
-                device,
-            ))
-        };
-
-        let in_max: Option<TypedBuffer<u32>> = if input_max.is_some() {
-            None
-        } else {
-            Some(TypedBuffer::new_single_element(
-                "input max",
-                0,
-                BufferUsages::STORAGE,
-                device,
-            ))
-        };
-
-        let scan_bind_group = Scan::create_scan_bind_group(
-            scan_layout,
-            input,
-            if let Some(input_max) = input_max {
-                input_max
-            } else {
-                in_max.as_ref().unwrap()
-            },
-            &reduced_sum,
-            if last_pass {
-                &output_max
-            } else {
-                reduced_max.as_ref().unwrap()
-            },
-            &use_max_input,
-            device,
-        );
+        let scan_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Label::from("scan bind group"),
+            layout: scan_pipeline.bind_group_layout(0),
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: input.buffer().as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: reduced_sum.buffer().as_entire_binding(),
+                },
+            ]
+        });
 
         passes.push(ComputePipelineData::new_1d(
-            scan_pipeline,
+            scan_pipeline.pipeline(),
             vec![scan_bind_group],
             reduced_size as u32,
         ));
 
-        if let Some(reduced_max) = &reduced_max {
+        if !last_pass {
             Scan::create_recursive_bind_groups(
+                &reduced_sum,
                 scan_pipeline,
                 sum_pipeline,
-                &reduced_sum,
-                reduced_size,
-                Some(reduced_max),
-                output_max,
-                scan_layout,
-                sum_layout,
                 passes,
                 device,
             );
             
             let sum_bind_group = device.create_bind_group(&BindGroupDescriptor {
                 label: Label::from("sum bind group"),
-                layout: sum_layout,
+                layout: sum_pipeline.bind_group_layout(0),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
@@ -239,9 +178,9 @@ impl Scan {
             });
 
             passes.push(ComputePipelineData::new_1d(
-                sum_pipeline,
+                sum_pipeline.pipeline(),
                 vec![sum_bind_group],
-                (input_size as f32 / WORKGROUP_SIZE as f32).ceil() as u32,
+                (input.num_elements() as f32 / WORKGROUP_SIZE as f32).ceil() as u32,
             ));
         }
     }

@@ -4,14 +4,9 @@
 
  // Input buffer
 @group(0) @binding(0) var<storage, read_write> data_in_out: array<u32>;
-@group(0) @binding(1) var<storage, read> data_in_out_max: array<u32>;
 
 // Workgroup buffer, with the sum of all input values of a workgroup
-@group(0) @binding(2) var<storage, read_write> wgSum: array<u32>;
-@group(0) @binding(3) var<storage, read_write> wgMax: array<u32>;
-
-// Uniform
-@group(0) @binding(4) var<uniform> use_max_inputU32: u32;
+@group(0) @binding(1) var<storage, read_write> wgSum: array<u32>;
 
 const WORKGROUP_SIZE = 256u;
 const TEMP_SIZE = WORKGROUP_SIZE * 2;
@@ -19,7 +14,6 @@ const TEMP_SIZE = WORKGROUP_SIZE * 2;
 // Local (workgroup) buffers
 // Twice the workgroup size because each thread will take care of 2 elements in the buffer
 var<workgroup> wg_sum: array<u32, TEMP_SIZE>;
-var<workgroup> wg_max: array<u32, TEMP_SIZE>;
 
 // MAIN CODE -----------------------------------------------------------------------------------------------------------
 
@@ -27,7 +21,6 @@ fn prepare_workgroup_memory(
     g_address1: u32, g_address2: u32,
     l_address1: u32, l_address2: u32,
     num_elements: u32,
-    use_max_input: bool
 ) -> u32 {
     // Load input into workgroup memory
     if (g_address2 < num_elements) {
@@ -35,29 +28,14 @@ fn prepare_workgroup_memory(
         let v2 = data_in_out[g_address2];
         wg_sum[l_address1] = v1;
         wg_sum[l_address2] = v2;
-        if (use_max_input) {
-            wg_max[l_address1] = data_in_out_max[g_address1];
-            wg_max[l_address2] = data_in_out_max[g_address2];
-        } else {
-            wg_max[l_address1] = v1;
-            wg_max[l_address2] = v2;
-        }
     // Or write zero when out of bounds
     } else if (g_address1 < num_elements) {
         let v1 = data_in_out[g_address1];
         wg_sum[l_address1] = v1;
         wg_sum[l_address2] = 0u;
-        if (use_max_input) {
-            wg_max[l_address1] = data_in_out_max[g_address1];
-        } else {
-            wg_max[l_address1] = v1;
-        }
-        wg_max[l_address2] = 0u;
     } else {
         wg_sum[l_address1] = 0u;
         wg_sum[l_address2] = 0u;
-        wg_max[l_address1] = 0u;
-        wg_max[l_address2] = 0u;
     }
     return wg_sum[l_address2];
 }
@@ -70,7 +48,6 @@ fn up_sweep(local_thread_id: u32, l_address1: u32, l_address2: u32, offset: ptr<
             let ai = *offset * (l_address1 + 1u) - 1u;
             let bi = *offset * (l_address2 + 1u) - 1u;
             wg_sum[bi] = wg_sum[bi] + wg_sum[ai];     // Increment
-            wg_max[bi] = max(wg_max[bi], wg_max[ai]); // Get maximum
         }
         *offset = *offset * 2u;
     }
@@ -110,7 +87,6 @@ fn write_results(
 
     if (l_address2 == TEMP_SIZE - 1u) {
         wgSum[workgroup_id.x] = wg_sum[l_address2] + last_element;
-        wgMax[workgroup_id.x] = wg_max[l_address2];
     }
 }
 
@@ -131,13 +107,10 @@ fn main(
     let num_elements: u32 = arrayLength(&data_in_out);        // Size of the buffer
     var offset: u32 = 1u;
 
-    let use_max_input: bool = use_max_inputU32 > 0u;
-
     let last_element = prepare_workgroup_memory(
         g_address1, g_address2,
         l_address1, l_address2,
         num_elements,
-        use_max_input
     );
 
     up_sweep(
