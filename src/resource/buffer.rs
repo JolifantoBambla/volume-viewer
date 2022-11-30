@@ -1,9 +1,84 @@
 use std::marker::PhantomData;
+use std::mem;
 use std::mem::size_of;
 use std::ops::RangeBounds;
 use std::sync::{Arc, Mutex};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{Buffer, BufferAddress, BufferUsages, Device, MapMode};
+use wgpu::{Buffer, BufferAddress, BufferDescriptor, BufferUsages, Device, Label, MapMode};
+
+pub struct TypedBuffer<T: bytemuck::Pod> {
+    label: String,
+    buffer: Buffer,
+    num_elements: usize,
+    phantom_data: PhantomData<T>
+}
+
+impl<T: bytemuck::Pod> TypedBuffer<T> {
+    pub fn new_zeroed(label: &str, num_elements: usize, usage: BufferUsages, device: &Device) -> Self {
+        let data = vec![unsafe { mem::zeroed() }; num_elements];
+        TypedBuffer::from_data(label, &data, usage, device)
+    }
+
+    pub fn new_single_element(label: &str, element: T, usage: BufferUsages, device: &Device) -> Self {
+        let data = vec![element];
+        TypedBuffer::from_data(label, &data, usage, device)
+    }
+
+    pub fn from_data(label: &str, data: &Vec<T>, usage: BufferUsages, device: &Device) -> Self {
+        let buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Label::from(label),
+            contents: bytemuck::cast_slice(data),
+            usage
+        });
+        Self {
+            label: String::from(label),
+            buffer,
+            num_elements: data.len(),
+            phantom_data: PhantomData,
+        }
+    }
+
+    fn create_read_buffer(&self, device: &Device) -> Self {
+        assert!(self.supports(BufferUsages::COPY_SRC));
+        let label = format!("map buffer [{}]", self.label.as_str());
+        let buffer = device.create_buffer(&BufferDescriptor {
+            label: Label::from(label.as_str()),
+            size: self.size(),
+            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+            mapped_at_creation: false
+        });
+        Self {
+            label,
+            buffer,
+            num_elements: self.num_elements,
+            phantom_data: PhantomData,
+        }
+    }
+
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
+    pub fn usage(&self) -> BufferUsages {
+        self.buffer.usage()
+    }
+
+    pub fn size(&self) -> BufferAddress {
+        self.buffer.size()
+    }
+
+    pub fn element_size(&self) -> usize {
+        size_of::<T>()
+    }
+
+    pub fn num_elements(&self) -> usize {
+        self.num_elements
+    }
+
+    pub fn supports(&self, usage: BufferUsages) -> bool {
+        self.usage().contains(usage)
+    }
+}
 
 pub async fn map_buffer<S: RangeBounds<BufferAddress>>(buffer: &Buffer, bounds: S) {
     let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
@@ -30,24 +105,26 @@ pub struct MappableBufferState {
 }
 
 pub struct MappableBuffer<T: bytemuck::Pod> {
-    buffer: Buffer,
+    buffer: TypedBuffer<T>,
     state: Arc<Mutex<MappableBufferState>>,
-    phantom_data: PhantomData<T>,
 }
 
 impl<T: bytemuck::Pod> MappableBuffer<T> {
-    pub fn new(buffer: Buffer) -> Self {
+    pub fn from_buffer(buffer: &TypedBuffer<T>, device: &Device) -> Self {
         Self {
-            buffer,
+            buffer: buffer.create_read_buffer(device),
             state: Arc::new(Mutex::new(MappableBufferState {
                 state: BufferState::Ready,
             })),
-            phantom_data: PhantomData,
         }
     }
 
-    pub fn as_buffer_ref(&self) -> &Buffer {
-        &self.buffer
+    pub fn buffer(&self) -> &Buffer {
+        self.buffer.buffer()
+    }
+
+    pub fn size(&self) -> BufferAddress {
+        self.buffer.size()
     }
 
     /// Maps a mappable buffer if it is not already mapped or being mapped.
@@ -56,7 +133,7 @@ impl<T: bytemuck::Pod> MappableBuffer<T> {
         let s = self.state.clone();
         if self.is_ready() {
             s.lock().unwrap().state = BufferState::Mapping;
-            self.buffer.slice(bounds).map_async(mode, move |_| {
+            self.buffer().slice(bounds).map_async(mode, move |_| {
                 s.lock().unwrap().state = BufferState::Mapped;
             });
         }
@@ -72,7 +149,7 @@ impl<T: bytemuck::Pod> MappableBuffer<T> {
 
     pub fn maybe_read<S: RangeBounds<BufferAddress>>(&self, bounds: S) -> Vec<T> {
         if self.is_mapped() {
-            let mapped_range = self.buffer.slice(bounds).get_mapped_range();
+            let mapped_range = self.buffer().slice(bounds).get_mapped_range();
             let result: Vec<T> = bytemuck::cast_slice(&mapped_range).to_vec();
             drop(mapped_range);
             result
@@ -83,7 +160,7 @@ impl<T: bytemuck::Pod> MappableBuffer<T> {
 
     pub fn unmap(&self) {
         if self.is_mapped() {
-            self.buffer.unmap();
+            self.buffer().unmap();
             self.state.lock().unwrap().state = BufferState::Ready;
         }
     }
@@ -101,23 +178,14 @@ pub struct MultiBufferedMappableBuffer<T: bytemuck::Pod> {
 }
 
 impl<T: bytemuck::Pod> MultiBufferedMappableBuffer<T> {
-    pub fn new(num_buffers: u32, init_data: &Vec<T>, device: &Device) -> Self {
-        let num_entries = init_data.len();
-        let buffer_size = (size_of::<T>() * num_entries as usize) as BufferAddress;
-
-        let mut buffers: Vec<MappableBuffer<T>> = Vec::new();
-        for _ in 0..num_buffers {
-            let buffer = MappableBuffer::new(device.create_buffer_init(&BufferInitDescriptor {
-                label: None,
-                contents: bytemuck::cast_slice(init_data),
-                usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-            }));
-            buffers.push(buffer);
-        }
-
+    pub fn from_buffer(buffer: &TypedBuffer<T>, num_buffers: u32, device: &Device) -> Self {
+        assert!(num_buffers > 0);
+        let buffers = (0..num_buffers)
+            .map(|_| MappableBuffer::from_buffer(buffer, device))
+            .collect();
         Self {
             buffers,
-            buffer_size,
+            buffer_size: buffer.size(),
         }
     }
 
@@ -139,7 +207,7 @@ impl<T: bytemuck::Pod> MultiBufferedMappableBuffer<T> {
     }
 
     pub fn as_buffer_ref(&self, index_or_frame_number: u32) -> &Buffer {
-        self.get_buffer(index_or_frame_number).as_buffer_ref()
+        self.get_buffer(index_or_frame_number).buffer()
     }
 
     pub fn map_async<S: RangeBounds<BufferAddress>>(

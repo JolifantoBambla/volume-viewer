@@ -1,10 +1,8 @@
-// todo: create mask from list & time stamp
-// todo: sort list w.r.t. mask
-
 mod lru_update;
 
 use glam::UVec3;
 use std::mem::size_of;
+use std::rc::Rc;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
@@ -19,9 +17,9 @@ use crate::util::extent::{
 };
 use crate::{GPUContext, Input};
 
-use crate::resource::buffer::MultiBufferedMappableBuffer;
-use crate::resource::sparse_residency::texture3d::cache_management::lru::lru_update::Resources;
-use lru_update::LRUUpdate;
+use crate::resource::buffer::{MultiBufferedMappableBuffer, TypedBuffer};
+
+use lru_update::{LRUUpdate, LRUUpdateResources};
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -57,16 +55,15 @@ pub struct LRUCache {
     next_empty_index: u32,
 
     lru_local: Vec<u32>,
-    lru_buffer: Buffer,
+    lru_buffer: Rc<TypedBuffer<u32>>,
     lru_read_buffer: MultiBufferedMappableBuffer<u32>,
     lru_buffer_size: BufferAddress,
 
     num_used_entries_local: u32,
-    num_used_entries_buffer: Buffer,
+    num_used_entries_buffer: Rc<TypedBuffer<NumUsedEntries>>,
     num_used_entries_read_buffer: MultiBufferedMappableBuffer<NumUsedEntries>,
 
     lru_update_pass: LRUUpdate,
-    lru_update_bind_group: Vec<BindGroup>,
 }
 
 impl LRUCache {
@@ -76,7 +73,6 @@ impl LRUCache {
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
-        // todo: make configurable
         let cache = Texture::create_brick_cache(&ctx.device, settings.cache_size);
 
         let usage_buffer_size = extent_to_uvec(&settings.cache_size) / settings.cache_entry_size;
@@ -96,32 +92,41 @@ impl LRUCache {
             uvec_to_extent(&usage_buffer_size),
         );
 
-        let lru_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(lru_local.as_slice()),
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
-        });
-        let num_used_entries_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::bytes_of(&num_unused_entries),
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
-        });
+        let lru_buffer = Rc::new(TypedBuffer::from_data(
+            "lru",
+            &lru_local,
+            BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
+            &ctx.device,
+        ));
+        let num_used_entries_buffer = Rc::new(TypedBuffer::new_single_element(
+            "num used entries",
+            num_unused_entries,
+            BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
+            &ctx.device,
+        ));
 
-        let lru_read_buffer =
-            MultiBufferedMappableBuffer::new(settings.num_multi_buffering, &lru_local, &ctx.device);
-        let num_used_entries_read_buffer = MultiBufferedMappableBuffer::new(
+        let lru_read_buffer = MultiBufferedMappableBuffer::from_buffer(
+                &lru_buffer,
+                settings.num_multi_buffering,
+                &ctx.device
+            );
+        let num_used_entries_read_buffer = MultiBufferedMappableBuffer::from_buffer(
+            &num_used_entries_buffer,
             settings.num_multi_buffering,
-            &vec![num_unused_entries],
             &ctx.device,
         );
 
-        let lru_update_pass = LRUUpdate::new(num_entries, wgsl_preprocessor, ctx);
-        let lru_update_bind_group = lru_update_pass.create_bind_groups(&Resources {
-            usage_buffer: &usage_buffer,
-            timestamp: timestamp_uniform_buffer,
-            lru_cache: &lru_buffer,
-            num_used_entries: &num_used_entries_buffer,
-        });
+
+        let lru_update_pass = LRUUpdate::new(
+            &LRUUpdateResources::new(
+                lru_buffer.clone(),
+                num_used_entries_buffer.clone(),
+                &usage_buffer,
+                &timestamp_uniform_buffer
+            ),
+            wgsl_preprocessor,
+            ctx
+        );
 
         Self {
             ctx: ctx.clone(),
@@ -139,24 +144,20 @@ impl LRUCache {
             num_used_entries_buffer,
             num_used_entries_read_buffer,
             lru_update_pass,
-            lru_update_bind_group,
         }
     }
 
     pub fn encode_lru_update(&self, encoder: &mut CommandEncoder, timestamp: u32) {
         let num_used_entries = NumUsedEntries { num: 0 };
+
+        // this is done in update as well?
         self.ctx.queue.write_buffer(
-            &self.num_used_entries_buffer,
+            &self.num_used_entries_buffer.buffer(),
             0 as BufferAddress,
             bytemuck::bytes_of(&num_used_entries),
         );
 
-        self.lru_update_pass.encode(
-            encoder,
-            &self.lru_update_bind_group,
-            &self.lru_buffer,
-            &self.usage_buffer.extent,
-        );
+        self.lru_update_pass.encode(encoder);
         self.copy_to_readable(encoder, timestamp + 1);
     }
 
@@ -165,7 +166,7 @@ impl LRUCache {
             && self.num_used_entries_read_buffer.is_ready(buffer_index)
         {
             encoder.copy_buffer_to_buffer(
-                &self.num_used_entries_buffer,
+                &self.num_used_entries_buffer.buffer(),
                 0,
                 self.num_used_entries_read_buffer
                     .as_buffer_ref(buffer_index),
@@ -173,7 +174,7 @@ impl LRUCache {
                 size_of::<NumUsedEntries>() as BufferAddress,
             );
             encoder.copy_buffer_to_buffer(
-                &self.lru_buffer,
+                &self.lru_buffer.buffer(),
                 0,
                 self.lru_read_buffer.as_buffer_ref(buffer_index),
                 0,

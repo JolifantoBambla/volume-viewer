@@ -11,112 +11,63 @@ struct NumUsedEntries {
 @group(0) @binding(1) var<uniform> timestamp: Timestamp;
 @group(0) @binding(2) var<storage, read_write> lru_cache: ListU32;
 @group(0) @binding(3) var<storage, read_write> num_used_entries: NumUsedEntries;
+@group(0) @binding(4) var<storage, read_write> offsets: ListU32;
 
-// these resources are never used outside of this pass
-@group(1) @binding(0) var<storage, read_write> scan_even: ListU32;
-@group(1) @binding(1) var<storage, read_write> scan_odd: ListU32;
+@group(1) @binding(0) var<storage, read_write> lru_updated: ListU32;
+
+const WORKGROUP_SIZE: u32 = 256;
+
+fn get_num_entries() -> u32 {
+    return arrayLength(&lru_cache.list);
+}
+
+fn is_out_of_bounds(global_id: u32) -> bool {
+    return global_id >= get_num_entries();
+}
+
+fn is_used(lru_entry: u32) -> bool {
+    let buffer_size = uint3(textureDimensions(usage_buffer));
+    let usage_index = int3(index_to_subscript(lru_entry, buffer_size));
+    return timestamp.now == u32(textureLoad(usage_buffer, usage_index, 0).r);
+}
 
 @compute
-@workgroup_size(128, 1, 1)
-fn group_wise_scan(@builtin(local_invocation_index) local_id: u32,
-        @builtin(global_invocation_id) global_invocation_id: uint3,
-        @builtin(num_workgroups) num_workgroups_in_grid: uint3) {
-    let num_workgroups = num_workgroups_in_grid.x;
+@workgroup_size(WORKGROUP_SIZE, 1, 1)
+fn initialize_offsets(@builtin(global_invocation_id) global_invocation_id: uint3) {
     let global_id = global_invocation_id.x;
-    let buffer_size = uint3(textureDimensions(usage_buffer));
-    let num_entries = buffer_size.x * buffer_size.y * buffer_size.z;
-    let workgroup_size = u32(ceil(f32(num_entries) / f32(num_workgroups)));
-
-    // note: we can't return here because then storageBarrier calls would be outside of uniform control flow, so what we
-    // do instead is that we wrap all operations in if-else blocks checking for `OUT_OF_BOUNDS`
-    let OUT_OF_BOUNDS = global_id >= num_entries;
-
-    // initialize number of used entries & scan at own index
-    var lru_entry = 0u;
-    var used = false;
-    if (!OUT_OF_BOUNDS) {
-        lru_entry = lru_cache.list[global_id];
-        let usage_index = int3(index_to_subscript(lru_entry, buffer_size));
-        used = timestamp.now == u32(textureLoad(usage_buffer, usage_index, 0).r);
-        scan_odd.list[global_id] = u32(used);
-        if (used) {
-            atomicAdd(&num_used_entries.num, 1u);
-        }
+    if (is_out_of_bounds(global_id)) {
+        return;
     }
 
-    storageBarrier();
+    let lru_entry = lru_cache.list[global_id];
+    let used = is_used(lru_entry);
 
-    // scan within the workgroup
-    var even_pass = true;
-    for (var lookup = 1u; lookup <= workgroup_size - 1; lookup *= 2u) {
-        if (!OUT_OF_BOUNDS) {
-            if (even_pass) {
-                if (local_id >= lookup) {
-                    scan_even.list[global_id] = scan_odd.list[global_id] + scan_odd.list[global_id - lookup];
-                } else {
-                    scan_even.list[global_id] = scan_odd.list[global_id];
-                }
-            } else {
-                if (local_id >= lookup) {
-                    scan_odd.list[global_id] = scan_even.list[global_id] + scan_even.list[global_id - lookup];
-                } else {
-                    scan_odd.list[global_id] = scan_even.list[global_id];
-                }
-            }
-            even_pass = !even_pass;
-        }
-        storageBarrier();
+    offsets.list[global_id] = u32(used);
+    if (used) {
+        atomicAdd(&num_used_entries.num, 1u);
     }
+}
 
-    // ensure both scan arrays store the same data (this is redundant, but time is short and I don't want to add logic
-    // to choose the correct array in the other pass)
-    if (!OUT_OF_BOUNDS) {
-        if (even_pass) {
-            scan_even.list[global_id] = scan_odd.list[global_id];
-        } else {
-            scan_odd.list[global_id] = scan_even.list[global_id];
-        }
+fn compute_new_index(global_id: u32, used: bool) -> u32 {
+    let offset = offsets.list[global_id];
+    if (used) {
+        return offset - 1u;
+    } else {
+        let num_used_total = atomicLoad(&num_used_entries.num);
+        return global_id + num_used_total - offset;
     }
 }
 
 @compute
-@workgroup_size(128, 1, 1)
-fn accumulate_and_update_lru(@builtin(local_invocation_index) local_id: u32,
-        @builtin(global_invocation_id) global_invocation_id: uint3,
-        @builtin(workgroup_id) workgroup_grid_id: uint3,
-        @builtin(num_workgroups) num_workgroups_in_grid: uint3) {
-
-    // one workgroup only!
-    let num_entries = arrayLength(&lru_cache.list);
-    let num_used_total = atomicLoad(&num_used_entries.num);
-    let block_size = 128u;
-    let num_blocks = u32(ceil(f32(num_entries) / f32(block_size)));
-    let buffer_size = uint3(textureDimensions(usage_buffer));
-
-    for (var block = 0u; block < num_blocks; block += 1u) {
-        let block_offset = block_size * block;
-        let global_id = block_offset + local_id;
-
-        let OUT_OF_BOUNDS = global_id >= num_entries;
-
-        if (block != 0u && !OUT_OF_BOUNDS) {
-            scan_even.list[global_id] += scan_even.list[block_offset - 1u];
-        }
-        storageBarrier();
-
-        if (!OUT_OF_BOUNDS) {
-            let lru_entry = lru_cache.list[global_id];
-            let usage_index = int3(index_to_subscript(lru_entry, buffer_size));
-            let used = timestamp.now == u32(textureLoad(usage_buffer, usage_index, 0).r);
-
-            let count = scan_even.list[global_id];
-            var index = global_id + num_used_total - count;
-            if (used) {
-                index = count - 1u;
-            }
-            scan_odd.list[index] = lru_entry;
-        }
-        storageBarrier();
+@workgroup_size(WORKGROUP_SIZE, 1, 1)
+fn update_lru(@builtin(global_invocation_id) global_invocation_id: uint3) {
+    let global_id = global_invocation_id.x;
+    if (is_out_of_bounds(global_id)) {
+        return;
     }
-}
 
+    let lru_entry = lru_cache.list[global_id];
+    let index = compute_new_index(global_id, is_used(lru_entry));
+
+    lru_updated.list[index] = lru_entry;
+}

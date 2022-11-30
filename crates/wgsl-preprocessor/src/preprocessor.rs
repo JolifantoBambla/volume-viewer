@@ -114,10 +114,6 @@ impl WGSLPreprocessor {
         //  - @else()
         //  - @endif()
 
-        // todo: fix attributes for older target browser (version)
-        //  - @<stagename> -> @stage(<stagename>)
-        //  - const -> let
-
         Ok(resolved_includes.ok().unwrap())
     }
 }
@@ -136,7 +132,7 @@ mod tests {
     }
 
     fn include_foo() -> &str {
-        r"@include(foo.wgsl)"
+        r"@include(lru_update.wgsl)"
     }
 
     fn include_bar() -> &str {

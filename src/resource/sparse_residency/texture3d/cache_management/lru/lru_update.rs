@@ -1,91 +1,90 @@
-use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
+use crate::renderer::pass::{AsBindGroupEntries, ComputeEncodeDescriptor, ComputePipelineData, GPUPass};
 use crate::resource::Texture;
 use crate::util::extent::extent_volume;
 use crate::GPUContext;
 use std::borrow::Cow;
 use std::mem::size_of;
+use std::rc::Rc;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{
-    BindGroup, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress, BufferDescriptor,
-    BufferUsages, CommandEncoder,
-};
+use wgpu::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, ComputePass, ComputePassDescriptor, ComputePipelineDescriptor, Device, Label};
 use wgsl_preprocessor::WGSLPreprocessor;
+use crate::renderer::pass::scan::Scan;
+use crate::resource::buffer::TypedBuffer;
+use crate::resource::sparse_residency::texture3d::cache_management::lru::NumUsedEntries;
 
-pub struct Resources<'a> {
-    pub usage_buffer: &'a Texture,
-    pub timestamp: &'a Buffer,
-    pub lru_cache: &'a Buffer,
-    pub num_used_entries: &'a Buffer,
+const WORKGROUP_SIZE: u32 = 256;
+
+pub struct LRUUpdateResources<'a> {
+    lru_cache: Rc<TypedBuffer<u32>>,
+    num_used_entries: Rc<TypedBuffer<NumUsedEntries>>,
+    usage_buffer: &'a Texture,
+    // todo: make that into a TypedBuffer
+    time_stamp: &'a Buffer,
 }
 
-impl<'a> AsBindGroupEntries for Resources<'a> {
-    fn as_bind_group_entries(&self) -> Vec<BindGroupEntry> {
-        vec![
-            BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&self.usage_buffer.view),
-            },
-            BindGroupEntry {
-                binding: 1,
-                resource: self.timestamp.as_entire_binding(),
-            },
-            BindGroupEntry {
-                binding: 2,
-                resource: self.lru_cache.as_entire_binding(),
-            },
-            BindGroupEntry {
-                binding: 3,
-                resource: self.num_used_entries.as_entire_binding(),
-            },
-        ]
+impl<'a> LRUUpdateResources<'a> {
+    pub fn new(lru_cache: Rc<TypedBuffer<u32>>, num_used_entries: Rc<TypedBuffer<NumUsedEntries>>, usage_buffer: &'a Texture, time_stamp: &'a Buffer) -> Self {
+        Self { lru_cache, num_used_entries, usage_buffer, time_stamp }
     }
 }
 
 pub(crate) struct LRUUpdate {
     ctx: Arc<GPUContext>,
 
-    group_wise_scan_pipeline: wgpu::ComputePipeline,
-    group_wise_scan_bind_group_layout: BindGroupLayout,
-    group_wise_scan_internal_bind_group: BindGroup,
-    num_group_wise_scan_work_groups: u32,
+    // these two resources get updated
+    lru_cache: Rc<TypedBuffer<u32>>,
+    num_used_entries: Rc<TypedBuffer<NumUsedEntries>>,
 
-    accumulate_and_update_lru_pipeline: wgpu::ComputePipeline,
-    accumulate_and_update_lru_bind_group_layout: BindGroupLayout,
-    accumulate_and_update_lru_internal_bind_group: BindGroup,
+    // temp buffer
+    lru_updated: TypedBuffer<u32>,
 
-    scan_even: Buffer,
-    scan_odd: Buffer,
-
-    num_entries: u32,
-
-    state_buffer: Buffer,
-    state_init: Vec<u32>,
+    initialize_offsets_pass: ComputeEncodeDescriptor,
+    scan: Scan,
+    update_lru_pass: ComputeEncodeDescriptor,
 }
 
 impl LRUUpdate {
-    pub fn new(
-        num_entries: u32,
+    fn create_base_bind_group<'a, const N: usize>(
+        label: &str,
+        pipeline: &ComputePipelineData<N>,
+        resources: &'a LRUUpdateResources<'a>,
+        offsets: &TypedBuffer<u32>,
+        device: &Device,
+    ) -> BindGroup {
+        device.create_bind_group(&BindGroupDescriptor {
+            label: Label::from(label),
+            layout: pipeline.bind_group_layout(0),
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&resources.usage_buffer.view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: resources.time_stamp.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: resources.lru_cache.buffer().as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: resources.num_used_entries.buffer().as_entire_binding()
+                },
+                BindGroupEntry {
+                    binding: 4,
+                    resource: offsets.buffer().as_entire_binding(),
+                }
+            ]
+        })
+    }
+
+    pub fn new<'a>(
+        resources: &'a LRUUpdateResources<'a>,
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
-        let num_workgroups = (num_entries as f32 / 128.).ceil() as u32;
-        let state_init = vec![0u32; num_workgroups as usize];
-        let state_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(state_init.as_slice()),
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-        });
-
-        let scan_buffer_descriptor = BufferDescriptor {
-            label: None,
-            size: (size_of::<u32>() * num_entries as usize) as BufferAddress,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC, // todo: remove copy_src
-            mapped_at_creation: false,
-        };
-        let scan_even = ctx.device.create_buffer(&scan_buffer_descriptor);
-        let scan_odd = ctx.device.create_buffer(&scan_buffer_descriptor);
-
         let shader_module = ctx
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -97,174 +96,118 @@ impl LRUUpdate {
                         .unwrap(),
                 )),
             });
-        let group_wise_scan_pipeline =
-            ctx.device
-                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: None,
+        let initialize_offsets_pipeline: Rc<ComputePipelineData<1>> = Rc::new(
+            ComputePipelineData::new(
+                &ComputePipelineDescriptor {
+                    label: Label::from("initialize offsets"),
                     layout: None,
                     module: &shader_module,
-                    entry_point: "group_wise_scan",
-                });
-
-        let group_wise_scan_bind_group_layout = group_wise_scan_pipeline.get_bind_group_layout(0);
-
-        let group_wise_scan_internal_bind_group_layout =
-            group_wise_scan_pipeline.get_bind_group_layout(1);
-        let group_wise_scan_internal_bind_group =
-            ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &group_wise_scan_internal_bind_group_layout,
-                entries: &vec![
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: scan_even.as_entire_binding(),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: scan_odd.as_entire_binding(),
-                    },
-                ],
-            });
-
-        let accumulate_and_update_lru_pipeline =
-            ctx.device
-                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: None,
+                    entry_point: "initialize_offsets",
+                },
+                &ctx.device
+            )
+        );
+        let update_lru_pipeline: Rc<ComputePipelineData<2>> = Rc::new(
+            ComputePipelineData::new(
+                &ComputePipelineDescriptor {
+                    label: Label::from("update lru"),
                     layout: None,
                     module: &shader_module,
-                    entry_point: "accumulate_and_update_lru",
-                });
-        let accumulate_and_update_lru_bind_group_layout =
-            accumulate_and_update_lru_pipeline.get_bind_group_layout(0);
+                    entry_point: "update_lru",
+                },
+                &ctx.device
+            )
+        );
 
-        let accumulate_and_update_lru_internal_bind_group_layout =
-            accumulate_and_update_lru_pipeline.get_bind_group_layout(1);
-        let accumulate_and_update_lru_internal_bind_group =
-            ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &accumulate_and_update_lru_internal_bind_group_layout,
-                entries: &vec![
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: scan_even.as_entire_binding(),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: scan_odd.as_entire_binding(),
-                    },
-                ],
-            });
+        let offsets: TypedBuffer<u32> = TypedBuffer::new_zeroed(
+            "offsets",
+            resources.lru_cache.num_elements(),
+            BufferUsages::STORAGE,
+            &ctx.device,
+        );
+        let lru_updated: TypedBuffer<u32> = TypedBuffer::new_zeroed(
+            "lru updated",
+            resources.lru_cache.num_elements(),
+            BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            &ctx.device,
+        );
+
+        let scan = Scan::new(&offsets, wgsl_preprocessor, ctx);
+
+        let initialize_offsets_pass = ComputeEncodeDescriptor::new_1d(
+            initialize_offsets_pipeline.pipeline(),
+            vec![
+                LRUUpdate::create_base_bind_group(
+                    "initialize offsets",
+                    &initialize_offsets_pipeline,
+                    resources,
+                    &offsets,
+                    &ctx.device
+                )
+            ],
+            WORKGROUP_SIZE,
+        );
+        let update_lru_pass = ComputeEncodeDescriptor::new_1d(
+            update_lru_pipeline.pipeline(),
+            vec![
+                LRUUpdate::create_base_bind_group(
+                    "update lru 0",
+                    &update_lru_pipeline,
+                    resources,
+                    &offsets,
+                    &ctx.device
+                ),
+                ctx.device.create_bind_group(&BindGroupDescriptor {
+                    label: Label::from("update lru 1"),
+                    layout: update_lru_pipeline.bind_group_layout(1),
+                    entries: &[
+                        BindGroupEntry {
+                            binding: 0,
+                            resource: lru_updated.buffer().as_entire_binding(),
+                        }
+                    ]
+                })
+            ],
+            WORKGROUP_SIZE,
+        );
 
         Self {
             ctx: ctx.clone(),
-
-            group_wise_scan_pipeline,
-            group_wise_scan_bind_group_layout,
-            group_wise_scan_internal_bind_group,
-            num_group_wise_scan_work_groups: num_workgroups,
-
-            accumulate_and_update_lru_pipeline,
-            accumulate_and_update_lru_bind_group_layout,
-            accumulate_and_update_lru_internal_bind_group,
-
-            scan_even,
-            scan_odd,
-
-            num_entries,
-
-            state_buffer,
-            state_init,
+            lru_cache: resources.lru_cache.clone(),
+            num_used_entries: resources.num_used_entries.clone(),
+            lru_updated,
+            initialize_offsets_pass,
+            scan,
+            update_lru_pass,
         }
     }
 
-    pub fn encode(
-        &self,
-        command_encoder: &mut CommandEncoder,
-        bind_groups: &Vec<BindGroup>,
-        lru_buffer: &Buffer,
-        output_extent: &wgpu::Extent3d,
-    ) {
+    pub fn encode(&self, command_encoder: &mut CommandEncoder) {
         self.ctx.queue.write_buffer(
-            &self.state_buffer,
+            self.num_used_entries.buffer(),
             0,
-            bytemuck::cast_slice(self.state_init.as_slice()),
+            bytemuck::bytes_of(&NumUsedEntries { num: 0 }),
         );
-
-        self.encode_group_wise_scan(command_encoder, &bind_groups[0], output_extent);
-        self.encode_accumulate_and_update_lru(command_encoder, &bind_groups[1]);
-        self.encode_copy_lru(command_encoder, lru_buffer);
+        self.encode_passes(command_encoder);
+        self.encode_copy(command_encoder);
     }
 
-    fn encode_copy_lru(&self, command_encoder: &mut CommandEncoder, lru_buffer: &Buffer) {
-        let buffer_size = (size_of::<u32>() as u32 * self.num_entries) as BufferAddress;
-        command_encoder.copy_buffer_to_buffer(&self.scan_odd, 0, lru_buffer, 0, buffer_size);
-    }
-
-    fn encode_group_wise_scan(
-        &self,
-        command_encoder: &mut CommandEncoder,
-        bind_group: &BindGroup,
-        output_extent: &wgpu::Extent3d,
-    ) {
-        let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("LRU Update"),
+    fn encode_passes(&self, command_encoder: &mut CommandEncoder) {
+        let mut compute_pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
+            label: Label::from("update lru")
         });
-        cpass.set_pipeline(&self.group_wise_scan_pipeline);
-        cpass.set_bind_group(0, bind_group, &[]);
-        cpass.set_bind_group(1, &self.group_wise_scan_internal_bind_group, &[]);
-        cpass.insert_debug_marker(self.label());
-        cpass.dispatch_workgroups(
-            (extent_volume(output_extent) as f32 / 128.).ceil() as u32,
-            1,
-            1,
+        self.initialize_offsets_pass.encode(&mut compute_pass);
+        self.scan.encode_to_pass(&mut compute_pass);
+        self.update_lru_pass.encode(&mut compute_pass);
+    }
+
+    fn encode_copy(&self, command_encoder: &mut CommandEncoder) {
+        command_encoder.copy_buffer_to_buffer(
+            self.lru_updated.buffer(),
+            0,
+            self.lru_cache.buffer(),
+            0,
+            self.lru_cache.size()
         );
-    }
-
-    fn encode_accumulate_and_update_lru(
-        &self,
-        command_encoder: &mut CommandEncoder,
-        bind_group: &BindGroup,
-    ) {
-        let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("LRU Update"),
-        });
-        cpass.set_pipeline(&self.accumulate_and_update_lru_pipeline);
-        cpass.set_bind_group(0, bind_group, &[]);
-        cpass.set_bind_group(1, &self.accumulate_and_update_lru_internal_bind_group, &[]);
-        cpass.insert_debug_marker(self.label());
-        cpass.dispatch_workgroups(1, 1, 1);
-    }
-
-    pub fn create_bind_groups(&self, resources: &Resources) -> Vec<BindGroup> {
-        vec![
-            self.ctx()
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: None,
-                    layout: &self.group_wise_scan_bind_group_layout,
-                    entries: &resources.as_bind_group_entries(),
-                }),
-            self.ctx()
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: None,
-                    layout: &self.accumulate_and_update_lru_bind_group_layout,
-                    entries: &resources.as_bind_group_entries(),
-                }),
-        ]
-    }
-}
-
-impl<'a> GPUPass<Resources<'a>> for LRUUpdate {
-    fn ctx(&self) -> &Arc<GPUContext> {
-        &self.ctx
-    }
-
-    fn label(&self) -> &str {
-        "LRU Update"
-    }
-
-    fn bind_group_layout(&self) -> &BindGroupLayout {
-        &self.group_wise_scan_bind_group_layout
     }
 }
