@@ -91,14 +91,14 @@ impl<T: bytemuck::Pod> GpuList<T> {
             encoder.copy_buffer_to_buffer(
                 &self.meta_buffer,
                 0,
-                self.meta_read_buffer.as_buffer_ref(),
+                self.meta_read_buffer.buffer(),
                 0,
                 size_of::<GpuListMeta>() as BufferAddress,
             );
             encoder.copy_buffer_to_buffer(
                 &self.list_buffer,
                 0,
-                self.list_read_buffer.as_buffer_ref(),
+                self.list_read_buffer.buffer(),
                 0,
                 self.list_buffer_size,
             );

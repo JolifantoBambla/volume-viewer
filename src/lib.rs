@@ -2,6 +2,7 @@ extern crate core;
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use glam::{Vec2, Vec3};
 use wasm_bindgen::{prelude::*, JsCast};
@@ -47,6 +48,7 @@ use crate::window::window_builder_without_size;
 use crate::util::vec::vec_equals;
 #[allow(unused)]
 use include_preprocessed_wgsl::include_preprocessed;
+use crate::resource::buffer::TypedBuffer;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -133,6 +135,9 @@ async fn start_event_loop(
     volume_meta: BrickedMultiResolutionMultiVolumeMeta,
     render_settings: MultiChannelVolumeRendererSettings,
 ) {
+
+    test_scan().await;
+
     let html_canvas = canvas
         .clone()
         .unchecked_into::<web_sys::HtmlCanvasElement>();
@@ -507,4 +512,9 @@ async fn expose_device() -> web_sys::GpuDevice {
     log::info!("max bind groups: {}", ctx.device.limits().max_bind_groups);
 
     device.id
+}
+
+async fn test_scan() {
+    let mut ctx = Arc::new(GPUContext::new(&renderer::context::ContextDescriptor::default()).await);
+    renderer::pass::scan::test_scan(&ctx).await;
 }
