@@ -3,49 +3,19 @@ use std::rc::Rc;
 use std::sync::Arc;
 use glam::{UVec2, UVec3};
 use wasm_bindgen::prelude::wasm_bindgen;
-use wgpu::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescriptor, BufferUsages, CommandEncoderDescriptor, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor, Device, Label, ShaderModuleDescriptor, ShaderSource};
+use wgpu::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescriptor, BufferUsages, CommandEncoder, CommandEncoderDescriptor, ComputePass, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor, Device, Label, ShaderModuleDescriptor, ShaderSource};
 use wgsl_preprocessor::WGSLPreprocessor;
 use crate::renderer::context::GPUContext;
-use crate::renderer::pass::{ComputePipelineData, GPUPass};
+use crate::renderer::pass::{ComputeEncodeDescriptor, ComputePipelineData, GPUPass};
 use crate::resource::buffer::{map_buffer, TypedBuffer};
 use crate::resource::MappableBuffer;
 
 const WORKGROUP_SIZE: u32 = 256;
 const WORKGROUP_SIZE_DOUBLED: u32 = WORKGROUP_SIZE * 2;
 
-struct PipelineData<const N: usize> {
-    pipeline: Rc<ComputePipeline>,
-    bind_group_layouts: Vec<BindGroupLayout>,
-}
-
-impl<const N: usize> PipelineData<N> {
-    pub fn new(pipeline_descriptor: &ComputePipelineDescriptor, device: &Device) -> Self {
-        let pipeline = Rc::new(
-            device.create_compute_pipeline(pipeline_descriptor)
-        );
-        let mut bind_group_layouts = Vec::new();
-        for i in 0..N as u32 {
-            bind_group_layouts.push(pipeline.get_bind_group_layout(i));
-        }
-        Self {
-            pipeline,
-            bind_group_layouts
-        }
-    }
-
-    pub fn pipeline(&self) -> &Rc<ComputePipeline> {
-        &self.pipeline
-    }
-
-    pub fn bind_group_layout(&self, i: usize) -> &BindGroupLayout {
-        assert!(i < N);
-        &self.bind_group_layouts[i]
-    }
-}
-
 pub struct Scan {
     ctx: Arc<GPUContext>,
-    passes: Vec<ComputePipelineData>,
+    passes: Vec<ComputeEncodeDescriptor>,
 }
 
 impl Scan {
@@ -69,7 +39,7 @@ impl Scan {
                         .unwrap()
                 )),
             });
-        let scan_pipeline = PipelineData::new(
+        let scan_pipeline = ComputePipelineData::new(
             &ComputePipelineDescriptor {
                 label: Label::from("Scan"),
                 layout: None,
@@ -90,7 +60,7 @@ impl Scan {
                         .unwrap()
                 )),
             });
-        let sum_pipeline = PipelineData::new(
+        let sum_pipeline = ComputePipelineData::new(
             &ComputePipelineDescriptor {
                 label: Label::from("Sum"),
                 layout: None,
@@ -117,9 +87,9 @@ impl Scan {
 
     fn create_recursive_bind_groups(
         input: &TypedBuffer<u32>,
-        scan_pipeline: &PipelineData<1>,
-        sum_pipeline: &PipelineData<1>,
-        passes: &mut Vec<ComputePipelineData>,
+        scan_pipeline: &ComputePipelineData<1>,
+        sum_pipeline: &ComputePipelineData<1>,
+        passes: &mut Vec<ComputeEncodeDescriptor>,
         device: &Device
     ) {
         let reduced_size = f32::ceil(input.num_elements() as f32 / WORKGROUP_SIZE_DOUBLED as f32) as usize;
@@ -147,7 +117,7 @@ impl Scan {
             ]
         });
 
-        passes.push(ComputePipelineData::new_1d(
+        passes.push(ComputeEncodeDescriptor::new_1d(
             scan_pipeline.pipeline(),
             vec![scan_bind_group],
             reduced_size as u32,
@@ -177,7 +147,7 @@ impl Scan {
                 ],
             });
 
-            passes.push(ComputePipelineData::new_1d(
+            passes.push(ComputeEncodeDescriptor::new_1d(
                 sum_pipeline.pipeline(),
                 vec![sum_bind_group],
                 (input.num_elements() as f32 / WORKGROUP_SIZE as f32).ceil() as u32,
@@ -185,17 +155,24 @@ impl Scan {
         }
     }
 
-    pub fn encode(&self, command_encoder: &mut wgpu::CommandEncoder) {
-        let mut cpass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
+    pub fn encode(&self, command_encoder: &mut CommandEncoder) {
+        let mut compute_pass: ComputePass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
             label: Label::from("Scan")
         });
+        self.encode_to_pass(&mut compute_pass);
+    }
+
+    pub fn encode_to_pass<'a, 'b>(&'a self, compute_pass: &mut ComputePass<'b>)
+    where
+        'a: 'b
+    {
         for p in &self.passes {
-            p.encode(&mut cpass);
+            p.encode(compute_pass);
         }
     }
 }
 
-
+// todo: remove (debug)!
 pub async fn test_scan(ctx: &Arc<GPUContext>) {
     let num_chunks = (1024*1024*1024) / (32*32*32);
     let data: Vec<u32> = (0..num_chunks).map(|_| if js_sys::Math::random() > 0.5 { 1 } else { 0 }).collect();

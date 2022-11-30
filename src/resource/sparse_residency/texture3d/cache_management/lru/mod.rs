@@ -2,6 +2,7 @@
 // todo: sort list w.r.t. mask
 
 mod lru_update;
+mod foo;
 
 use glam::UVec3;
 use std::mem::size_of;
@@ -76,7 +77,6 @@ impl LRUCache {
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
-        // todo: make configurable
         let cache = Texture::create_brick_cache(&ctx.device, settings.cache_size);
 
         let usage_buffer_size = extent_to_uvec(&settings.cache_size) / settings.cache_entry_size;
