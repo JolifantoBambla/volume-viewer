@@ -374,6 +374,9 @@ pub fn run_event_loop(
                                 settings.channel_settings[i].max_lod = range.min;
                                 settings.channel_settings[i].min_lod = range.max;
                             }
+                            ChannelSettingsChange::LoDFactor(lod_factor) => {
+                                settings.channel_settings[i].lod_factor = lod_factor;
+                            }
                         }
                     }
                 },

@@ -63,7 +63,7 @@ struct ChannelSettings {
     threshold_upper: f32,
     visible: u32,
     page_table_index: u32,
-    padding2: u32,
+    lod_factor: f32,
 }
 
 struct ChannelSettingsList {
@@ -141,8 +141,8 @@ fn clone_channel_settings(channel_index: u32) -> ChannelSettings {
         channel_settings.threshold_lower,
         channel_settings.threshold_upper,
         channel_settings.visible,
-        channel_settings.page_table_index, // page_table_index,
-        0u  // padding2,
+        channel_settings.page_table_index,
+        channel_settings.lod_factor
      );
 }
 
@@ -210,10 +210,12 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     // todo: look for visible channels as soon as multiple channels are supported
     let cs = clone_channel_settings(0);
 
+    let inv_high_res_size = 1. / float3(page_table_meta.resolutions[0].brick_size);
+    let brick_size = page_table_meta.resolutions[0].brick_size;
+
     let lowest_res = min(cs.min_lod, num_resolutions);
     let highest_res = min(cs.max_lod, lowest_res);
-    
-    let brick_size = page_table_meta.resolutions[0].brick_size;
+    let lod_factor = cs.lod_factor * max_component(inv_high_res_size);
 
     // Set up state tracking
     var color = float4();
@@ -234,7 +236,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
             let position = brick_endpoints.entry;
             let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
-            let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res);
+
+            let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res, lod_factor);
             if (lod != last_lod) {
                 last_lod = lod;
                 page_table = clone_page_table_meta(lod);
@@ -303,7 +306,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
         for (var t = t_min; t < t_max; t += dt) {
             let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
-            let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res);
+            let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res, lod_factor);
             let lod_changed = lod != last_lod;
             if (lod_changed) {
                 last_lod = lod;
@@ -415,11 +418,14 @@ fn apply_colormap(value: f32, channel_settings: ChannelSettings) -> float3{
 }
 
 // page table stuff
-fn select_level_of_detail(distance: f32, highest_res: u32, lowest_res: u32) -> u32 {
-    // todo: select based on distance to camera or screen size?
-    // let lod ...
-    // return clamp(lod, highest_res, lowest_res);
-    return 0u; //page_table_meta.max_lod;
+/// Computes a level of detail within a given highest and lowest level for the distance from the current sample to the
+/// camera in the camera's space.
+/// The ranges of the given highest and lowest levels are max(0, highest_res) and max(highest_res, lowest_res)
+/// respectively.
+/// It is the caller's responsibility to choose an adequate factor.
+fn select_level_of_detail(distance: f32, highest_res: u32, lowest_res: u32, lod_factor: f32) -> u32 {
+    let lod = u32(log2(lod_factor * distance));
+    return clamp(lod, highest_res, lowest_res);
 }
 
 fn is_saturated(color: float4) -> bool {

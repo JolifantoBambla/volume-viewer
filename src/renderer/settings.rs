@@ -37,6 +37,10 @@ impl From<Color> for Vec4 {
     }
 }
 
+fn one() -> f32 {
+    1.0
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ChannelSettings {
     /// This channel's name.
@@ -58,6 +62,12 @@ pub struct ChannelSettings {
     /// If this `min_lod` > n, defaults to n.
     #[serde(rename = "minLoD")]
     pub min_lod: u32,
+
+    /// A factor to be used to modulate between levels of detail for this channel.
+    /// Defaults to 1.0.
+    #[serde(rename = "lodFactor")]
+    #[serde(default = "one")]
+    pub lod_factor: f32,
 
     /// The lower threshold for this channel.
     /// Every value below it is treated as 0 during rendering.

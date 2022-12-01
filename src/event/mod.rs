@@ -22,6 +22,9 @@ pub enum ChannelSettingsChange {
     #[serde(rename = "lod")]
     LoD(Range<u32>),
 
+    #[serde(rename = "lodFactor")]
+    LoDFactor(f32),
+
     #[serde(rename = "threshold")]
     Threshold(Range<f32>),
 
