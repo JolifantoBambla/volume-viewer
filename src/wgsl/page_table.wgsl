@@ -81,6 +81,15 @@ fn compute_brick_id(page_table: PageTableMeta, global_id: uint3, level: u32) -> 
     return pack4x8uint(uint4(local_brick_address, level));
 }
 
+struct PageTableMetas {
+    metas: array<PageTableMeta>,
+}
+
 struct PageDirectoryMeta {
-    resolutions: array<PageTableMeta>,
+    // size of a brick in voxels
+    @size(16) brick_size: uint3,
+    max_resolutions: u32,
+    max_channels: u32,
+    padding1: u32,
+    padding2: u32,
 }

@@ -11,6 +11,7 @@ use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 use crate::GPUContext;
 
 pub use meta::{PageDirectoryMeta, PageTableMeta};
+use crate::resource::buffer::TypedBuffer;
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -118,9 +119,20 @@ pub struct ResMeta {
     //   - a variable saying which channel this page table holds
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct PageDirectoryMetaGPUData {
+    brick_size: UVec4,
+    max_visible_channels: u32,
+    max_resolutions: u32,
+    padding1: u32,
+    padding2: u32,
+}
+
 pub struct PageTableDirectory {
     ctx: Arc<GPUContext>,
     local_page_directory: Vec<UVec4>,
+    page_directory_meta_buffer: TypedBuffer<PageDirectoryMetaGPUData>,
     page_table_meta_buffer: Buffer,
     page_directory: Texture,
     meta: PageDirectoryMeta,
@@ -157,6 +169,19 @@ impl PageTableDirectory {
             log::info!("resolution meta data: {:?}", r);
         }
 
+        let page_directory_meta_buffer = TypedBuffer::new_single_element(
+            "Page Directory Meta",
+            PageDirectoryMetaGPUData {
+                brick_size: meta.brick_size().extend(0),
+                max_visible_channels: meta.num_channels() as u32,
+                max_resolutions: meta.num_resolutions() as u32,
+                padding1: 0,
+                padding2: 0
+            },
+            BufferUsages::UNIFORM,
+            &ctx.device,
+        );
+
         let page_table_meta_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Page Table Meta"),
             contents: bytemuck::cast_slice(res_meta_data.as_slice()),
@@ -172,6 +197,7 @@ impl PageTableDirectory {
             max_visible_channels,
             max_resolutions,
             volume_meta: volume_meta.clone(),
+            page_directory_meta_buffer,
             page_table_meta_buffer,
             page_directory,
             local_page_directory,
@@ -180,11 +206,12 @@ impl PageTableDirectory {
     }
 
     pub fn page_index_to_address(&self, page_index: u32) -> BrickAddress {
-        // todo: find out why these are in big endian - my system is little endian AND webgpu ensures little endian
         let bytes: [u8; 4] = page_index.to_be_bytes();
 
         let size = self.meta.get_page_table_size();
         let subscript = size.index_to_subscript(bytes[3] as u32);
+        // todo: remove (debug)
+        log::warn!("index: {}, bytes: {:?}, channel: {} resolution: {}, size: {}, channels: {}, resolutions: {}", page_index, bytes, subscript.x, subscript.y, size, self.meta.num_channels(), self.meta.num_resolutions());
 
         BrickAddress::new(
             [bytes[0] as u32, bytes[1] as u32, bytes[2] as u32],
@@ -246,6 +273,10 @@ impl PageTableDirectory {
             self.meta.page_tables[0].volume_meta.volume_size[2] as f32,
         );
         size * (self.meta.scale / self.meta.scale.max_element())
+    }
+
+    pub fn get_page_directory_meta_as_binding_resource(&self) -> BindingResource {
+        self.page_directory_meta_buffer.buffer().as_entire_binding()
     }
 
     pub fn get_page_table_meta_as_binding_resource(&self) -> BindingResource {

@@ -65,7 +65,7 @@ async function createUI(offscreenRenderer, config) {
             return new ChannelSettings({
                 channelIndex,
                 visible: channelIndex === 0,
-                minLoD: volumeMetaData.resolutions.length,
+                minLoD: volumeMetaData.resolutions.length - 1,
             });
         }),
     });
@@ -142,7 +142,7 @@ async function createUI(offscreenRenderer, config) {
         });
         const lodFactorSlider = channelSettings.addInput(c, 'lodFactor', {
             label: 'LoD Factor',
-            min: 0.01, max: 5.0, step: 0.01
+            min: 0.001, max: 2.0, step: 0.001
         })
         const thresholdSlider = channelSettings.addInput({threshold: {min: c.thresholdLower, max: c.thresholdUpper}}, 'threshold', {
             label: 'Threshold',

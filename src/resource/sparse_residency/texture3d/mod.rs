@@ -430,24 +430,30 @@ impl AsBindGroupEntries for SparseResidencyTexture3D {
                 binding: 0,
                 resource: self
                     .page_table_directory
-                    .get_page_table_meta_as_binding_resource(),
+                    .get_page_directory_meta_as_binding_resource(),
             },
             BindGroupEntry {
                 binding: 1,
                 resource: self
                     .page_table_directory
-                    .get_page_directory_as_binding_resource(),
+                    .get_page_table_meta_as_binding_resource(),
             },
             BindGroupEntry {
                 binding: 2,
-                resource: self.lru_cache.get_cache_as_binding_resource(), //BindingResource::TextureView(&self.brick_cache.view),
+                resource: self
+                    .page_table_directory
+                    .get_page_directory_as_binding_resource(),
             },
             BindGroupEntry {
                 binding: 3,
-                resource: self.lru_cache.get_usage_buffer_as_binding_resource(), //BindingResource::TextureView(&self.brick_usage_buffer.view),
+                resource: self.lru_cache.get_cache_as_binding_resource(), //BindingResource::TextureView(&self.brick_cache.view),
             },
             BindGroupEntry {
                 binding: 4,
+                resource: self.lru_cache.get_usage_buffer_as_binding_resource(), //BindingResource::TextureView(&self.brick_usage_buffer.view),
+            },
+            BindGroupEntry {
+                binding: 5,
                 resource: BindingResource::TextureView(&self.request_buffer.view),
             },
         ]

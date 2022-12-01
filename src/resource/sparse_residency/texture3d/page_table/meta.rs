@@ -118,4 +118,23 @@ impl PageDirectoryMeta {
         let size = self.get_page_table_size();
         &self.page_tables[subscript.to_index(&size) as usize]
     }
+
+    pub fn brick_size(&self) -> UVec3 {
+        self.brick_size
+    }
+    pub fn scale(&self) -> Vec3 {
+        self.scale
+    }
+    pub fn extent(&self) -> UVec3 {
+        self.extent
+    }
+    pub fn page_tables(&self) -> &Vec<PageTableMeta> {
+        &self.page_tables
+    }
+    pub fn num_channels(&self) -> usize {
+        self.num_channels
+    }
+    pub fn num_resolutions(&self) -> usize {
+        self.num_resolutions
+    }
 }
