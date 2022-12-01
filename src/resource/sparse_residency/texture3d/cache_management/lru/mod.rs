@@ -248,6 +248,7 @@ impl LRUCache {
                     ) + UVec3::ONE),
                 );
 
+                // todo: batch updates
                 let cache_entry_location = self.cache_entry_index_to_location(cache_entry_index);
                 self.cache.write_subregion(
                     data.as_slice(),

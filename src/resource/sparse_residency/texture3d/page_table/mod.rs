@@ -123,8 +123,8 @@ pub struct ResMeta {
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct PageDirectoryMetaGPUData {
     brick_size: UVec4,
-    max_visible_channels: u32,
     max_resolutions: u32,
+    max_visible_channels: u32,
     padding1: u32,
     padding2: u32,
 }
@@ -210,8 +210,6 @@ impl PageTableDirectory {
 
         let size = self.meta.get_page_table_size();
         let subscript = size.index_to_subscript(bytes[3] as u32);
-        // todo: remove (debug)
-        log::warn!("index: {}, bytes: {:?}, channel: {} resolution: {}, size: {}, channels: {}, resolutions: {}", page_index, bytes, subscript.x, subscript.y, size, self.meta.num_channels(), self.meta.num_resolutions());
 
         BrickAddress::new(
             [bytes[0] as u32, bytes[1] as u32, bytes[2] as u32],
