@@ -1,10 +1,11 @@
+use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
 use std::mem;
 use std::mem::size_of;
 use std::ops::RangeBounds;
 use std::sync::{Arc, Mutex};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{Buffer, BufferAddress, BufferDescriptor, BufferUsages, Device, Label, MapMode};
+use wgpu::{Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, Device, Label, MapMode};
 
 pub struct TypedBuffer<T: bytemuck::Pod> {
     label: String,
@@ -93,7 +94,7 @@ pub async fn map_buffer<S: RangeBounds<BufferAddress>>(buffer: &Buffer, bounds: 
         .expect("I said: could not map buffer!");
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum BufferState {
     Ready,
     Mapping,
@@ -172,75 +173,134 @@ impl<T: bytemuck::Pod> MappableBuffer<T> {
     }
 }
 
-pub struct MultiBufferedMappableBuffer<T: bytemuck::Pod> {
-    buffers: Vec<MappableBuffer<T>>,
-    buffer_size: BufferAddress,
+#[derive(Debug, Eq, PartialEq)]
+pub enum BufferMapError {
+    NotReady,
+    NotMapped,
 }
 
-impl<T: bytemuck::Pod> MultiBufferedMappableBuffer<T> {
-    pub fn from_buffer(buffer: &TypedBuffer<T>, num_buffers: u32, device: &Device) -> Self {
-        assert!(num_buffers > 0);
-        let buffers = (0..num_buffers)
-            .map(|_| MappableBuffer::from_buffer(buffer, device))
-            .collect();
+pub struct ReadableStorageBuffer<T: bytemuck::Pod> {
+    storage_buffer: Arc<TypedBuffer<T>>,
+    read_buffer: MappableBuffer<T>,
+}
+
+impl<T: bytemuck::Pod> ReadableStorageBuffer<T> {
+    pub fn new(label: &str, capacity: usize, device: &Device) -> Self {
+        let storage_buffer = Arc::new(TypedBuffer::new_zeroed(
+            label,
+            capacity,
+            BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
+            device,
+        ));
+        let read_buffer = MappableBuffer::from_buffer(&storage_buffer, device);
         Self {
-            buffers,
-            buffer_size: buffer.size(),
+            storage_buffer,
+            read_buffer,
         }
     }
 
-    pub fn to_index(&self, index_or_frame_number: u32) -> usize {
-        index_or_frame_number as usize % self.num_buffers()
+    pub fn from_data(label: &str, data: &Vec<T>, device: &Device) -> Self {
+        let storage_buffer = Arc::new(TypedBuffer::from_data(
+            label,
+            data,
+            BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
+            device,
+        ));
+        let read_buffer = MappableBuffer::from_buffer(&storage_buffer, device);
+        Self {
+            storage_buffer,
+            read_buffer,
+        }
     }
 
-    fn get_buffer(&self, index_or_frame_number: u32) -> &MappableBuffer<T> {
-        &self.buffers[self.to_index(index_or_frame_number)]
+    pub fn storage_buffer(&self) -> &Arc<TypedBuffer<T>> {
+        &self.storage_buffer
     }
 
-    pub fn to_previous_index(&self, index_or_frame_number: u32) -> u32 {
-        let num_buffers = self.num_buffers() as u32;
-        (index_or_frame_number + num_buffers - 1) % num_buffers
+    pub fn read_buffer(&self) -> &MappableBuffer<T> {
+        &self.read_buffer
     }
 
-    pub fn num_buffers(&self) -> usize {
-        self.buffers.len()
+    pub fn buffer(&self) -> &Buffer {
+        self.storage_buffer.buffer()
     }
 
-    pub fn as_buffer_ref(&self, index_or_frame_number: u32) -> &Buffer {
-        self.get_buffer(index_or_frame_number).buffer()
+    pub fn size(&self) -> BufferAddress {
+        self.storage_buffer.size()
     }
 
-    pub fn map_async<S: RangeBounds<BufferAddress>>(
-        &self,
-        index_or_frame_number: u32,
-        mode: MapMode,
-        bounds: S,
-    ) {
-        self.get_buffer(index_or_frame_number)
-            .map_async(mode, bounds);
+    pub fn copy_to_readable(&self, command_encoder: &mut CommandEncoder) -> Result<(), BufferMapError> {
+        if self.read_buffer.is_ready() {
+            command_encoder.copy_buffer_to_buffer(
+                self.storage_buffer.buffer(),
+                0,
+                self.read_buffer.buffer(),
+                0,
+                self.storage_buffer.size(),
+            );
+            Ok(())
+        } else {
+            Err(BufferMapError::NotReady)
+        }
     }
 
-    pub fn is_ready(&self, index_or_frame_number: u32) -> bool {
-        self.get_buffer(index_or_frame_number).is_ready()
+    /// Maps a mappable buffer if it is not already mapped or being mapped.
+    /// The buffer can be read
+    pub fn map_async<S: RangeBounds<BufferAddress>>(&self, bounds: S) -> Result<(), BufferMapError> {
+        if self.read_buffer.is_ready() {
+            let s = self.read_buffer.state.clone();
+            s.lock().unwrap().state = BufferState::Mapping;
+            self.read_buffer.buffer().slice(bounds).map_async(MapMode::Read, move |_| {
+                s.lock().unwrap().state = BufferState::Mapped;
+            });
+            Ok(())
+        }  else {
+            Err(BufferMapError::NotReady)
+        }
     }
 
-    pub fn is_mapped(&self, index_or_frame_number: u32) -> bool {
-        self.get_buffer(index_or_frame_number).is_mapped()
+    pub fn map_all_async(&self) -> Result<(), BufferMapError> {
+        self.map_async(..)
     }
 
-    pub fn maybe_read<S: RangeBounds<BufferAddress>>(
-        &self,
-        index_or_frame_number: u32,
-        bounds: S,
-    ) -> Vec<T> {
-        self.get_buffer(index_or_frame_number).maybe_read(bounds)
+    pub fn read<S: RangeBounds<BufferAddress>>(&self, bounds: S) -> Result<Vec<T>, BufferMapError> {
+        if self.read_buffer.is_mapped() {
+            let mapped_range = self.read_buffer.buffer().slice(bounds).get_mapped_range();
+            let result: Vec<T> = bytemuck::cast_slice(&mapped_range).to_vec();
+            drop(mapped_range);
+            Ok(result)
+        } else {
+            Err(BufferMapError::NotMapped)
+        }
     }
 
-    pub fn unmap(&self, index_or_frame_number: u32) {
-        self.get_buffer(index_or_frame_number).unmap();
+    #[inline]
+    fn unmap_unchecked(&self) {
+        self.read_buffer.buffer().unmap();
+        self.read_buffer.state.lock().unwrap().state = BufferState::Ready;
     }
 
-    pub fn maybe_read_all(&self, index_or_frame_number: u32) -> Vec<T> {
-        self.get_buffer(index_or_frame_number).maybe_read_all()
+    pub fn unmap(&self) {
+        if self.read_buffer.is_mapped() {
+            self.unmap_unchecked()
+        }
+    }
+
+    pub fn read_all(&self) -> Result<Vec<T>, BufferMapError> {
+        let result = self.read(..);
+        if result.is_ok() {
+            self.unmap_unchecked()
+        }
+        result
+    }
+}
+
+impl<T: bytemuck::Pod> Display for ReadableStorageBuffer<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Readable Storage Buffer [{}] (size: {}, state: {:?})",
+               self.storage_buffer.label,
+               self.size(),
+               self.read_buffer.state.lock().unwrap().state
+        )
     }
 }

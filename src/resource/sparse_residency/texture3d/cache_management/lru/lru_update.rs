@@ -16,15 +16,15 @@ use crate::resource::sparse_residency::texture3d::cache_management::lru::NumUsed
 const WORKGROUP_SIZE: u32 = 256;
 
 pub struct LRUUpdateResources<'a> {
-    lru_cache: Rc<TypedBuffer<u32>>,
-    num_used_entries: Rc<TypedBuffer<NumUsedEntries>>,
+    lru_cache: Arc<TypedBuffer<u32>>,
+    num_used_entries: Arc<TypedBuffer<NumUsedEntries>>,
     usage_buffer: &'a Texture,
     // todo: make that into a TypedBuffer
     time_stamp: &'a Buffer,
 }
 
 impl<'a> LRUUpdateResources<'a> {
-    pub fn new(lru_cache: Rc<TypedBuffer<u32>>, num_used_entries: Rc<TypedBuffer<NumUsedEntries>>, usage_buffer: &'a Texture, time_stamp: &'a Buffer) -> Self {
+    pub fn new(lru_cache: Arc<TypedBuffer<u32>>, num_used_entries: Arc<TypedBuffer<NumUsedEntries>>, usage_buffer: &'a Texture, time_stamp: &'a Buffer) -> Self {
         Self { lru_cache, num_used_entries, usage_buffer, time_stamp }
     }
 }
@@ -33,8 +33,8 @@ pub(crate) struct LRUUpdate {
     ctx: Arc<GPUContext>,
 
     // these two resources get updated
-    lru_cache: Rc<TypedBuffer<u32>>,
-    num_used_entries: Rc<TypedBuffer<NumUsedEntries>>,
+    lru_cache: Arc<TypedBuffer<u32>>,
+    num_used_entries: Arc<TypedBuffer<NumUsedEntries>>,
 
     // temp buffer
     lru_updated: TypedBuffer<u32>,
@@ -50,6 +50,7 @@ impl LRUUpdate {
         pipeline: &ComputePipelineData<N>,
         resources: &'a LRUUpdateResources<'a>,
         offsets: &TypedBuffer<u32>,
+        used: &TypedBuffer<u32>,
         device: &Device,
     ) -> BindGroup {
         device.create_bind_group(&BindGroupDescriptor {
@@ -58,23 +59,19 @@ impl LRUUpdate {
             entries: &[
                 BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&resources.usage_buffer.view),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: resources.time_stamp.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 2,
                     resource: resources.lru_cache.buffer().as_entire_binding(),
                 },
                 BindGroupEntry {
-                    binding: 3,
+                    binding: 1,
                     resource: resources.num_used_entries.buffer().as_entire_binding()
                 },
                 BindGroupEntry {
-                    binding: 4,
+                    binding: 2,
                     resource: offsets.buffer().as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: used.buffer().as_entire_binding(),
                 }
             ]
         })
@@ -85,35 +82,51 @@ impl LRUUpdate {
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {
-        let shader_module = ctx
+        let mut preprocessor = wgsl_preprocessor.clone();
+        preprocessor.include("lru_update_base", include_str!("lru_update_base.wgsl"));
+
+        let init_shader = ctx
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
-                    &*wgsl_preprocessor
-                        .preprocess(include_str!("lru_update.wgsl"))
+                    &preprocessor
+                        .preprocess(include_str!("lru_update_init.wgsl"))
                         .ok()
                         .unwrap(),
                 )),
             });
-        let initialize_offsets_pipeline: Rc<ComputePipelineData<1>> = Rc::new(
+
+        let sort_shader = ctx
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
+                    &preprocessor
+                        .preprocess(include_str!("lru_update_sort.wgsl"))
+                        .ok()
+                        .unwrap(),
+                )),
+            });
+
+        let lru_update_init_pipeline: Rc<ComputePipelineData<2>> = Rc::new(
             ComputePipelineData::new(
                 &ComputePipelineDescriptor {
                     label: Label::from("initialize offsets"),
                     layout: None,
-                    module: &shader_module,
-                    entry_point: "initialize_offsets",
+                    module: &init_shader,
+                    entry_point: "main",
                 },
                 &ctx.device
             )
         );
-        let update_lru_pipeline: Rc<ComputePipelineData<2>> = Rc::new(
+        let lru_update_sort_pipeline: Rc<ComputePipelineData<2>> = Rc::new(
             ComputePipelineData::new(
                 &ComputePipelineDescriptor {
                     label: Label::from("update lru"),
                     layout: None,
-                    module: &shader_module,
-                    entry_point: "update_lru",
+                    module: &sort_shader,
+                    entry_point: "main",
                 },
                 &ctx.device
             )
@@ -125,6 +138,13 @@ impl LRUUpdate {
             BufferUsages::STORAGE,
             &ctx.device,
         );
+        let used: TypedBuffer<u32> = TypedBuffer::new_zeroed(
+            "used",
+            resources.lru_cache.num_elements(),
+            BufferUsages::STORAGE,
+            &ctx.device,
+        );
+
         let lru_updated: TypedBuffer<u32> = TypedBuffer::new_zeroed(
             "lru updated",
             resources.lru_cache.num_elements(),
@@ -135,31 +155,47 @@ impl LRUUpdate {
         let scan = Scan::new(&offsets, wgsl_preprocessor, ctx);
 
         let initialize_offsets_pass = ComputeEncodeDescriptor::new_1d(
-            initialize_offsets_pipeline.pipeline(),
+            lru_update_init_pipeline.pipeline(),
             vec![
                 LRUUpdate::create_base_bind_group(
-                    "initialize offsets",
-                    &initialize_offsets_pipeline,
+                    "LRU update init 0",
+                    &lru_update_init_pipeline,
                     resources,
                     &offsets,
+                    &used,
                     &ctx.device
-                )
+                ),
+                ctx.device.create_bind_group(&BindGroupDescriptor {
+                    label: Label::from("LRU update init 1"),
+                    layout: lru_update_init_pipeline.bind_group_layout(1),
+                    entries: &[
+                        BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&resources.usage_buffer.view),
+                        },
+                        BindGroupEntry {
+                            binding: 1,
+                            resource: resources.time_stamp.as_entire_binding(),
+                        },
+                    ]
+                })
             ],
             WORKGROUP_SIZE,
         );
         let update_lru_pass = ComputeEncodeDescriptor::new_1d(
-            update_lru_pipeline.pipeline(),
+            lru_update_sort_pipeline.pipeline(),
             vec![
                 LRUUpdate::create_base_bind_group(
-                    "update lru 0",
-                    &update_lru_pipeline,
+                    "LRU update sort 0",
+                    &lru_update_sort_pipeline,
                     resources,
                     &offsets,
+                    &used,
                     &ctx.device
                 ),
                 ctx.device.create_bind_group(&BindGroupDescriptor {
-                    label: Label::from("update lru 1"),
-                    layout: update_lru_pipeline.bind_group_layout(1),
+                    label: Label::from("LRU update sort 1"),
+                    layout: lru_update_sort_pipeline.bind_group_layout(1),
                     entries: &[
                         BindGroupEntry {
                             binding: 0,

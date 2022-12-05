@@ -30,10 +30,10 @@
     const dataSourceConfig = new VolumeDataSourceConfig(
         new DataStoreConfig({
             store: 'http://localhost:8005/',
-            path: 'melanoma.zarr', //'stag_beetle.zarr',//'ome-zarr/m-128x128.ome.zarr/0',
+            path: 'bonsai.zarr', //'stag_beetle.zarr',//'ome-zarr/m-128x128.ome.zarr/0',
         }),
         new PreprocessConfig({
-            preprocessingMethod: PREPROCESS_METHOD_SCALE_TO_MAX, //PREPROCESS_METHOD_CAST,
+            preprocessingMethod: PREPROCESS_METHOD_CAST,
             isZeroThreshold: 0.01,
         }),
         new BrickConfig({

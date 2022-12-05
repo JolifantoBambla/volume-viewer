@@ -3,7 +3,7 @@ use crate::error::*;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct WGSLPreprocessor {
     include_files: HashMap<String, String>,
     include_regex: Regex,

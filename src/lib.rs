@@ -9,11 +9,8 @@ use wasm_bindgen::{prelude::*, JsCast};
 use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
 };
-use winit::event_loop::EventLoop;
+use winit::event_loop::{EventLoop, EventLoopBuilder};
 use winit::window::Window;
-
-pub use numcodecs_wasm::*;
-pub use zarr_wasm::zarr::{DimensionArraySelection, GetOptions, ZarrArray};
 
 pub mod app;
 pub mod event;
@@ -44,11 +41,7 @@ use crate::volume::{
 };
 use crate::window::window_builder_without_size;
 
-// todo: remove this (this is for testing the preprocessor macro)
 use crate::util::vec::vec_equals;
-#[allow(unused)]
-use include_preprocessed_wgsl::include_preprocessed;
-use crate::resource::buffer::TypedBuffer;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -91,34 +84,6 @@ pub fn main(canvas: JsValue, volume_meta: JsValue, render_settings: JsValue) {
     init::set_panic_hook();
     init::set_logger(None);
 
-    /* todo: remove this (this is for testing the preprocessor macro only)
-    let _shader_str = include_preprocessed!(
-        "renderer/pass/dvr/dvr.wgsl",
-        include_dirs = [
-            "renderer/wgsl",
-            {
-                path: "renderer/wgsl",
-                relative: true,
-            }
-        ]
-        includes = [
-            "renderer/pass/process_requests/process_requests.wgsl",
-            {
-                identifier: "ray",
-                path: "renderer/ray.wgsl"
-            },
-            {
-                identifier: "ray",
-                path: {
-                    path: "/home/foo/wgsl/ray.wgsl",
-                    relative: false,
-                },
-            }
-            ["ray", "renderer/ray.wgsl"]
-        ]
-    );
-     */
-
     let volume_meta: BrickedMultiResolutionMultiVolumeMeta = volume_meta
         .into_serde()
         .expect("Received invalid volume meta. Shutting down.");
@@ -135,15 +100,12 @@ async fn start_event_loop(
     volume_meta: BrickedMultiResolutionMultiVolumeMeta,
     render_settings: MultiChannelVolumeRendererSettings,
 ) {
-
-    test_scan().await;
-
     let html_canvas = canvas
         .clone()
         .unchecked_into::<web_sys::HtmlCanvasElement>();
 
     let builder = window_builder_without_size("Offscreen DVR".to_string(), html_canvas.clone());
-    let event_loop = winit::event_loop::EventLoop::with_user_event();
+    let event_loop = EventLoopBuilder::with_user_event().build();
     let window = builder.build(&event_loop).unwrap();
 
     // instantiate global event proxy
@@ -256,7 +218,7 @@ pub fn run_event_loop(
         // todo: refactor input handling
         match event {
             winit::event::Event::RedrawEventsCleared => {
-                //window.request_redraw();
+                window.request_redraw();
             }
             // todo: handle events
             winit::event::Event::UserEvent(e) => match e {
@@ -398,77 +360,59 @@ pub fn run_event_loop(
                     .borrow()
                     .update(&camera, &input, &settings);
 
-                wasm_bindgen_futures::spawn_local(calling_from_async(
-                    renderer.clone(),
-                    camera,
-                    input.clone(),
-                    window.clone(),
-                ));
+                let frame = match renderer
+                    .as_ref()
+                    .borrow()
+                    .ctx
+                    .surface
+                    .as_ref()
+                    .unwrap()
+                    .get_current_texture()
+                {
+                    Ok(frame) => frame,
+                    Err(_) => {
+                        renderer
+                            .as_ref()
+                            .borrow()
+                            .ctx
+                            .surface
+                            .as_ref()
+                            .unwrap()
+                            .configure(
+                                &renderer.as_ref().borrow().ctx.device,
+                                renderer
+                                    .as_ref()
+                                    .borrow()
+                                    .ctx
+                                    .surface_configuration
+                                    .as_ref()
+                                    .unwrap(),
+                            );
+                        renderer
+                            .as_ref()
+                            .borrow()
+                            .ctx
+                            .surface
+                            .as_ref()
+                            .unwrap()
+                            .get_current_texture()
+                            .expect("Failed to acquire next surface texture!")
+                    }
+                };
+                let view = frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+
+                renderer.as_ref().borrow().render(&view, &input);
+                renderer.as_ref().borrow_mut().post_render(&input);
+
+                frame.present();
 
                 last_input = input;
             }
             _ => {}
         }
     });
-}
-
-async fn calling_from_async(
-    renderer: Rc<RefCell<MultiChannelVolumeRenderer>>,
-    _camera: Camera,
-    input: Input,
-    window: Rc<Window>,
-) {
-    let frame = match renderer
-        .as_ref()
-        .borrow()
-        .ctx
-        .surface
-        .as_ref()
-        .unwrap()
-        .get_current_texture()
-    {
-        Ok(frame) => frame,
-        Err(_) => {
-            renderer
-                .as_ref()
-                .borrow()
-                .ctx
-                .surface
-                .as_ref()
-                .unwrap()
-                .configure(
-                    &renderer.as_ref().borrow().ctx.device,
-                    renderer
-                        .as_ref()
-                        .borrow()
-                        .ctx
-                        .surface_configuration
-                        .as_ref()
-                        .unwrap(),
-                );
-            renderer
-                .as_ref()
-                .borrow()
-                .ctx
-                .surface
-                .as_ref()
-                .unwrap()
-                .get_current_texture()
-                .expect("Failed to acquire next surface texture!")
-        }
-    };
-    let view = frame
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
-
-    renderer.as_ref().borrow().render(&view, &input);
-
-    renderer.as_ref().borrow_mut().post_render(&input);
-
-    frame.present();
-
-    // we request the redraw after rendering has definitely finished
-    window.request_redraw();
 }
 
 pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock {

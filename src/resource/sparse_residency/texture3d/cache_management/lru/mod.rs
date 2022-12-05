@@ -1,9 +1,11 @@
 mod lru_update;
 
+use std::collections::HashSet;
 use glam::UVec3;
 use std::mem::size_of;
 use std::rc::Rc;
 use std::sync::Arc;
+use web_sys::console::time;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroup, BindingResource, Buffer, BufferAddress, BufferUsages, CommandEncoder, Extent3d,
@@ -11,18 +13,19 @@ use wgpu::{
 };
 use wgsl_preprocessor::WGSLPreprocessor;
 
-use crate::resource::Texture;
+use crate::resource::{MappableBuffer, Texture};
 use crate::util::extent::{
     box_volume, extent_to_uvec, index_to_subscript, uvec_to_extent, uvec_to_origin,
 };
 use crate::{GPUContext, Input};
 
-use crate::resource::buffer::{MultiBufferedMappableBuffer, TypedBuffer};
+use crate::resource::buffer::{BufferMapError, ReadableStorageBuffer, TypedBuffer};
 
 use lru_update::{LRUUpdate, LRUUpdateResources};
+use crate::util::multi_buffer::MultiBuffered;
 
 #[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct NumUsedEntries {
     num: u32,
 }
@@ -34,6 +37,50 @@ pub struct LRUCacheSettings {
     pub cache_entry_size: UVec3,
     pub num_multi_buffering: u32,
     pub time_to_live: u32,
+}
+
+struct LRUCacheGpuOps {
+    lru: ReadableStorageBuffer<u32>,
+    num_used_entries: ReadableStorageBuffer<NumUsedEntries>,
+    lru_update_pass: LRUUpdate,
+}
+
+impl LRUCacheGpuOps {
+    pub fn encode(&self, command_encoder: &mut CommandEncoder, frame_number: u32) {
+        self.lru_update_pass.encode(command_encoder);
+
+        if self.lru.copy_to_readable(command_encoder).is_err() {
+            log::warn!("Frame {}: could not copy to readable ({})", frame_number, self.lru);
+        }
+        if self.num_used_entries.copy_to_readable(command_encoder).is_err() {
+            log::warn!("Frame {}: could not copy to readable ({})", frame_number, self.num_used_entries);
+        }
+    }
+
+    pub fn map_read_buffers(&self, frame_number: u32) {
+        if self.lru.map_all_async().is_ok() {
+            if self.num_used_entries.map_all_async().is_err() {
+                self.lru.unmap();
+                log::warn!("Frame {}: could not map ({})", frame_number, self.num_used_entries);
+            }
+        } else {
+            log::warn!("Frame {}: could not map ({})", frame_number, self.lru);
+        }
+    }
+
+    pub fn read_buffers(&self, frame_number: u32) -> Result<(Vec<u32>, NumUsedEntries), ()> {
+        if let Ok(lru) = self.lru.read_all() {
+            if let Ok(num_used_entries) = self.num_used_entries.read_all() {
+                Ok((lru, num_used_entries[0]))
+            } else {
+                log::warn!("Frame {}: could not read ({})", frame_number, self.num_used_entries);
+                Err(())
+            }
+        } else {
+            log::warn!("Frame {}: could not read ({})", frame_number, self.lru);
+            Err(())
+        }
+    }
 }
 
 pub struct LRUCache {
@@ -55,15 +102,12 @@ pub struct LRUCache {
     next_empty_index: u32,
 
     lru_local: Vec<u32>,
-    lru_buffer: Rc<TypedBuffer<u32>>,
-    lru_read_buffer: MultiBufferedMappableBuffer<u32>,
+
     lru_buffer_size: BufferAddress,
 
     num_used_entries_local: u32,
-    num_used_entries_buffer: Rc<TypedBuffer<NumUsedEntries>>,
-    num_used_entries_read_buffer: MultiBufferedMappableBuffer<NumUsedEntries>,
 
-    lru_update_pass: LRUUpdate,
+    lru_stuff: MultiBuffered<LRUCacheGpuOps>,
 }
 
 impl LRUCache {
@@ -92,40 +136,37 @@ impl LRUCache {
             uvec_to_extent(&usage_buffer_size),
         );
 
-        let lru_buffer = Rc::new(TypedBuffer::from_data(
-            "lru",
-            &lru_local,
-            BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
-            &ctx.device,
-        ));
-        let num_used_entries_buffer = Rc::new(TypedBuffer::new_single_element(
-            "num used entries",
-            num_unused_entries,
-            BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
-            &ctx.device,
-        ));
+        let lru_stuff = MultiBuffered::new(
+            || {
+                let lru = ReadableStorageBuffer::from_data(
+                    "lru",
+                    &lru_local,
+                    &ctx.device
+                );
+                let num_used_entries = ReadableStorageBuffer::from_data(
+                    "num used entries",
+                    &vec![num_unused_entries],
+                    &ctx.device,
+                );
 
-        let lru_read_buffer = MultiBufferedMappableBuffer::from_buffer(
-                &lru_buffer,
-                settings.num_multi_buffering,
-                &ctx.device
-            );
-        let num_used_entries_read_buffer = MultiBufferedMappableBuffer::from_buffer(
-            &num_used_entries_buffer,
-            settings.num_multi_buffering,
-            &ctx.device,
-        );
+                let lru_update_pass = LRUUpdate::new(
+                    &LRUUpdateResources::new(
+                        lru.storage_buffer().clone(),
+                        num_used_entries.storage_buffer().clone(),
+                        &usage_buffer,
+                        &timestamp_uniform_buffer
+                    ),
+                    wgsl_preprocessor,
+                    ctx
+                );
 
-
-        let lru_update_pass = LRUUpdate::new(
-            &LRUUpdateResources::new(
-                lru_buffer.clone(),
-                num_used_entries_buffer.clone(),
-                &usage_buffer,
-                &timestamp_uniform_buffer
-            ),
-            wgsl_preprocessor,
-            ctx
+                LRUCacheGpuOps {
+                    lru,
+                    num_used_entries,
+                    lru_update_pass,
+                }
+            },
+            settings.num_multi_buffering as usize,
         );
 
         Self {
@@ -137,78 +178,38 @@ impl LRUCache {
             time_to_live: settings.time_to_live,
             next_empty_index,
             lru_local,
-            lru_buffer,
-            lru_read_buffer,
             lru_buffer_size,
             num_used_entries_local: 0,
-            num_used_entries_buffer,
-            num_used_entries_read_buffer,
-            lru_update_pass,
+            lru_stuff
         }
     }
 
     pub fn encode_lru_update(&self, encoder: &mut CommandEncoder, timestamp: u32) {
-        let num_used_entries = NumUsedEntries { num: 0 };
-
-        // this is done in update as well?
-        self.ctx.queue.write_buffer(
-            &self.num_used_entries_buffer.buffer(),
-            0 as BufferAddress,
-            bytemuck::bytes_of(&num_used_entries),
-        );
-
-        self.lru_update_pass.encode(encoder);
-        self.copy_to_readable(encoder, timestamp + 1);
-    }
-
-    fn copy_to_readable(&self, encoder: &mut CommandEncoder, buffer_index: u32) {
-        if self.lru_read_buffer.is_ready(buffer_index)
-            && self.num_used_entries_read_buffer.is_ready(buffer_index)
-        {
-            encoder.copy_buffer_to_buffer(
-                &self.num_used_entries_buffer.buffer(),
-                0,
-                self.num_used_entries_read_buffer
-                    .as_buffer_ref(buffer_index),
-                0,
-                size_of::<NumUsedEntries>() as BufferAddress,
-            );
-            encoder.copy_buffer_to_buffer(
-                &self.lru_buffer.buffer(),
-                0,
-                self.lru_read_buffer.as_buffer_ref(buffer_index),
-                0,
-                self.lru_buffer_size,
-            );
-        }
+        self.lru_stuff.get(timestamp as usize).encode(encoder, timestamp);
     }
 
     /// tries to read the last frame's to
     /// to update its CPU local list of free cache entries.
     pub fn update_local_lru(&mut self, timestamp: u32) {
-        let next_frame = timestamp + 1;
+        self.lru_stuff.get(timestamp as usize).map_read_buffers(timestamp);
 
-        //  Maps the current frame's LRU read buffer for reading
-        self.lru_read_buffer
-            .map_async(next_frame, MapMode::Read, ..);
-        self.num_used_entries_read_buffer
-            .map_async(next_frame, MapMode::Read, ..);
-
-        if self.lru_read_buffer.is_mapped(timestamp)
-            && self.num_used_entries_read_buffer.is_mapped(timestamp)
+        if let Ok((lru, num_used_entries)) =
+            self.lru_stuff
+                .get_previous(timestamp as usize)
+                .read_buffers(timestamp)
         {
-            let lru = self.lru_read_buffer.maybe_read_all(timestamp);
-            let num_used_entries = self.num_used_entries_read_buffer.maybe_read_all(timestamp);
-
-            if lru.is_empty() || num_used_entries.is_empty() {
-                log::error!("Could not read LRU at frame {}", timestamp);
+            let foo: HashSet<u32> = HashSet::from_iter(lru.iter().cloned());
+            if foo.len() != self.lru_local.len() {
+                let bar = HashSet::from_iter(self.lru_local.iter().cloned());
+                let difference = bar.difference(&foo);
+                panic!("Frame {}: duplicates again foo {} != lru local {}, missing: {:?}, num used {}, \n{:?}", timestamp, foo.len(), self.lru_local.len(), difference, num_used_entries.num, lru);
             } else {
-                self.lru_local = lru;
-                self.num_used_entries_local = num_used_entries[0].num;
-                self.next_empty_index = self.lru_local.len() as u32;
+                log::info!("Frame {}: all good, both have len: {}, num used {}", timestamp, foo.len(), num_used_entries.num);
             }
-        } else {
-            log::warn!("Could not update LRU at frame {}", timestamp);
+
+            self.lru_local = lru;
+            self.num_used_entries_local = num_used_entries.num;
+            self.next_empty_index = self.lru_local.len() as u32;
         }
     }
 
