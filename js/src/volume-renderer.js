@@ -36,17 +36,19 @@ export class ChannelSettings {
     channelIndex;
     maxLoD;
     minLoD;
+    lodFactor;
     thresholdLower;
     thresholdUpper;
     color;
     visible;
 
-    constructor({channelName, channelIndex = 0, maxLoD = 0, minLoD, thresholdLower = 0.01, thresholdUpper = 1.0, color, visible = false}) {
+    constructor({channelName, channelIndex = 0, maxLoD = 0, minLoD, lodFactor = 1.0, thresholdLower = 0.01, thresholdUpper = 1.0, color, visible = false}) {
         // todo: validation
         this.channelName = channelName || `${channelIndex}`;
         this.channelIndex = channelIndex;
         this.maxLoD = maxLoD;
         this.minLoD = minLoD || maxLoD;
+        this.lodFactor = lodFactor;
         this.thresholdLower = thresholdLower;
         this.thresholdUpper = thresholdUpper;
         this.color = color || Color.random();

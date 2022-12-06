@@ -65,7 +65,7 @@ async function createUI(offscreenRenderer, config) {
             return new ChannelSettings({
                 channelIndex,
                 visible: channelIndex === 0,
-                minLoD: volumeMetaData.resolutions.length,
+                minLoD: volumeMetaData.resolutions.length - 1,
             });
         }),
     });
@@ -140,12 +140,16 @@ async function createUI(offscreenRenderer, config) {
             label: 'Resolution Levels',
             min: 0, max: c.minLoD, step: 1,
         });
+        const lodFactorSlider = channelSettings.addInput(c, 'lodFactor', {
+            label: 'LoD Factor',
+            min: 0.001, max: 2.0, step: 0.001
+        })
         const thresholdSlider = channelSettings.addInput({threshold: {min: c.thresholdLower, max: c.thresholdUpper}}, 'threshold', {
             label: 'Threshold',
             min: 0.0, max: 1.0, step: 0.01,
         });
 
-        [colorPicker, visibleToggle, lodSlider, thresholdSlider]
+        [colorPicker, visibleToggle, lodSlider, lodFactorSlider, thresholdSlider]
             .forEach(i => i.on('change', e => dispatchChannelSettingsChange(e, c.channelIndex)));
     });
 

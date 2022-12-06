@@ -48,7 +48,7 @@ impl Default for SparseResidencyTexture3DOptions {
                 height: 1024,
                 depth_or_array_layers: 1024,
             },
-            num_multi_buffering: 3,
+            num_multi_buffering: 2,
             cache_time_to_live: u32::MAX,
         }
     }
@@ -280,17 +280,18 @@ impl SparseResidencyTexture3D {
         if !bricks.is_empty() {
             for (address, brick) in bricks {
                 if let Some(local_address) = self.map_to_page_table(&address, None) {
+                    let brick_id = address.into();
                     if brick.data.is_empty() {
                         self.page_table_directory.mark_as_empty(&local_address);
                     } else {
                         // write brick to cache
                         let brick_location = self.lru_cache.add_cache_entry(&brick.data, input);
-
                         match brick_location {
                             Ok(brick_location) => {
                                 // mark brick as mapped
                                 self.page_table_directory
                                     .mark_as_mapped(&local_address, &brick_location);
+                                self.cached_bricks.insert(brick_id);
                             }
                             Err(_) => {
                                 // todo: error handling
@@ -298,8 +299,6 @@ impl SparseResidencyTexture3D {
                             }
                         }
                     }
-                    let brick_id = address.into();
-                    self.cached_bricks.insert(brick_id);
                     self.requested_bricks.remove(&brick_id);
                 } else {
                     let brick_id = address.into();
@@ -430,24 +429,30 @@ impl AsBindGroupEntries for SparseResidencyTexture3D {
                 binding: 0,
                 resource: self
                     .page_table_directory
-                    .get_page_table_meta_as_binding_resource(),
+                    .get_page_directory_meta_as_binding_resource(),
             },
             BindGroupEntry {
                 binding: 1,
                 resource: self
                     .page_table_directory
-                    .get_page_directory_as_binding_resource(),
+                    .get_page_table_meta_as_binding_resource(),
             },
             BindGroupEntry {
                 binding: 2,
-                resource: self.lru_cache.get_cache_as_binding_resource(), //BindingResource::TextureView(&self.brick_cache.view),
+                resource: self
+                    .page_table_directory
+                    .get_page_directory_as_binding_resource(),
             },
             BindGroupEntry {
                 binding: 3,
-                resource: self.lru_cache.get_usage_buffer_as_binding_resource(), //BindingResource::TextureView(&self.brick_usage_buffer.view),
+                resource: self.lru_cache.get_cache_as_binding_resource(), //BindingResource::TextureView(&self.brick_cache.view),
             },
             BindGroupEntry {
                 binding: 4,
+                resource: self.lru_cache.get_usage_buffer_as_binding_resource(), //BindingResource::TextureView(&self.brick_usage_buffer.view),
+            },
+            BindGroupEntry {
+                binding: 5,
                 resource: BindingResource::TextureView(&self.request_buffer.view),
             },
         ]

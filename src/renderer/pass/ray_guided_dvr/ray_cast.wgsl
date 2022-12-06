@@ -63,7 +63,7 @@ struct ChannelSettings {
     threshold_upper: f32,
     visible: u32,
     page_table_index: u32,
-    padding2: u32,
+    lod_factor: f32,
 }
 
 struct ChannelSettingsList {
@@ -88,11 +88,12 @@ struct ChannelSettingsList {
 //    The default value 0 indicates that a brick has never been requested.
 
 // Bind group 1 holds all data for one channel of a multiresolution, multichannel volume
-@group(1) @binding(0) var<storage> page_table_meta: PageDirectoryMeta;
-@group(1) @binding(1) var page_directory: texture_3d<u32>;
-@group(1) @binding(2) var brick_cache: texture_3d<f32>;
-@group(1) @binding(3) var brick_usage_buffer: texture_storage_3d<r32uint, write>;
-@group(1) @binding(4) var request_buffer: texture_storage_3d<r32uint, write>;
+@group(1) @binding(0) var<uniform> page_directory_meta: PageDirectoryMeta;
+@group(1) @binding(1) var<storage> page_table_meta: PageTableMetas;
+@group(1) @binding(2) var page_directory: texture_3d<u32>;
+@group(1) @binding(3) var brick_cache: texture_3d<f32>;
+@group(1) @binding(4) var brick_usage_buffer: texture_storage_3d<r32uint, write>;
+@group(1) @binding(5) var request_buffer: texture_storage_3d<r32uint, write>;
 
 // Helper stuff
 
@@ -122,7 +123,7 @@ fn request_brick(page_address: int3) {
 }
 
 fn clone_page_table_meta(level: u32) -> PageTableMeta {
-    let page_table_meta = page_table_meta.resolutions[level];
+    let page_table_meta = page_table_meta.metas[level];
     return PageTableMeta(
         page_table_meta.brick_size,
         page_table_meta.page_table_offset,
@@ -141,8 +142,8 @@ fn clone_channel_settings(channel_index: u32) -> ChannelSettings {
         channel_settings.threshold_lower,
         channel_settings.threshold_upper,
         channel_settings.visible,
-        channel_settings.page_table_index, // page_table_index,
-        0u  // padding2,
+        channel_settings.page_table_index,
+        channel_settings.lod_factor
      );
 }
 
@@ -156,7 +157,7 @@ fn normalize_cache_address(cache_address: uint3) -> float3 {
 }
 
 fn compute_offset(position: float3, level: u32) -> float3 {
-    let resolution = page_table_meta.resolutions[level];
+    let resolution = page_table_meta.metas[level];
     let scale = float3(resolution.volume_size) / float3(resolution.brick_size);
     return floor(position * scale) / scale;
 }
@@ -169,6 +170,10 @@ fn transform_to_brick(position: float3, level: u32, page: PageTableEntry) -> flo
 // todo: add mutliple virtualization levels
 fn get_page(page_address: uint3) -> PageTableEntry {
     return to_page_table_entry(textureLoad(page_directory, int3(page_address), 0));
+}
+
+fn compute_page_table_index(channel: u32, lod: u32) -> u32 {
+    return channel + lod * page_directory_meta.max_channels;
 }
 
 @compute
@@ -204,16 +209,17 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let timestamp = uniforms.timestamp;
 
-    let num_channels = uniforms.settings.num_visible_channels;// arrayLength(&channel_settings_list.channels);
-    let num_resolutions = arrayLength(&page_table_meta.resolutions) / num_channels;
+    let num_channels = uniforms.settings.num_visible_channels;
+    let num_resolutions = page_directory_meta.max_resolutions;
 
-    // todo: look for visible channels as soon as multiple channels are supported
     let cs = clone_channel_settings(0);
 
-    let lowest_res = min(cs.min_lod, num_resolutions);
+    let inv_high_res_size = 1. / float3(page_table_meta.metas[0].volume_size);
+    let brick_size = page_table_meta.metas[0].brick_size;
+
+    let lowest_res = min(cs.min_lod, num_resolutions - 1);
     let highest_res = min(cs.max_lod, lowest_res);
-    
-    let brick_size = page_table_meta.resolutions[0].brick_size;
+    let lod_factor = cs.lod_factor * max_component(inv_high_res_size);
 
     // Set up state tracking
     var color = float4();
@@ -234,7 +240,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
             let position = brick_endpoints.entry;
             let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
-            let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res);
+
+            let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res, lod_factor);
             if (lod != last_lod) {
                 last_lod = lod;
                 page_table = clone_page_table_meta(lod);
@@ -297,22 +304,28 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         let offset = wang_hash(pixel.x + 640 * pixel.y);
         let dt_scale = uniforms.settings.step_scale;
 
-        var dt_vec = 1. / (float3(page_table_meta.resolutions[last_lod].volume_size) * abs(ray_os.direction));
+        var dt_vec = 1. / (float3(page_table_meta.metas[last_lod].volume_size) * abs(ray_os.direction));
         var dt = dt_scale * min_component(dt_vec);
         var p = ray_at(ray_os, t_min + offset * dt);
 
+        let first_channel_index = channel_settings_list.channels[0].page_table_index;
+
         for (var t = t_min; t < t_max; t += dt) {
             let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
-            let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res);
+            let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res, lod_factor);
             let lod_changed = lod != last_lod;
             if (lod_changed) {
                 last_lod = lod;
-                dt_vec = 1. / (float3(page_table_meta.resolutions[lod * num_channels].volume_size) * abs(ray_os.direction));
+                dt_vec = 1. / (float3(page_table_meta.metas[compute_page_table_index(first_channel_index, lod)].volume_size) * abs(ray_os.direction));
                 dt = dt_scale * min_component(dt_vec);
             }
 
             for (var channel = 0u; channel < num_channels; channel += 1u) {
-                let page_table = clone_page_table_meta(channel + lod * num_channels);
+                let page_table_index = compute_page_table_index(
+                    channel_settings_list.channels[channel].page_table_index,
+                    lod
+                );
+                let page_table = clone_page_table_meta(page_table_index);
 
                 // todo: think about this more carefully - does that change the ray or not?
                 let position_corrected = p * compute_volume_to_padded(page_table);
@@ -415,11 +428,14 @@ fn apply_colormap(value: f32, channel_settings: ChannelSettings) -> float3{
 }
 
 // page table stuff
-fn select_level_of_detail(distance: f32, highest_res: u32, lowest_res: u32) -> u32 {
-    // todo: select based on distance to camera or screen size?
-    // let lod ...
-    // return clamp(lod, highest_res, lowest_res);
-    return 0u; //page_table_meta.max_lod;
+/// Computes a level of detail within a given highest and lowest level for the distance from the current sample to the
+/// camera in the camera's space.
+/// The ranges of the given highest and lowest levels are max(0, highest_res) and max(highest_res, lowest_res)
+/// respectively.
+/// It is the caller's responsibility to choose an adequate factor.
+fn select_level_of_detail(distance: f32, highest_res: u32, lowest_res: u32, lod_factor: f32) -> u32 {
+    let lod = u32(log2(lod_factor * distance));
+    return clamp(lod, highest_res, lowest_res);
 }
 
 fn is_saturated(color: float4) -> bool {

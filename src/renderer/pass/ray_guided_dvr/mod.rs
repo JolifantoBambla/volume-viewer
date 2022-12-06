@@ -22,7 +22,7 @@ pub struct ChannelSettings {
     pub threshold_upper: f32,
     pub visible: u32,
     pub page_table_index: u32,
-    padding2: u32,
+    pub lod_factor: f32,
 }
 
 impl From<&crate::renderer::settings::ChannelSettings> for ChannelSettings {
@@ -36,7 +36,7 @@ impl From<&crate::renderer::settings::ChannelSettings> for ChannelSettings {
             threshold_upper: settings.threshold_upper,
             visible: settings.visible as u32,
             page_table_index: u32::MAX_VALUE,
-            padding2: 0,
+            lod_factor: settings.lod_factor,
         }
     }
 }
