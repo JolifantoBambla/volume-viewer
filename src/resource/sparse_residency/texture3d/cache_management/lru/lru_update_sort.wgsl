@@ -13,7 +13,7 @@ fn was_used(global_id: u32) -> bool {
 fn compute_new_index(global_id: u32) -> u32 {
     let offset = offsets.list[global_id];
     if (was_used(global_id)) {
-        return offset - 1u;
+        return offset;
     } else {
         let num_used_total = atomicLoad(&num_used_entries.num);
         return global_id + num_used_total - offset;

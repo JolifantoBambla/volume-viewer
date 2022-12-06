@@ -50,10 +50,10 @@ impl LRUCacheGpuOps {
         self.lru_update_pass.encode(command_encoder);
 
         if self.lru.copy_to_readable(command_encoder).is_err() {
-            log::warn!("Frame {}: could not copy to readable ({})", frame_number, self.lru);
+            log::debug!("Frame {}: could not copy to readable ({})", frame_number, self.lru);
         }
         if self.num_used_entries.copy_to_readable(command_encoder).is_err() {
-            log::warn!("Frame {}: could not copy to readable ({})", frame_number, self.num_used_entries);
+            log::debug!("Frame {}: could not copy to readable ({})", frame_number, self.num_used_entries);
         }
     }
 
@@ -61,10 +61,10 @@ impl LRUCacheGpuOps {
         if self.lru.map_all_async().is_ok() {
             if self.num_used_entries.map_all_async().is_err() {
                 self.lru.unmap();
-                log::warn!("Frame {}: could not map ({})", frame_number, self.num_used_entries);
+                log::debug!("Frame {}: could not map ({})", frame_number, self.num_used_entries);
             }
         } else {
-            log::warn!("Frame {}: could not map ({})", frame_number, self.lru);
+            log::debug!("Frame {}: could not map ({})", frame_number, self.lru);
         }
     }
 
@@ -73,11 +73,11 @@ impl LRUCacheGpuOps {
             if let Ok(num_used_entries) = self.num_used_entries.read_all() {
                 Ok((lru, num_used_entries[0]))
             } else {
-                log::warn!("Frame {}: could not read ({})", frame_number, self.num_used_entries);
+                log::debug!("Frame {}: could not read ({})", frame_number, self.num_used_entries);
                 Err(())
             }
         } else {
-            log::warn!("Frame {}: could not read ({})", frame_number, self.lru);
+            log::debug!("Frame {}: could not read ({})", frame_number, self.lru);
             Err(())
         }
     }
@@ -198,15 +198,6 @@ impl LRUCache {
                 .get_previous(timestamp as usize)
                 .read_buffers(timestamp)
         {
-            let foo: HashSet<u32> = HashSet::from_iter(lru.iter().cloned());
-            if foo.len() != self.lru_local.len() {
-                let bar = HashSet::from_iter(self.lru_local.iter().cloned());
-                let difference = bar.difference(&foo);
-                panic!("Frame {}: duplicates again foo {} != lru local {}, missing: {:?}, num used {}, \n{:?}", timestamp, foo.len(), self.lru_local.len(), difference, num_used_entries.num, lru);
-            } else {
-                log::info!("Frame {}: all good, both have len: {}, num used {}", timestamp, foo.len(), num_used_entries.num);
-            }
-
             self.lru_local = lru;
             self.num_used_entries_local = num_used_entries.num;
             self.next_empty_index = self.lru_local.len() as u32;
@@ -249,7 +240,7 @@ impl LRUCache {
                     ) + UVec3::ONE),
                 );
 
-                // todo: batch updates
+                // todo: batch updates (technically this is batched by wgpu
                 let cache_entry_location = self.cache_entry_index_to_location(cache_entry_index);
                 self.cache.write_subregion(
                     data.as_slice(),
@@ -262,13 +253,6 @@ impl LRUCache {
                 return Ok(cache_entry_location);
             }
         }
-        /*
-        log::info!(
-            "next empty index {}, num used {}",
-            self.next_empty_index,
-            self.num_used_entries_local
-        );
-         */
         Err(CacheFullError {})
     }
 
