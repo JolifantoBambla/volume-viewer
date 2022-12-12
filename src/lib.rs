@@ -10,6 +10,7 @@ use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
 };
 use winit::event_loop::{EventLoop, EventLoopBuilder};
+use winit::platform::web::EventLoopExtWebSys;
 use winit::window::Window;
 
 pub mod app;
@@ -42,6 +43,7 @@ use crate::volume::{
 use crate::window::window_builder_without_size;
 
 use crate::util::vec::vec_equals;
+use crate::volume::octree::Octree;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -84,12 +86,12 @@ pub fn main(canvas: JsValue, volume_meta: JsValue, render_settings: JsValue) {
     init::set_panic_hook();
     init::set_logger(None);
 
-    let volume_meta: BrickedMultiResolutionMultiVolumeMeta = volume_meta
-        .into_serde()
+    let volume_meta: BrickedMultiResolutionMultiVolumeMeta = serde_wasm_bindgen::from_value(volume_meta)
         .expect("Received invalid volume meta. Shutting down.");
 
-    let render_settings: MultiChannelVolumeRendererSettings = render_settings
-        .into_serde()
+    Octree::new(&volume_meta);
+
+    let render_settings: MultiChannelVolumeRendererSettings = serde_wasm_bindgen::from_value(render_settings)
         .expect("Received invalid render settings. Shutting down.");
 
     wasm_bindgen_futures::spawn_local(start_event_loop(canvas, volume_meta, render_settings));
@@ -115,26 +117,14 @@ async fn start_event_loop(
 
     register_default_js_event_handlers(&html_canvas, &event_loop);
 
-    // this part shows a GPUDevice handle can be shared via a custom event posted to the canvas
-    let exposed_device = expose_device().await;
-    let event_from_rust = web_sys::CustomEvent::new("from-rust").ok().unwrap();
-    event_from_rust.init_custom_event_with_can_bubble_and_cancelable_and_detail(
-        "from-rust",
-        false,
-        false,
-        &exposed_device,
-    );
-    html_canvas.dispatch_event(&event_from_rust).ok();
+    let volume_source = Box::new(HtmlEventTargetVolumeDataSource::new(
+        volume_meta,
+        html_canvas.clone().unchecked_into::<web_sys::EventTarget>(),
+    ));
 
     let renderer = MultiChannelVolumeRenderer::new(
-        canvas,
-        Box::new(HtmlEventTargetVolumeDataSource::new(
-            volume_meta,
-            html_canvas.clone().unchecked_into::<web_sys::EventTarget>(),
-        )),
-        &render_settings,
-    )
-    .await;
+        canvas, volume_source, &render_settings
+    ).await;
 
     // NOTE: All resource allocations should happen before the main render loop
     // The reason for this is that receiving allocation errors is async, but
@@ -142,17 +132,10 @@ async fn start_event_loop(
         run_event_loop(renderer, render_settings, window, event_loop)
     });
 
-    // make sure to handle JS exceptions thrown inside start.
+    // make sure to handle JS exceptions thrown inside start_closure.
     // Otherwise wasm_bindgen_futures Queue would break and never handle any tasks again.
-    // This is required, because winit uses JS exception for control flow to escape from `run`.
     if let Err(error) = call_catch(&start_closure) {
-        let is_control_flow_exception = error.dyn_ref::<js_sys::Error>().map_or(false, |e| {
-            e.message().includes("Using exceptions for control flow", 0)
-        });
-
-        if !is_control_flow_exception {
-            web_sys::console::error_1(&error);
-        }
+        web_sys::console::error_1(&error);
     }
 
     #[wasm_bindgen]
@@ -209,7 +192,7 @@ pub fn run_event_loop(
 
     let window = Rc::new(window);
 
-    event_loop.run(move |event, _, control_flow| {
+    event_loop.spawn(move |event, _, control_flow| {
         // force ownership by the closure
         //let _ = (&renderer.as_ref().borrow().ctx.instance, &renderer.as_ref().borrow().ctx.adapter);
 
@@ -426,42 +409,4 @@ pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock 
         shape[1],
         shape[0],
     )
-}
-
-// Test device sharing between WASM and JS context, could be useful at some point
-
-#[wasm_bindgen(module = "/js/src/shared-gpu.js")]
-extern "C" {
-    #[wasm_bindgen(js_name = "printGpuDeviceLimits")]
-    fn print_gpu_device_limits(device: web_sys::GpuDevice);
-}
-
-#[wasm_bindgen(js_name = "testDeviceSharing")]
-pub fn test_device_sharing() {
-    wasm_bindgen_futures::spawn_local(get_device());
-}
-
-async fn get_device() {
-    print_gpu_device_limits(expose_device().await);
-}
-
-async fn expose_device() -> web_sys::GpuDevice {
-    // create ctx to capture device from
-    let mut ctx = GPUContext::new(&renderer::context::ContextDescriptor::default()).await;
-
-    // memcopy device
-    //let device = transmute_copy!(ctx.device, Device);
-    //let device = util::resource::copy_device(&ctx.device);
-
-    let device = util::transmute::transmute_copy!(ctx.device, util::transmute::Device);
-
-    // make sure ctx still has its device
-    log::info!("max bind groups: {}", ctx.device.limits().max_bind_groups);
-
-    device.id
-}
-
-async fn test_scan() {
-    let mut ctx = Arc::new(GPUContext::new(&renderer::context::ContextDescriptor::default()).await);
-    renderer::pass::scan::test_scan(&ctx).await;
 }

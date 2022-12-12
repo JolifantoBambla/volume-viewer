@@ -49,6 +49,7 @@ impl HtmlEventTargetVolumeDataSource {
     ) -> Self {
         let brick_queue = Rc::new(RefCell::new(VecDeque::new()));
         let receiver = brick_queue.clone();
+
         let event_callback = Closure::wrap(Box::new(move |event: JsValue| {
             let custom_event = event.unchecked_into::<CustomEvent>();
             let brick_event: BrickEvent =

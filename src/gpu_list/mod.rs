@@ -1,5 +1,6 @@
 use crate::renderer::context::GPUContext;
 use crate::renderer::pass::AsBindGroupEntries;
+use crate::resource::buffer::TypedBuffer;
 use crate::resource::MappableBuffer;
 use std::cmp::min;
 use std::marker::PhantomData;
@@ -10,7 +11,6 @@ use wgpu::{
     BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages,
     CommandEncoder, Maintain, MapMode,
 };
-use crate::resource::buffer::TypedBuffer;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -53,7 +53,7 @@ impl<T: bytemuck::Pod> GpuList<T> {
             format!("{} [list]", label).as_str(),
             capacity as usize,
             BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            &ctx.device
+            &ctx.device,
         );
         let meta_buffer = TypedBuffer::new_single_element(
             format!("{} [meta]", label).as_str(),

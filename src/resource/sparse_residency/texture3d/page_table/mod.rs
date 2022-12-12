@@ -10,8 +10,8 @@ use crate::util::extent::{subscript_to_index, uvec_to_extent, IndexToSubscript};
 use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 use crate::GPUContext;
 
-pub use meta::{PageDirectoryMeta, PageTableMeta};
 use crate::resource::buffer::TypedBuffer;
+pub use meta::{PageDirectoryMeta, PageTableMeta};
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -176,7 +176,7 @@ impl PageTableDirectory {
                 max_visible_channels: meta.num_channels() as u32,
                 max_resolutions: meta.num_resolutions() as u32,
                 padding1: 0,
-                padding2: 0
+                padding2: 0,
             },
             BufferUsages::UNIFORM,
             &ctx.device,

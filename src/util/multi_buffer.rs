@@ -6,9 +6,7 @@ impl<T> MultiBuffered<T> {
     pub fn new<F: Fn() -> T>(constructor: F, capacity: usize) -> Self {
         assert!(capacity > 0);
         Self {
-            resources: (0..capacity)
-                .map(|_| constructor())
-                .collect()
+            resources: (0..capacity).map(|_| constructor()).collect(),
         }
     }
 
@@ -27,12 +25,20 @@ impl<T> MultiBuffered<T> {
     }
 
     pub fn get_previous(&self, index: usize) -> &T {
-        let i = if index == 0 { index + self.len() - 1 } else { index - 1 };
+        let i = if index == 0 {
+            index + self.len() - 1
+        } else {
+            index - 1
+        };
         self.get(i)
     }
 
     pub fn get_previous_mut(&mut self, index: usize) -> &T {
-        let i = if index == 0 { index + self.len() - 1 } else { index - 1 };
+        let i = if index == 0 {
+            index + self.len() - 1
+        } else {
+            index - 1
+        };
         self.get_mut(i)
     }
 

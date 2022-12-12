@@ -88,7 +88,6 @@ export class VolumeRendererSettings {
 export class VolumeRenderer {
     #canvas;
     #initialized;
-    #device;
     #loader;
 
     constructor() {
@@ -125,7 +124,7 @@ export class VolumeRenderer {
 
     async run(renderSettings = null) {
         if (!this.#initialized) {
-            console.warn('\'run\' called on uninitialized VolumeRenderer.')
+            console.error('\'run\' called on uninitialized VolumeRenderer.')
             return;
         }
 
@@ -136,19 +135,13 @@ export class VolumeRenderer {
         // todo: make configurable
         await initThreadPool(navigator.hardwareConcurrency);
 
-        // note this is used to share a GPUDevice handle with the JS side
-        this.#canvas.addEventListener('from-rust', e => {
-            this.#device = e.detail;
-            console.log('device limits', this.#device.limits);
-        });
-
         this.#canvas.addEventListener(BRICK_REQUEST_EVENT, e => {
             (async () => {
                 this.#loader.worker.postMessage({
                     type: BRICK_REQUEST_EVENT,
                     addresses: e.detail.addresses,
                 });
-            })()
+            })();
         });
         this.#loader.worker.addEventListener('message', e => {
             if (e.data.type === BRICK_RESPONSE_EVENT) {
@@ -171,9 +164,7 @@ export class VolumeRenderer {
                     )
                 );
             }
-        })
-
-        console.log(renderSettings);
+        });
 
         // start event loop
         main(this.#canvas, this.#loader.volumeMeta, renderSettings);

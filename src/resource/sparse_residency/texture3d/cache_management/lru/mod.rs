@@ -1,7 +1,7 @@
 mod lru_update;
 
-use std::collections::HashSet;
 use glam::UVec3;
+use std::collections::HashSet;
 use std::mem::size_of;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -21,8 +21,8 @@ use crate::{GPUContext, Input};
 
 use crate::resource::buffer::{BufferMapError, ReadableStorageBuffer, TypedBuffer};
 
-use lru_update::{LRUUpdate, LRUUpdateResources};
 use crate::util::multi_buffer::MultiBuffered;
+use lru_update::{LRUUpdate, LRUUpdateResources};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -50,10 +50,22 @@ impl LRUCacheGpuOps {
         self.lru_update_pass.encode(command_encoder);
 
         if self.lru.copy_to_readable(command_encoder).is_err() {
-            log::debug!("Frame {}: could not copy to readable ({})", frame_number, self.lru);
+            log::debug!(
+                "Frame {}: could not copy to readable ({})",
+                frame_number,
+                self.lru
+            );
         }
-        if self.num_used_entries.copy_to_readable(command_encoder).is_err() {
-            log::debug!("Frame {}: could not copy to readable ({})", frame_number, self.num_used_entries);
+        if self
+            .num_used_entries
+            .copy_to_readable(command_encoder)
+            .is_err()
+        {
+            log::debug!(
+                "Frame {}: could not copy to readable ({})",
+                frame_number,
+                self.num_used_entries
+            );
         }
     }
 
@@ -61,7 +73,11 @@ impl LRUCacheGpuOps {
         if self.lru.map_all_async().is_ok() {
             if self.num_used_entries.map_all_async().is_err() {
                 self.lru.unmap();
-                log::debug!("Frame {}: could not map ({})", frame_number, self.num_used_entries);
+                log::debug!(
+                    "Frame {}: could not map ({})",
+                    frame_number,
+                    self.num_used_entries
+                );
             }
         } else {
             log::debug!("Frame {}: could not map ({})", frame_number, self.lru);
@@ -73,7 +89,11 @@ impl LRUCacheGpuOps {
             if let Ok(num_used_entries) = self.num_used_entries.read_all() {
                 Ok((lru, num_used_entries[0]))
             } else {
-                log::debug!("Frame {}: could not read ({})", frame_number, self.num_used_entries);
+                log::debug!(
+                    "Frame {}: could not read ({})",
+                    frame_number,
+                    self.num_used_entries
+                );
                 Err(())
             }
         } else {
@@ -138,11 +158,7 @@ impl LRUCache {
 
         let lru_stuff = MultiBuffered::new(
             || {
-                let lru = ReadableStorageBuffer::from_data(
-                    "lru",
-                    &lru_local,
-                    &ctx.device
-                );
+                let lru = ReadableStorageBuffer::from_data("lru", &lru_local, &ctx.device);
                 let num_used_entries = ReadableStorageBuffer::from_data(
                     "num used entries",
                     &vec![num_unused_entries],
@@ -154,10 +170,10 @@ impl LRUCache {
                         lru.storage_buffer().clone(),
                         num_used_entries.storage_buffer().clone(),
                         &usage_buffer,
-                        &timestamp_uniform_buffer
+                        &timestamp_uniform_buffer,
                     ),
                     wgsl_preprocessor,
-                    ctx
+                    ctx,
                 );
 
                 LRUCacheGpuOps {
@@ -180,23 +196,27 @@ impl LRUCache {
             lru_local,
             lru_buffer_size,
             num_used_entries_local: 0,
-            lru_stuff
+            lru_stuff,
         }
     }
 
     pub fn encode_lru_update(&self, encoder: &mut CommandEncoder, timestamp: u32) {
-        self.lru_stuff.get(timestamp as usize).encode(encoder, timestamp);
+        self.lru_stuff
+            .get(timestamp as usize)
+            .encode(encoder, timestamp);
     }
 
     /// tries to read the last frame's to
     /// to update its CPU local list of free cache entries.
     pub fn update_local_lru(&mut self, timestamp: u32) {
-        self.lru_stuff.get(timestamp as usize).map_read_buffers(timestamp);
+        self.lru_stuff
+            .get(timestamp as usize)
+            .map_read_buffers(timestamp);
 
-        if let Ok((lru, num_used_entries)) =
-            self.lru_stuff
-                .get_previous(timestamp as usize)
-                .read_buffers(timestamp)
+        if let Ok((lru, num_used_entries)) = self
+            .lru_stuff
+            .get_previous(timestamp as usize)
+            .read_buffers(timestamp)
         {
             self.lru_local = lru;
             self.num_used_entries_local = num_used_entries.num;

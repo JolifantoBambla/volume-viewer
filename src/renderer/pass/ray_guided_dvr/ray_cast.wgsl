@@ -118,7 +118,6 @@ fn report_usage(brick_address: int3) {
 /// # Arguments
 /// * `page_address`:
 fn request_brick(page_address: int3) {
-    // todo: translate to actual location
     textureStore(request_buffer, page_address, uint4(uniforms.timestamp));
 }
 
@@ -227,34 +226,40 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var last_lod = 0u;
     var steps_taken = 0u;
 
-    if (uniforms.settings.render_mode == GRID_TRAVERSAL) {
-        // todo: use active_page_tables instead
-        var page_table = clone_page_table_meta(0u);
+    let offset = hash_u32_to_f32(pcg_hash(u32(pixel.x + 640 * pixel.y)));
+    let dt_scale = uniforms.settings.step_scale;
 
-        for (
-            var grid_traversal = create_grid_traversal(ray_os, t_min, t_max, page_table);
-            in_grid(grid_traversal);
-            next_voxel(&grid_traversal)
-        ) {
-            let brick_endpoints = compute_voxel_endpoints(grid_traversal);
+    var dt_vec = 1. / (float3(page_table_meta.metas[last_lod].volume_size) * abs(ray_os.direction));
+    var dt = dt_scale * min_component(dt_vec);
+    var p = ray_at(ray_os, t_min + offset * dt);
 
-            let position = brick_endpoints.entry;
-            let distance_to_camera = abs((object_to_view * float4(position, 1.)).z);
+    let first_channel_index = channel_settings_list.channels[0].page_table_index;
 
-            let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res, lod_factor);
-            if (lod != last_lod) {
-                last_lod = lod;
-                page_table = clone_page_table_meta(lod);
-                // todo: t_entry is w.r.t. grid_traversal.ray not ray_os!
-                grid_traversal = create_grid_traversal(ray_os, grid_traversal.state.t_entry, t_max, page_table);
-            }
+    for (var t = t_min; t < t_max; t += dt) {
+        let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
+        let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res, lod_factor);
+        let lod_changed = lod != last_lod;
+        if (lod_changed) {
+            last_lod = lod;
+            dt_vec = 1. / (float3(page_table_meta.metas[compute_page_table_index(first_channel_index, lod)].volume_size) * abs(ray_os.direction));
+            dt = dt_scale * min_component(dt_vec);
+        }
 
-            let page_address = uint3(grid_traversal.state.voxel);
+        for (var channel = 0u; channel < num_channels; channel += 1u) {
+            let page_table_index = compute_page_table_index(
+                channel_settings_list.channels[channel].page_table_index,
+                lod
+            );
+            let page_table = clone_page_table_meta(page_table_index);
+
+            // todo: think about this more carefully - does that change the ray or not?
+            let position_corrected = p * compute_volume_to_padded(page_table);
+            let page_address = compute_page_address(page_table, position_corrected);
+            let page = get_page(page_address);
 
             // todo: remove (debug)
             let page_color = float3(page_address) / float3(7., 7., 1.);
 
-            let page = get_page(page_address);
             if (page.flag == UNMAPPED) {
                 // todo: remove this (debug)
                 color = float4(page_color, 1.);
@@ -267,175 +272,35 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             } else if (page.flag == MAPPED) {
                 report_usage(int3(page.location / brick_size));
 
-                let padded_size = float3(page_table.brick_size * page_table.page_table_extent);
-                let entry = max(uint3(ceil(brick_endpoints.entry * float3(padded_size))), uint3(1u)) % brick_size;
-                let exit  = max(uint3(ceil(brick_endpoints.exit  * float3(padded_size))), uint3(1u)) % brick_size;
-
-
-                let start = normalize_cache_address(page.location + entry);
-                let stop  = normalize_cache_address(page.location + exit);
-
-                // todo: fix num_steps, find out why boundaries are visible
-                let brick_distance = distance(
-                    start * float3(page_table.brick_size),
-                    stop  * float3(page_table.brick_size)
+                let sample_location = normalize_cache_address(
+                    compute_cache_address(page_table, p, page)
                 );
-                let num_steps = i32(brick_distance + 0.5);
-                if (num_steps < 1) {
-                    //color += RED;
-                    //break;
-                    continue;
-                }
+                let value = sample_volume(sample_location);
 
-                let step = (stop - start) / f32(num_steps);
-                color = ray_cast(color, start, step, num_steps, cs);
+                // todo: make minimum threshold configurable
+                if (value >= channel_settings_list.channels[channel].threshold_lower && value <= channel_settings_list.channels[channel].threshold_upper) {
+                    let trans_sample = channel_settings_list.channels[channel].color;
+                    var val_color = float4(trans_sample.rgb, value * trans_sample.a);
+                    val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
+                    color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
+                    color.a += (1.0 - color.a) * val_color.a;
+                }
 
                 if (is_saturated(color)) {
                     break;
                 }
-
-                steps_taken += 1;
-            }
-            if (steps_taken >= uniforms.settings.max_steps) {
-                break;
             }
         }
-    } else {
-        let offset = wang_hash(pixel.x + 640 * pixel.y);
-        let dt_scale = uniforms.settings.step_scale;
 
-        var dt_vec = 1. / (float3(page_table_meta.metas[last_lod].volume_size) * abs(ray_os.direction));
-        var dt = dt_scale * min_component(dt_vec);
-        var p = ray_at(ray_os, t_min + offset * dt);
-
-        let first_channel_index = channel_settings_list.channels[0].page_table_index;
-
-        for (var t = t_min; t < t_max; t += dt) {
-            let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
-            let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res, lod_factor);
-            let lod_changed = lod != last_lod;
-            if (lod_changed) {
-                last_lod = lod;
-                dt_vec = 1. / (float3(page_table_meta.metas[compute_page_table_index(first_channel_index, lod)].volume_size) * abs(ray_os.direction));
-                dt = dt_scale * min_component(dt_vec);
-            }
-
-            for (var channel = 0u; channel < num_channels; channel += 1u) {
-                let page_table_index = compute_page_table_index(
-                    channel_settings_list.channels[channel].page_table_index,
-                    lod
-                );
-                let page_table = clone_page_table_meta(page_table_index);
-
-                // todo: think about this more carefully - does that change the ray or not?
-                let position_corrected = p * compute_volume_to_padded(page_table);
-                let page_address = compute_page_address(page_table, position_corrected);
-                let page = get_page(page_address);
-
-                // todo: remove (debug)
-                let page_color = float3(page_address) / float3(7., 7., 1.);
-
-                if (page.flag == UNMAPPED) {
-                    // todo: remove this (debug)
-                    color = float4(page_color, 1.);
-
-                    if (!requested_brick) {
-                        // todo: maybe request lower res as well?
-                        request_brick(int3(page_address));
-                        requested_brick = true;
-                    }
-                } else if (page.flag == MAPPED) {
-                    report_usage(int3(page.location / brick_size));
-
-                    let sample_location = normalize_cache_address(
-                        compute_cache_address(page_table, p, page)
-                    );
-                    let value = sample_volume(sample_location);
-
-                    // todo: make minimum threshold configurable
-                    if (value >= channel_settings_list.channels[channel].threshold_lower && value <= channel_settings_list.channels[channel].threshold_upper) {
-                        let trans_sample = channel_settings_list.channels[channel].color;
-                        var val_color = float4(trans_sample.rgb, value * trans_sample.a);
-                        val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
-                        color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
-                        color.a += (1.0 - color.a) * val_color.a;
-                    }
-
-                    if (is_saturated(color)) {
-                        break;
-                    }
-                }
-            }
-
-            steps_taken += 1;
-            if (steps_taken >= uniforms.settings.max_steps) {
-                break;
-            }
-
-            p += ray_os.direction * dt;
-        }
-    }
-
-    debug(pixel, color);
-}
-
-fn ray_cast(in_color: float4, start: float3, step: float3, num_steps: i32, channel_settings: ChannelSettings) -> float4 {
-    let view_direction = normalize(step);
-    var color = in_color;
-
-    var sample_location = start;
-    for (var i = 0; i < num_steps; i += 1) {
-        let value = sample_volume(sample_location);
-
-        if (value >= channel_settings.threshold_lower && value <= channel_settings.threshold_upper) {
-            var lighting = compute_lighting(value, sample_location, step, view_direction, channel_settings);
-            lighting.a = value;
-            color += lighting;
-        }
-
-        if (is_saturated(color)) {
+        steps_taken += 1;
+        if (steps_taken >= uniforms.settings.max_steps) {
             break;
         }
 
-        sample_location += step;
+        p += ray_os.direction * dt;
     }
 
-    return color;
-}
-
-fn compute_lighting(value: f32, x: float3, step: float3, view: float3, channel_settings: ChannelSettings) -> float4 {
-    var light_direction = view;//float3(1.);
-
-    let normal = compute_volume_normal(x, step, view);
-
-    let ambient = 0.2;
-
-    let diffuse = clamp(dot(normal, light_direction), 0., 1.);
-
-    let halfway = normalize(light_direction + view);
-    let shininess = 16.;
-    let specular = pow(max(dot(halfway, normal), 0.), shininess);
-
-    return float4(
-        apply_colormap(value, channel_settings) * (ambient + diffuse) + specular,
-        value
-    );
-}
-
-fn apply_colormap(value: f32, channel_settings: ChannelSettings) -> float3{
-    let u_clim = float2(0., 0.5);
-    return channel_settings.color.rgb * (value - u_clim[0]) / (u_clim[1] - u_clim[0]);
-}
-
-// page table stuff
-/// Computes a level of detail within a given highest and lowest level for the distance from the current sample to the
-/// camera in the camera's space.
-/// The ranges of the given highest and lowest levels are max(0, highest_res) and max(highest_res, lowest_res)
-/// respectively.
-/// It is the caller's responsibility to choose an adequate factor.
-fn select_level_of_detail(distance: f32, highest_res: u32, lowest_res: u32, lod_factor: f32) -> u32 {
-    let lod = u32(log2(lod_factor * distance));
-    return clamp(lod, highest_res, lowest_res);
+    debug(pixel, color);
 }
 
 fn is_saturated(color: float4) -> bool {

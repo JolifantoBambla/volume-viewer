@@ -5,22 +5,34 @@ use std::mem::size_of;
 use std::ops::RangeBounds;
 use std::sync::{Arc, Mutex};
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, Device, Label, MapMode};
+use wgpu::{
+    Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, Device, Label, MapMode,
+};
 
 pub struct TypedBuffer<T: bytemuck::Pod> {
     label: String,
     buffer: Buffer,
     num_elements: usize,
-    phantom_data: PhantomData<T>
+    phantom_data: PhantomData<T>,
 }
 
 impl<T: bytemuck::Pod> TypedBuffer<T> {
-    pub fn new_zeroed(label: &str, num_elements: usize, usage: BufferUsages, device: &Device) -> Self {
+    pub fn new_zeroed(
+        label: &str,
+        num_elements: usize,
+        usage: BufferUsages,
+        device: &Device,
+    ) -> Self {
         let data = vec![unsafe { mem::zeroed() }; num_elements];
         TypedBuffer::from_data(label, &data, usage, device)
     }
 
-    pub fn new_single_element(label: &str, element: T, usage: BufferUsages, device: &Device) -> Self {
+    pub fn new_single_element(
+        label: &str,
+        element: T,
+        usage: BufferUsages,
+        device: &Device,
+    ) -> Self {
         let data = vec![element];
         TypedBuffer::from_data(label, &data, usage, device)
     }
@@ -29,7 +41,7 @@ impl<T: bytemuck::Pod> TypedBuffer<T> {
         let buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Label::from(label),
             contents: bytemuck::cast_slice(data),
-            usage
+            usage,
         });
         Self {
             label: String::from(label),
@@ -46,7 +58,7 @@ impl<T: bytemuck::Pod> TypedBuffer<T> {
             label: Label::from(label.as_str()),
             size: self.size(),
             usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-            mapped_at_creation: false
+            mapped_at_creation: false,
         });
         Self {
             label,
@@ -229,7 +241,10 @@ impl<T: bytemuck::Pod> ReadableStorageBuffer<T> {
         self.storage_buffer.size()
     }
 
-    pub fn copy_to_readable(&self, command_encoder: &mut CommandEncoder) -> Result<(), BufferMapError> {
+    pub fn copy_to_readable(
+        &self,
+        command_encoder: &mut CommandEncoder,
+    ) -> Result<(), BufferMapError> {
         if self.read_buffer.is_ready() {
             command_encoder.copy_buffer_to_buffer(
                 self.storage_buffer.buffer(),
@@ -246,15 +261,21 @@ impl<T: bytemuck::Pod> ReadableStorageBuffer<T> {
 
     /// Maps a mappable buffer if it is not already mapped or being mapped.
     /// The buffer can be read
-    pub fn map_async<S: RangeBounds<BufferAddress>>(&self, bounds: S) -> Result<(), BufferMapError> {
+    pub fn map_async<S: RangeBounds<BufferAddress>>(
+        &self,
+        bounds: S,
+    ) -> Result<(), BufferMapError> {
         if self.read_buffer.is_ready() {
             let s = self.read_buffer.state.clone();
             s.lock().unwrap().state = BufferState::Mapping;
-            self.read_buffer.buffer().slice(bounds).map_async(MapMode::Read, move |_| {
-                s.lock().unwrap().state = BufferState::Mapped;
-            });
+            self.read_buffer
+                .buffer()
+                .slice(bounds)
+                .map_async(MapMode::Read, move |_| {
+                    s.lock().unwrap().state = BufferState::Mapped;
+                });
             Ok(())
-        }  else {
+        } else {
             Err(BufferMapError::NotReady)
         }
     }
@@ -297,10 +318,12 @@ impl<T: bytemuck::Pod> ReadableStorageBuffer<T> {
 
 impl<T: bytemuck::Pod> Display for ReadableStorageBuffer<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Readable Storage Buffer [{}] (size: {}, state: {:?})",
-               self.storage_buffer.label,
-               self.size(),
-               self.read_buffer.state.lock().unwrap().state
+        write!(
+            f,
+            "Readable Storage Buffer [{}] (size: {}, state: {:?})",
+            self.storage_buffer.label,
+            self.size(),
+            self.read_buffer.state.lock().unwrap().state
         )
     }
 }

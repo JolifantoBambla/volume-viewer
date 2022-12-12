@@ -56,15 +56,32 @@ fn clamp_to_one(v: float3) -> float3 {
     return clamp(v, float3(), float3(1.));
 }
 
-// Pseudo-random number gen from
 // http://www.reedbeta.com/blog/quick-and-easy-gpu-random-numbers-in-d3d11/
-// with some tweaks for the range of values
-// https://github.com/johanna-b/VisWeb/blob/2d414949cd1911cdd55a1ef7d0b5b385ede892c2/shaders/vol-shader.js#L55
-fn wang_hash(seed: i32) -> f32 {
+fn wang_hash(seed: u32) -> u32 {
 	var h = (seed ^ 61) ^ (seed >> 16);
 	h *= 9;
 	h = h ^ (h >> 4);
 	h *= 0x27d4eb2d;
-	h = h ^ (h >> 15);
-	return f32(h % 2147483647) / f32(2147483647);
+	return h ^ (h >> 15);
+}
+
+// https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/
+fn pcg_hash(seed: u32) -> u32 {
+    let state = seed * 747796405u + 2891336453u;
+    let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+fn hash_u32_to_f32(h: u32) -> f32 {
+    return f32(h % 2147483647) / f32(2147483647);
+}
+
+/// Computes a level of detail within a given highest and lowest level for the distance from the current sample to the
+/// camera in the camera's space.
+/// The ranges of the given highest and lowest levels are max(0, highest_res) and max(highest_res, lowest_res)
+/// respectively.
+/// It is the caller's responsibility to choose an adequate factor.
+fn select_level_of_detail(distance: f32, highest_res: u32, lowest_res: u32, lod_factor: f32) -> u32 {
+    let lod = u32(log2(lod_factor * distance));
+    return clamp(lod, highest_res, lowest_res);
 }

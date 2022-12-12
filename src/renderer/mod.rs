@@ -138,6 +138,7 @@ impl MultiChannelVolumeRenderer {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
+        log::info!("4.6");
 
         // todo: refactor multi-volume into scene object or whatever
         // the volume is a unit cube ([0,1]^3)

@@ -52,7 +52,7 @@ impl Input {
     }
 }
 
-impl Default for Input{
+impl Default for Input {
     fn default() -> Self {
         let now = now() as f32;
         Self {

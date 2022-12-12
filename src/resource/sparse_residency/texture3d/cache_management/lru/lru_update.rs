@@ -1,4 +1,9 @@
-use crate::renderer::pass::{AsBindGroupEntries, ComputeEncodeDescriptor, ComputePipelineData, GPUPass};
+use crate::renderer::pass::scan::Scan;
+use crate::renderer::pass::{
+    AsBindGroupEntries, ComputeEncodeDescriptor, ComputePipelineData, GPUPass,
+};
+use crate::resource::buffer::TypedBuffer;
+use crate::resource::sparse_residency::texture3d::cache_management::lru::NumUsedEntries;
 use crate::resource::Texture;
 use crate::util::extent::extent_volume;
 use crate::GPUContext;
@@ -7,11 +12,12 @@ use std::mem::size_of;
 use std::rc::Rc;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, ComputePass, ComputePassDescriptor, ComputePipelineDescriptor, Device, Label};
+use wgpu::{
+    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress,
+    BufferDescriptor, BufferUsages, CommandEncoder, ComputePass, ComputePassDescriptor,
+    ComputePipelineDescriptor, Device, Label,
+};
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::renderer::pass::scan::Scan;
-use crate::resource::buffer::TypedBuffer;
-use crate::resource::sparse_residency::texture3d::cache_management::lru::NumUsedEntries;
 
 const WORKGROUP_SIZE: u32 = 256;
 
@@ -24,8 +30,18 @@ pub struct LRUUpdateResources<'a> {
 }
 
 impl<'a> LRUUpdateResources<'a> {
-    pub fn new(lru_cache: Arc<TypedBuffer<u32>>, num_used_entries: Arc<TypedBuffer<NumUsedEntries>>, usage_buffer: &'a Texture, time_stamp: &'a Buffer) -> Self {
-        Self { lru_cache, num_used_entries, usage_buffer, time_stamp }
+    pub fn new(
+        lru_cache: Arc<TypedBuffer<u32>>,
+        num_used_entries: Arc<TypedBuffer<NumUsedEntries>>,
+        usage_buffer: &'a Texture,
+        time_stamp: &'a Buffer,
+    ) -> Self {
+        Self {
+            lru_cache,
+            num_used_entries,
+            usage_buffer,
+            time_stamp,
+        }
     }
 }
 
@@ -63,7 +79,7 @@ impl LRUUpdate {
                 },
                 BindGroupEntry {
                     binding: 1,
-                    resource: resources.num_used_entries.buffer().as_entire_binding()
+                    resource: resources.num_used_entries.buffer().as_entire_binding(),
                 },
                 BindGroupEntry {
                     binding: 2,
@@ -72,8 +88,8 @@ impl LRUUpdate {
                 BindGroupEntry {
                     binding: 3,
                     resource: used.buffer().as_entire_binding(),
-                }
-            ]
+                },
+            ],
         })
     }
 
@@ -109,28 +125,26 @@ impl LRUUpdate {
                 )),
             });
 
-        let lru_update_init_pipeline: Rc<ComputePipelineData<2>> = Rc::new(
-            ComputePipelineData::new(
+        let lru_update_init_pipeline: Rc<ComputePipelineData<2>> =
+            Rc::new(ComputePipelineData::new(
                 &ComputePipelineDescriptor {
                     label: Label::from("initialize offsets"),
                     layout: None,
                     module: &init_shader,
                     entry_point: "main",
                 },
-                &ctx.device
-            )
-        );
-        let lru_update_sort_pipeline: Rc<ComputePipelineData<2>> = Rc::new(
-            ComputePipelineData::new(
+                &ctx.device,
+            ));
+        let lru_update_sort_pipeline: Rc<ComputePipelineData<2>> =
+            Rc::new(ComputePipelineData::new(
                 &ComputePipelineDescriptor {
                     label: Label::from("update lru"),
                     layout: None,
                     module: &sort_shader,
                     entry_point: "main",
                 },
-                &ctx.device
-            )
-        );
+                &ctx.device,
+            ));
 
         let offsets: TypedBuffer<u32> = TypedBuffer::new_zeroed(
             "offsets",
@@ -163,7 +177,7 @@ impl LRUUpdate {
                     resources,
                     &offsets,
                     &used,
-                    &ctx.device
+                    &ctx.device,
                 ),
                 ctx.device.create_bind_group(&BindGroupDescriptor {
                     label: Label::from("LRU update init 1"),
@@ -171,14 +185,16 @@ impl LRUUpdate {
                     entries: &[
                         BindGroupEntry {
                             binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&resources.usage_buffer.view),
+                            resource: wgpu::BindingResource::TextureView(
+                                &resources.usage_buffer.view,
+                            ),
                         },
                         BindGroupEntry {
                             binding: 1,
                             resource: resources.time_stamp.as_entire_binding(),
                         },
-                    ]
-                })
+                    ],
+                }),
             ],
             WORKGROUP_SIZE,
         );
@@ -191,18 +207,16 @@ impl LRUUpdate {
                     resources,
                     &offsets,
                     &used,
-                    &ctx.device
+                    &ctx.device,
                 ),
                 ctx.device.create_bind_group(&BindGroupDescriptor {
                     label: Label::from("LRU update sort 1"),
                     layout: lru_update_sort_pipeline.bind_group_layout(1),
-                    entries: &[
-                        BindGroupEntry {
-                            binding: 0,
-                            resource: lru_updated.buffer().as_entire_binding(),
-                        }
-                    ]
-                })
+                    entries: &[BindGroupEntry {
+                        binding: 0,
+                        resource: lru_updated.buffer().as_entire_binding(),
+                    }],
+                }),
             ],
             WORKGROUP_SIZE,
         );
@@ -230,7 +244,7 @@ impl LRUUpdate {
 
     fn encode_passes(&self, command_encoder: &mut CommandEncoder) {
         let mut compute_pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
-            label: Label::from("update lru")
+            label: Label::from("update lru"),
         });
         self.initialize_offsets_pass.encode(&mut compute_pass);
         self.scan.encode_to_pass(&mut compute_pass);
@@ -243,7 +257,7 @@ impl LRUUpdate {
             0,
             self.lru_cache.buffer(),
             0,
-            self.lru_cache.size()
+            self.lru_cache.size(),
         );
     }
 }

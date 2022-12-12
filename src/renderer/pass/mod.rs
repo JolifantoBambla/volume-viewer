@@ -3,11 +3,14 @@ pub mod present_to_screen;
 pub mod ray_guided_dvr;
 pub mod scan;
 
-use std::rc::Rc;
 use crate::renderer::context::GPUContext;
-use std::sync::Arc;
 use glam::{UVec2, UVec3};
-use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, ComputePass, ComputePipeline, ComputePipelineDescriptor, Device};
+use std::rc::Rc;
+use std::sync::Arc;
+use wgpu::{
+    BindGroup, BindGroupEntry, BindGroupLayout, ComputePass, ComputePipeline,
+    ComputePipelineDescriptor, Device,
+};
 
 pub trait AsBindGroupEntries {
     fn as_bind_group_entries(&self) -> Vec<BindGroupEntry>;
@@ -37,7 +40,11 @@ pub struct ComputeEncodeDescriptor {
 }
 
 impl ComputeEncodeDescriptor {
-    pub fn new(pipeline: &Rc<ComputePipeline>, bind_groups: Vec<BindGroup>, work_group_size: UVec3) -> Self {
+    pub fn new(
+        pipeline: &Rc<ComputePipeline>,
+        bind_groups: Vec<BindGroup>,
+        work_group_size: UVec3,
+    ) -> Self {
         Self {
             pipeline: pipeline.clone(),
             bind_groups,
@@ -45,11 +52,19 @@ impl ComputeEncodeDescriptor {
         }
     }
 
-    pub fn new_1d(pipeline: &Rc<ComputePipeline>, bind_groups: Vec<BindGroup>, work_group_size: u32) -> Self {
+    pub fn new_1d(
+        pipeline: &Rc<ComputePipeline>,
+        bind_groups: Vec<BindGroup>,
+        work_group_size: u32,
+    ) -> Self {
         Self::new(pipeline, bind_groups, UVec3::new(work_group_size, 1, 1))
     }
 
-    pub fn new_2d(pipeline: &Rc<ComputePipeline>, bind_groups: Vec<BindGroup>, work_group_size: UVec2) -> Self {
+    pub fn new_2d(
+        pipeline: &Rc<ComputePipeline>,
+        bind_groups: Vec<BindGroup>,
+        work_group_size: UVec2,
+    ) -> Self {
         Self::new(pipeline, bind_groups, work_group_size.extend(1))
     }
 
@@ -61,7 +76,7 @@ impl ComputeEncodeDescriptor {
         compute_pass.dispatch_workgroups(
             self.work_group_size.x,
             self.work_group_size.y,
-            self.work_group_size.z
+            self.work_group_size.z,
         );
     }
 }
@@ -73,16 +88,14 @@ pub struct ComputePipelineData<const N: usize> {
 
 impl<const N: usize> ComputePipelineData<N> {
     pub fn new(pipeline_descriptor: &ComputePipelineDescriptor, device: &Device) -> Self {
-        let pipeline = Rc::new(
-            device.create_compute_pipeline(pipeline_descriptor)
-        );
+        let pipeline = Rc::new(device.create_compute_pipeline(pipeline_descriptor));
         let mut bind_group_layouts = Vec::new();
         for i in 0..N as u32 {
             bind_group_layouts.push(pipeline.get_bind_group_layout(i));
         }
         Self {
             pipeline,
-            bind_group_layouts
+            bind_group_layouts,
         }
     }
 
