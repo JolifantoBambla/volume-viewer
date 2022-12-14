@@ -16,16 +16,17 @@ A web-based volume viewer for large-scale multichannel volume data
 
 From the project root run:
 ```
-RUSTFLAGS=--cfg\=web_sys_unstable_apis\ -C\ target-feature\=+atomics\,+bulk-memory\,+mutable-globals \
-RUSTUP_TOOLCHAIN=nightly \
-wasm-pack build --target web -- . -Z build-std=panic_abort,std
+wasm-pack build --target web
 ```
 
 ### Required Rustflags
+These are set from `.cargo/config.toml`.
 * `--cfg=web_sys_unstable_apis`: enables unstable APIs like WebGPU for the `web_sys` crate
 * `-C target-feature=+atomics,+bulk-memory,+mutable-globals`: enables atomics & shared memory for WASM. This is required for multithreading.
 
 ### Required Unstable Flags
+These are set from `.cargo/config.toml`.
+The nightly toolchain used to build this project is defined in `rust-toolchain.toml`.
 * `build-std=panic_abort,std`: rebuild std with the features (atomics, etc.) enabled by `RUSTFLAGS`
 
 ## Demo
