@@ -8,7 +8,6 @@
 @include(timestamp)
 @include(transform)
 @include(type_alias)
-@include(grid_traversal)
 
 // includes that require the shader to define certain functions
 @include(volume_util)
@@ -122,16 +121,6 @@ fn request_brick(page_address: int3) {
     textureStore(request_buffer, page_address, uint4(uniforms.timestamp));
 }
 
-fn clone_page_table_meta(level: u32) -> PageTableMeta {
-    let page_table_meta = page_table_meta.metas[level];
-    return PageTableMeta(
-        page_table_meta.brick_size,
-        page_table_meta.page_table_offset,
-        page_table_meta.page_table_extent,
-        page_table_meta.volume_size
-    );
-}
-
 fn clone_channel_settings(channel_index: u32) -> ChannelSettings {
     let channel_settings = channel_settings_list.channels[channel_index];
     return ChannelSettings(
@@ -154,17 +143,6 @@ fn normalize_cache_address(cache_address: uint3) -> float3 {
         float3(),
         float3(1.)
     );
-}
-
-fn compute_offset(position: float3, level: u32) -> float3 {
-    let resolution = page_table_meta.metas[level];
-    let scale = float3(resolution.volume_size) / float3(resolution.brick_size);
-    return floor(position * scale) / scale;
-}
-
-fn transform_to_brick(position: float3, level: u32, page: PageTableEntry) -> float3 {
-    // todo: check if that's correct
-    return position - compute_offset(position, level) + (float3(page.location) / float3(textureDimensions(brick_cache).xyz));
 }
 
 // todo: add mutliple virtualization levels
