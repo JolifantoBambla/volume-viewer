@@ -115,8 +115,6 @@ pub struct ResMeta {
     volume_size: UVec4,
     // todo: I also need:
     //   - volume to padded ratio
-    //   - linear offset in bricks
-    //   - a variable saying which channel this page table holds
 }
 
 #[repr(C)]
@@ -161,7 +159,7 @@ impl PageTableDirectory {
                 brick_size: meta.brick_size.extend(0),
                 page_table_offset: pt.offset.extend(0),
                 page_table_extent: pt.extent.extend(0),
-                volume_size: UVec3::from_slice(pt.volume_meta.volume_size.as_slice()).extend(0),
+                volume_size: pt.volume_meta.volume_size.extend(0),
             })
             .collect();
 

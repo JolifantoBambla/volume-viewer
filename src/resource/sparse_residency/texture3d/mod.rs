@@ -157,7 +157,7 @@ impl SparseResidencyTexture3D {
         });
 
         let volume_meta = source.get_meta();
-        let brick_size = UVec3::from_slice(&volume_meta.brick_size);
+        let brick_size = volume_meta.brick_size;
 
         let page_table_directory = PageTableDirectory::new(
             volume_meta,
