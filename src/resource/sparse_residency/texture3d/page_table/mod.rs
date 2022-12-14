@@ -118,7 +118,7 @@ pub struct ResMeta {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
 struct PageDirectoryMetaGPUData {
     brick_size: UVec4,
     max_resolutions: u32,
@@ -173,8 +173,7 @@ impl PageTableDirectory {
                 brick_size: meta.brick_size().extend(0),
                 max_visible_channels: meta.num_channels() as u32,
                 max_resolutions: meta.num_resolutions() as u32,
-                padding1: 0,
-                padding2: 0,
+                ..Default::default()
             },
             BufferUsages::UNIFORM,
             &ctx.device,
