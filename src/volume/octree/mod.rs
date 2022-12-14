@@ -1,81 +1,36 @@
+use std::collections::HashMap;
 use glam::{BVec3, UVec3, Vec3};
-use js_sys::Atomics::sub;
 use crate::volume::BrickedMultiResolutionMultiVolumeMeta;
+use crate::volume::octree::direct_access_tree::DirectAccessTree;
+use crate::volume::octree::subdivision::VolumeSubdivision;
+use crate::volume::octree::top_down_tree::TopDownTree;
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct OctreeNode {
-    // todo: figure out what kind of data to store here
-    //   - mapped / unmapped / empty (per channel)
-    //   - max subtree that is mapped (per channel)
-    //   - min/max/avg (per channel)
-    //   - num children (per node)
+pub mod direct_access_tree;
+pub mod subdivision;
+pub mod top_down_tree;
 
-    // todo: determine how many channels we want to allow (i.e., maybe use only 4 channel = 4 bits)
-    // this is a per channel bitflag: 0000-0000-0000-0000-0000-0000-0000-0001 => first channel is mapped
-    is_mapped: u32,
+pub trait PageTableOctree {
+    fn with_subdivision(subdivision: &VolumeSubdivision) -> Self;
 
-    page_indices: UVec3,
+    // todo: update
+    //   - on new brick received
 }
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct OctreeLevel {
-    shape: UVec3,
-    // note: this is redundant since its just shape x*y*z, but we need a u32 anyway for alignment
-    num_children: u32,
+#[derive(Clone, Debug, Default)]
+pub struct MultiChannelPageTableOctree<Tree: PageTableOctree> {
+    subdivision: VolumeSubdivision,
+    octrees: HashMap<usize, Tree>,
 }
 
-#[derive(Clone, Debug)]
-pub struct Octree {
-    nodes: Vec<OctreeNode>,
-}
-
-impl Octree {
-    pub fn new(volume_meta: &BrickedMultiResolutionMultiVolumeMeta) -> Self {
-        let target_size = 32;
-        let target_shape = UVec3::new(target_size,target_size,target_size);
-        let input_shape = UVec3::from(volume_meta.resolutions[0].volume_size);
-
-        let mut shapes = vec![input_shape];
-        let mut subdivisions = Vec::new();
-        let mut last_shape = input_shape;
-        while last_shape.cmpgt(target_shape).any() {
-            let subdivide = vec![
-                last_shape.x > last_shape.y / 2 && last_shape.x > last_shape.z / 2,
-                last_shape.y > last_shape.x / 2 && last_shape.y > last_shape.z / 2,
-                last_shape.z > last_shape.x / 2 && last_shape.z > last_shape.y / 2
-            ];
-
-            let shape_raw: Vec<u32> = subdivide.iter().enumerate()
-                .map(|(i, &subdivide)| if subdivide { last_shape[i] / 2 } else { last_shape[i] })
-                .collect();
-            let shape = UVec3::from_slice(shape_raw.as_slice());
-            shapes.push(shape);
-            subdivisions.push(subdivide);
-            last_shape = shape;
+impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
+    pub fn new(volume_descriptor: &BrickedMultiResolutionMultiVolumeMeta) -> Self {
+        Self {
+            subdivision: VolumeSubdivision::default(),
+            octrees: HashMap::new()
         }
-
-        subdivisions.reverse();
-        let mut level_shapes = vec![UVec3::ONE];
-        let mut nodes = vec![vec![OctreeNode::default()]];
-        let mut last_num_children = 1;
-        for s in subdivisions {
-            let num_children = s.iter().fold(1, |acc, &s| if s { acc * 2 } else { acc });
-            level_shapes.push(UVec3::new(
-                if s[0] { 2 } else { 1 },
-                if s[1] { 2 } else { 1 },
-                if s[2] { 2 } else { 1 },
-            ) * (level_shapes[level_shapes.len() - 1]));
-            last_num_children *= num_children;
-            nodes.push(vec![OctreeNode::default(); last_num_children]);
-        }
-        let num_nodes: Vec<usize> = nodes.iter().map(|n| n.len()).collect();
-
-        log::info!("shapes {:?}", shapes);
-        log::info!("nodes {:?}", num_nodes);
-        log::info!("levels {:?}", level_shapes);
-
-        Self { nodes: nodes.into_iter().flatten().collect() }
     }
+
+    // todo: update
+    //   - on new brick received
+    //   - on channel selection change? -> no, each tree corresponds to one channel
 }
