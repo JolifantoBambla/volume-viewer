@@ -39,7 +39,7 @@ pub struct TopDownTree {
 }
 
 impl PageTableOctree for TopDownTree {
-    fn with_subdivision(subdivision: &VolumeSubdivision) -> Self {
+    fn with_subdivision(subdivisions: &Vec<VolumeSubdivision>) -> Self {
         todo!()
     }
 }

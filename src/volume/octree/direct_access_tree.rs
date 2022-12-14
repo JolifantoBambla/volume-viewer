@@ -41,7 +41,7 @@ pub struct DirectAccessTree {
 impl DirectAccessTree {}
 
 impl PageTableOctree for DirectAccessTree {
-    fn with_subdivision(subdivision: &VolumeSubdivision) -> Self {
+    fn with_subdivision(subdivisions: &Vec<VolumeSubdivision>) -> Self {
         todo!()
     }
 }

@@ -10,7 +10,7 @@ pub mod subdivision;
 pub mod top_down_tree;
 
 pub trait PageTableOctree {
-    fn with_subdivision(subdivision: &VolumeSubdivision) -> Self;
+    fn with_subdivision(subdivisions: &Vec<VolumeSubdivision>) -> Self;
 
     // todo: update
     //   - on new brick received
