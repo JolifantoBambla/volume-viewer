@@ -12,6 +12,7 @@
 
 // includes that require the shader to define certain functions
 @include(volume_util)
+@include(page_table_volume_accessor)
 
 fn debug(pixel: int2, color: float4) {
     textureStore(result, pixel, color);
@@ -246,38 +247,11 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
 
         for (var channel = 0u; channel < num_channels; channel += 1u) {
-            let page_table_index = compute_page_table_index(
-                channel_settings_list.channels[channel].page_table_index,
-                lod
-            );
-            let page_table = clone_page_table_meta(page_table_index);
+            let node = va_get_node(p, lod, channel, !requested_brick);
+            requested_brick = requested_brick || node.requested_brick;
+            if (node.is_mapped) {
+                let value = sample_volume(node.sample_address);
 
-            // todo: think about this more carefully - does that change the ray or not?
-            let position_corrected = p * compute_volume_to_padded(page_table);
-            let page_address = compute_page_address(page_table, position_corrected);
-            let page = get_page(page_address);
-
-            // todo: remove (debug)
-            let page_color = float3(page_address) / float3(7., 7., 1.);
-
-            if (page.flag == UNMAPPED) {
-                // todo: remove this (debug)
-                color = float4(page_color, 1.);
-
-                if (!requested_brick) {
-                    // todo: maybe request lower res as well?
-                    request_brick(int3(page_address));
-                    requested_brick = true;
-                }
-            } else if (page.flag == MAPPED) {
-                report_usage(int3(page.location / brick_size));
-
-                let sample_location = normalize_cache_address(
-                    compute_cache_address(page_table, p, page)
-                );
-                let value = sample_volume(sample_location);
-
-                // todo: make minimum threshold configurable
                 if (value >= channel_settings_list.channels[channel].threshold_lower && value <= channel_settings_list.channels[channel].threshold_upper) {
                     let trans_sample = channel_settings_list.channels[channel].color;
                     var val_color = float4(trans_sample.rgb, value * trans_sample.a);
@@ -294,6 +268,9 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
         steps_taken += 1;
         if (steps_taken >= uniforms.settings.max_steps) {
+            break;
+        }
+        if (is_saturated(color)) {
             break;
         }
 

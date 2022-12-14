@@ -13,12 +13,15 @@ pub fn create_wgsl_preprocessor() -> WGSLPreprocessor {
         .include("gpu_list", include_str!("gpu_list.wgsl"))
         .include("grid_traversal", include_str!("grid_traversal.wgsl"))
         .include("page_table", include_str!("page_table.wgsl"))
+        .include("page_table_util", include_str!("page_table_util.wgsl"))
+        .include("page_table_volume_accessor", include_str!("page_table_volume_accessor.wgsl"))
         .include("ray", include_str!("ray.wgsl"))
         .include("sphere", include_str!("sphere.wgsl"))
         .include("timestamp", include_str!("timestamp.wgsl"))
         .include("transform", include_str!("transform.wgsl"))
         .include("type_alias", include_str!("type_alias.wgsl"))
         .include("util", include_str!("util.wgsl"))
+        .include("volume_accessor", include_str!("volume_accessor.wgsl"))
         .include("volume_util", include_str!("volume_util.wgsl"));
 
     wgsl_preprocessor

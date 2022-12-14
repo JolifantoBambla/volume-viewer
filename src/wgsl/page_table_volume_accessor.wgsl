@@ -7,48 +7,41 @@
 //  - brick_usage_buffer: texture_storage_3d<r32uint, write>;
 //  - request_buffer: texture_storage_3d<r32uint, write>;
 
-@include(volume_accessor)
+@include(page_table)
+@include(page_table_util)
+@include(type_alias)
 @include(util)
+@include(volume_accessor)
 
 fn _volume_acessor__compute_lod(distance: f32, channel: u32, lod_factor: f32) -> u32 {
-    let highest_res = channel_settings_list[channel].max_lod;
-    let lowest_res = channel_settings_list[channel].min_lod;
+    let highest_res = channel_settings_list.channels[channel].max_lod;
+    let lowest_res = channel_settings_list.channels[channel].min_lod;
     return select_level_of_detail(distance, highest_res, lowest_res, lod_factor);
 }
 
-fn _volume_accessor__get_node(lod: u32, channel: u32, request_bricks: bool) -> Node {
+fn _volume_accessor__get_node(ray_sample: float3, lod: u32, channel: u32, request_bricks: bool) -> Node {
     let page_table_index = compute_page_table_index(
         channel_settings_list.channels[channel].page_table_index,
         lod
     );
-    // todo: remove this cloning stuff
-    let page_table = clone_page_table_meta(page_table_index);
 
-    // todo: let compute_volume_to_padded take a page_table index
-    // todo: think about this more carefully - does that change the ray or not?
-    let position_corrected = p * compute_volume_to_padded(page_table);
-    let page_address = compute_page_address(page_table, position_corrected);
+    // todo: store volume_to_padded in page table (is it already?)
+    let position_corrected = ray_sample * pt_compute_volume_to_padded(page_table_index);
+    let page_address = pt_compute_page_address(page_table_index, position_corrected);
     let page = get_page(page_address);
 
+    var requested_brick = false;
     if (page.flag == UNMAPPED) {
-        var requested_brick = false;
         if (request_bricks) {
             // todo: maybe request lower res as well?
             request_brick(int3(page_address));
             requested_brick = true;
         }
-        return Node(
-            false,
-            0.0,
-            false,
-            vec3(),
-            requested_brick
-        );
     } else if (page.flag == MAPPED) {
-        report_usage(int3(page.location / brick_size));
+        report_usage(int3(page.location / page_directory_meta.brick_size));
 
         let sample_location = normalize_cache_address(
-            compute_cache_address(page_table, p, page)
+            pt_compute_cache_address(page_table_index, ray_sample, page)
         );
         return Node(
             false,
@@ -58,4 +51,12 @@ fn _volume_accessor__get_node(lod: u32, channel: u32, request_bricks: bool) -> N
             false
         );
     }
+
+    return Node(
+        false,
+        0.0,
+        false,
+        float3(),
+        requested_brick
+    );
 }

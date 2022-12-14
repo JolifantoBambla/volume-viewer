@@ -39,6 +39,7 @@ struct PageTableMeta {
     // todo: store volume_to_padded ratio?
 }
 
+// todo: deprecated
 /// Computes the address of a page w.r.t. the page table table's offset for a given position in the unit cube ([0,1]^3)
 /// The result is in range [0, page_table.extent[i] - 1], i = 0,1,2.
 fn compute_local_page_address(page_table: PageTableMeta, position: float3) -> uint3 {
@@ -48,18 +49,21 @@ fn compute_local_page_address(page_table: PageTableMeta, position: float3) -> ui
     );
 }
 
+// todo: deprecated
 /// Computes the address of a page in a page directory for a given position in the unit cube ([0,1]^3).
 /// The result is in range [page_table.offset[i], page_table.offset[i] + page_table.extent[i] - 1], i = 0,1,2.
 fn compute_page_address(page_table: PageTableMeta, position: float3) -> uint3 {
     return page_table.page_table_offset + compute_local_page_address(page_table, position);
 }
 
+// todo: deprecated
 fn compute_cache_address(page_table: PageTableMeta, position: float3, page: PageTableEntry) -> uint3 {
     let brick_size = page_table.brick_size;
     let volume_size = page_table.volume_size;
     return page.location + uint3(floor(position * float3(volume_size))) % brick_size;
 }
 
+// todo: deprecated
 // todo: this could be a per-resolution constant
 /// Computes the ratio of filled voxels to total voxels in the page table.
 // The result is in range [0, 1]^3.
@@ -73,6 +77,7 @@ fn compute_volume_to_padded(page_table: PageTableMeta) -> float3 {
     return volume_size / padded_size;
 }
 
+// todo: deprecated
 // this constructs a multi res page table index where the level and each component in the page table are
 // represented as 8 bit unsigned integers - this enforces a limit on page table dimensions, namely that
 // they must not contain more than [0,255]^3 bricks
