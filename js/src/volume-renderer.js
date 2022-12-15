@@ -154,11 +154,7 @@ export class VolumeRenderer {
                         {
                             detail: {
                                 address: e.data.brick.address,
-                                brick: {
-                                    data: e.data.brick.data,
-                                    min: 0,
-                                    max: 0,
-                                }
+                                brick: e.data.brick.brick,
                             }
                         }
                     )

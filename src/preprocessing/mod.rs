@@ -24,6 +24,35 @@ pub fn is_zero_f32(data: Vec<f32>, threshold: f32) -> bool {
     data.par_iter().all(|&x| x.abs() <= thresh)
 }
 
+// CLAMP
+
+#[wasm_bindgen(js_name = "clampU8")]
+pub fn clamp_u8(data: Vec<u8>, threshold_lower: f32, threshold_upper: f32) -> Vec<u8> {
+    let tl = (threshold_lower.clamp(0., 1.) * 255.) as u8;
+    let tu = (threshold_upper.clamp(0., 1.) * 255.) as u8;
+    data.par_iter()
+        .map(|&x| if x >= tl && x <= tu { x } else { 0 })
+        .collect()
+}
+
+#[wasm_bindgen(js_name = "clampU16")]
+pub fn clamp_u16(data: Vec<u16>, threshold_lower: f32, threshold_upper: f32) -> Vec<u16> {
+    let tl = (threshold_lower.clamp(0., 1.) * 65535.) as u16;
+    let tu = (threshold_upper.clamp(0., 1.) * 65535.) as u16;
+    data.par_iter()
+        .map(|&x| if x >= tl && x <= tu { x } else { 0 })
+        .collect()
+}
+
+#[wasm_bindgen(js_name = "clampF32")]
+pub fn clamp_f32(data: Vec<f32>, threshold_lower: f32, threshold_upper: f32) -> Vec<f32> {
+    let tl = threshold_lower.clamp(0., 1.);
+    let tu = threshold_upper.clamp(0., 1.);
+    data.par_iter()
+        .map(|&x| if x >= tl && x <= tu { x } else { 0.0 })
+        .collect()
+}
+
 // MIN
 
 #[wasm_bindgen(js_name = "minU8")]
