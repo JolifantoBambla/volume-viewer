@@ -207,7 +207,7 @@ impl PageTableDirectory {
         let subscript = size.index_to_subscript(bytes[3] as u32);
 
         BrickAddress::new(
-            [bytes[0] as u32, bytes[1] as u32, bytes[2] as u32],
+            UVec3::new(bytes[0] as u32, bytes[1] as u32, bytes[2] as u32),
             subscript.x,
             subscript.y,
         )
@@ -218,7 +218,7 @@ impl PageTableDirectory {
             .meta
             .get_page_table(brick_address.level, brick_address.channel);
         let offset = page_table.offset;
-        let location = UVec3::from_slice(brick_address.index.as_slice());
+        let location = brick_address.index;
         let page_index =
             subscript_to_index(&(offset + location), &self.page_directory.extent) as usize;
         page_index

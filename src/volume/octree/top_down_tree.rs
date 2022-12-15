@@ -1,4 +1,3 @@
-use crate::resource::TypedBuffer;
 use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
 use crate::volume::octree::PageTableOctree;
 
@@ -51,7 +50,7 @@ impl PageTableOctree for TopDownTree {
         Self { nodes }
     }
 
-    fn write_to_buffer(&self, _buffer: TypedBuffer<Self::Node>, _offset: u32) {
-        todo!()
+    fn nodes(&self) -> &Vec<Self::Node> {
+        &self.nodes
     }
 }

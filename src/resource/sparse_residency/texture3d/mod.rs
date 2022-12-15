@@ -263,7 +263,7 @@ impl SparseResidencyTexture3D {
                     break;
                 }
             }
-            self.source.request_bricks(brick_addresses);
+            self.request_bricks(brick_addresses);
         }
     }
 

@@ -1,10 +1,12 @@
-use crate::resource::TypedBuffer;
-use crate::volume::octree::subdivision::VolumeSubdivision;
-use crate::volume::BrickedMultiResolutionMultiVolumeMeta;
-use crate::GPUContext;
 use glam::UVec3;
 use std::collections::HashMap;
 use std::sync::Arc;
+use wgpu::{BufferAddress, Queue};
+
+use crate::GPUContext;
+use crate::resource::TypedBuffer;
+use crate::volume::octree::subdivision::VolumeSubdivision;
+use crate::volume::BrickedMultiResolutionMultiVolumeMeta;
 
 pub mod direct_access_tree;
 pub mod subdivision;
@@ -15,7 +17,15 @@ pub trait PageTableOctree {
 
     fn with_subdivisions(subdivisions: &Vec<VolumeSubdivision>) -> Self;
 
-    fn write_to_buffer(&self, buffer: TypedBuffer<Self::Node>, offset: u32);
+    fn nodes(&self) -> &Vec<Self::Node>;
+
+    fn write_to_buffer(&self, buffer: TypedBuffer<Self::Node>, offset: u32, queue: &Queue) {
+        queue.write_buffer(
+            buffer.buffer(),
+            offset as BufferAddress,
+            bytemuck::cast_slice(self.nodes().as_slice())
+        );
+    }
 
     // todo: update
     //   - on new brick received

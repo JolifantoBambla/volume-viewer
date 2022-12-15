@@ -1,3 +1,4 @@
+use glam::UVec3;
 use serde::{Deserialize, Serialize};
 
 #[readonly::make]
@@ -9,12 +10,12 @@ pub struct Brick {
 }
 
 #[readonly::make]
-#[derive(Copy, Clone, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct BrickAddress {
     /// x,y,z
     // todo: refactor into x,y,z
     // todo: change type to u16
-    pub index: [u32; 3],
+    pub index: UVec3,
     // todo: change type to u8
     pub channel: u32,
     // todo: rename to `resolution` (requires changes in JS code as well)
@@ -23,7 +24,7 @@ pub struct BrickAddress {
 }
 
 impl BrickAddress {
-    pub fn new(index: [u32; 3], channel: u32, resolution: u32) -> Self {
+    pub fn new(index: UVec3, channel: u32, resolution: u32) -> Self {
         Self {
             index,
             channel,
@@ -48,9 +49,9 @@ impl From<BrickAddress> for u64 {
     ///
     /// ```
     fn from(brick_address: BrickAddress) -> Self {
-        ((brick_address.index[0] as u64) << 48)
-            + ((brick_address.index[1] as u64) << 32)
-            + ((brick_address.index[2] as u64) << 16)
+        ((brick_address.index.x as u64) << 48)
+            + ((brick_address.index.y as u64) << 32)
+            + ((brick_address.index.z as u64) << 16)
             + ((brick_address.channel as u64) << 8)
             + brick_address.level as u64
     }

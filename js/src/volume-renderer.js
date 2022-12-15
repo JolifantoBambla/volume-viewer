@@ -139,7 +139,7 @@ export class VolumeRenderer {
             (async () => {
                 this.#loader.worker.postMessage({
                     type: BRICK_REQUEST_EVENT,
-                    addresses: e.detail.addresses,
+                    addresses: e.detail.get('addresses'),
                 });
             })();
         });
