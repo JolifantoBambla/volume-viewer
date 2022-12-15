@@ -2,9 +2,8 @@ extern crate core;
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
 
-use glam::{Vec2, Vec3};
+use glam::{UVec3, Vec2, Vec3};
 use wasm_bindgen::{prelude::*, JsCast};
 use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
@@ -43,6 +42,8 @@ use crate::volume::{
 use crate::window::window_builder_without_size;
 
 use crate::util::vec::vec_equals;
+use crate::volume::octree::direct_access_tree::DirectAccessTree;
+use crate::volume::octree::{MultiChannelPageTableOctree, MultiChannelPageTableOctreeDescriptor};
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -85,13 +86,15 @@ pub fn main(canvas: JsValue, volume_meta: JsValue, render_settings: JsValue) {
     init::set_panic_hook();
     init::set_logger(None);
 
-    let volume_meta: BrickedMultiResolutionMultiVolumeMeta = serde_wasm_bindgen::from_value(volume_meta)
-        .expect("Received invalid volume meta. Shutting down.");
+    let volume_meta: BrickedMultiResolutionMultiVolumeMeta =
+        serde_wasm_bindgen::from_value(volume_meta)
+            .expect("Received invalid volume meta. Shutting down.");
 
     //Octree::new(&volume_meta);
 
-    let render_settings: MultiChannelVolumeRendererSettings = serde_wasm_bindgen::from_value(render_settings)
-        .expect("Received invalid render settings. Shutting down.");
+    let render_settings: MultiChannelVolumeRendererSettings =
+        serde_wasm_bindgen::from_value(render_settings)
+            .expect("Received invalid render settings. Shutting down.");
 
     wasm_bindgen_futures::spawn_local(start_event_loop(canvas, volume_meta, render_settings));
 }
@@ -117,13 +120,20 @@ async fn start_event_loop(
     register_default_js_event_handlers(&html_canvas, &event_loop);
 
     let volume_source = Box::new(HtmlEventTargetVolumeDataSource::new(
-        volume_meta,
+        volume_meta.clone(),
         html_canvas.clone().unchecked_into::<web_sys::EventTarget>(),
     ));
 
-    let renderer = MultiChannelVolumeRenderer::new(
-        canvas, volume_source, &render_settings
-    ).await;
+    let renderer = MultiChannelVolumeRenderer::new(canvas, volume_source, &render_settings).await;
+
+    let _octree: MultiChannelPageTableOctree<DirectAccessTree> = MultiChannelPageTableOctree::new(
+        MultiChannelPageTableOctreeDescriptor {
+            volume: &volume_meta,
+            brick_size: UVec3::new(32, 32, 32),
+            num_channels: 0,
+        },
+        renderer.ctx(),
+    );
 
     // NOTE: All resource allocations should happen before the main render loop
     // The reason for this is that receiving allocation errors is async, but
@@ -345,7 +355,7 @@ pub fn run_event_loop(
                 let frame = match renderer
                     .as_ref()
                     .borrow()
-                    .ctx
+                    .ctx()
                     .surface
                     .as_ref()
                     .unwrap()
@@ -356,16 +366,16 @@ pub fn run_event_loop(
                         renderer
                             .as_ref()
                             .borrow()
-                            .ctx
+                            .ctx()
                             .surface
                             .as_ref()
                             .unwrap()
                             .configure(
-                                &renderer.as_ref().borrow().ctx.device,
+                                &renderer.as_ref().borrow().ctx().device,
                                 renderer
                                     .as_ref()
                                     .borrow()
-                                    .ctx
+                                    .ctx()
                                     .surface_configuration
                                     .as_ref()
                                     .unwrap(),
@@ -373,7 +383,7 @@ pub fn run_event_loop(
                         renderer
                             .as_ref()
                             .borrow()
-                            .ctx
+                            .ctx()
                             .surface
                             .as_ref()
                             .unwrap()

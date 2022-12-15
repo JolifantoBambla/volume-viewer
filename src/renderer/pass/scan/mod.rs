@@ -1,17 +1,13 @@
 use crate::renderer::context::GPUContext;
-use crate::renderer::pass::{ComputeEncodeDescriptor, ComputePipelineData, GPUPass};
+use crate::renderer::pass::{ComputeEncodeDescriptor, ComputePipelineData};
 use crate::resource::buffer::{map_buffer, TypedBuffer};
 use crate::resource::MappableBuffer;
-use glam::{UVec2, UVec3};
 use std::borrow::Cow;
-use std::rc::Rc;
 use std::sync::Arc;
-use wasm_bindgen::prelude::wasm_bindgen;
 use wgpu::{
-    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BufferDescriptor,
-    BufferUsages, CommandEncoder, CommandEncoderDescriptor, ComputePass, ComputePassDescriptor,
-    ComputePipeline, ComputePipelineDescriptor, Device, Label, ShaderModuleDescriptor,
-    ShaderSource,
+    BindGroupDescriptor, BindGroupEntry, BufferUsages, CommandEncoder, CommandEncoderDescriptor,
+    ComputePass, ComputePassDescriptor, ComputePipelineDescriptor, Device, Label,
+    ShaderModuleDescriptor, ShaderSource,
 };
 use wgsl_preprocessor::WGSLPreprocessor;
 
@@ -19,7 +15,6 @@ const WORKGROUP_SIZE: u32 = 256;
 const WORKGROUP_SIZE_DOUBLED: u32 = WORKGROUP_SIZE * 2;
 
 pub struct Scan {
-    ctx: Arc<GPUContext>,
     passes: Vec<ComputeEncodeDescriptor>,
 }
 
@@ -80,10 +75,7 @@ impl Scan {
             &ctx.device,
         );
 
-        Self {
-            ctx: ctx.clone(),
-            passes,
-        }
+        Self { passes }
     }
 
     fn create_recursive_bind_groups(

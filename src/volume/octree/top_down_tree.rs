@@ -1,6 +1,8 @@
+use crate::resource::TypedBuffer;
+use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
 use crate::volume::octree::PageTableOctree;
-use crate::volume::octree::subdivision::VolumeSubdivision;
 
+/*
 #[modular_bitfield::bitfield]
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Default)]
@@ -14,32 +16,42 @@ struct MappedState {
     subtree_6_partially_mapped: bool,
     subtree_7_partially_mapped: bool,
 }
+ */
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
-struct Node {
+pub struct Node {
     /// A bitfield that stores for each of this node's subtrees this bitfield stores if it is
     /// partially mapped or not.
     /// Note that a subtree is also considered mapped if it is known to be empty or homogenous.
     partially_mapped_subtrees: u8,
+
+    /// Stores if this node is mapped or not and some other data or padding.
+    /// Possibly: The average value in the region in the volume represented by this node.
+    self_mapped_and_padding: u8,
 
     /// The minimum value in the region in the volume represented by this node.
     min: u8,
 
     /// The maximum value in the region in the volume represented by this node.
     max: u8,
-
-    /// The average value in the region in the volume represented by this node.
-    average: u8,
 }
 
 #[derive(Clone, Debug)]
 pub struct TopDownTree {
+    #[allow(unused)]
     nodes: Vec<Node>,
 }
 
 impl PageTableOctree for TopDownTree {
-    fn with_subdivision(subdivisions: &Vec<VolumeSubdivision>) -> Self {
+    type Node = Node;
+
+    fn with_subdivisions(subdivisions: &Vec<VolumeSubdivision>) -> Self {
+        let nodes = vec![Node::default(); total_number_of_nodes(subdivisions) as usize];
+        Self { nodes }
+    }
+
+    fn write_to_buffer(&self, _buffer: TypedBuffer<Self::Node>, _offset: u32) {
         todo!()
     }
 }

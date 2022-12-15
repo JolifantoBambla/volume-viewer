@@ -38,13 +38,14 @@ struct ChannelConfiguration {
 }
 
 impl ChannelConfiguration {
+    #[allow(unused)]
     pub fn num_visible_channels(&self) -> usize {
         self.visible_channel_indices.len()
     }
 }
 
 pub struct MultiChannelVolumeRenderer {
-    pub(crate) ctx: Arc<GPUContext>,
+    ctx: Arc<GPUContext>,
     pub(crate) window_size: PhysicalSize<u32>,
     volume_transform: glam::Mat4,
     volume_texture: SparseResidencyTexture3D,
@@ -294,5 +295,9 @@ impl MultiChannelVolumeRenderer {
             };
         }
         self.volume_texture.update_cache(input);
+    }
+
+    pub fn ctx(&self) -> &Arc<GPUContext> {
+        &self.ctx
     }
 }

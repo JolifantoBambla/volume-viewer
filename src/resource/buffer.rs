@@ -9,6 +9,7 @@ use wgpu::{
     Buffer, BufferAddress, BufferDescriptor, BufferUsages, CommandEncoder, Device, Label, MapMode,
 };
 
+#[derive(Debug)]
 pub struct TypedBuffer<T: bytemuck::Pod> {
     label: String,
     buffer: Buffer,
@@ -113,10 +114,12 @@ pub enum BufferState {
     Mapped,
 }
 
+#[derive(Debug)]
 pub struct MappableBufferState {
     state: BufferState,
 }
 
+#[derive(Debug)]
 pub struct MappableBuffer<T: bytemuck::Pod> {
     buffer: TypedBuffer<T>,
     state: Arc<Mutex<MappableBufferState>>,
@@ -191,6 +194,7 @@ pub enum BufferMapError {
     NotMapped,
 }
 
+#[derive(Debug)]
 pub struct ReadableStorageBuffer<T: bytemuck::Pod> {
     storage_buffer: Arc<TypedBuffer<T>>,
     read_buffer: MappableBuffer<T>,

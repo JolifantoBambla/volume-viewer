@@ -1,32 +1,57 @@
-use std::collections::HashMap;
-use glam::{BVec3, UVec3, Vec3};
-use crate::volume::BrickedMultiResolutionMultiVolumeMeta;
-use crate::volume::octree::direct_access_tree::DirectAccessTree;
+use crate::resource::TypedBuffer;
 use crate::volume::octree::subdivision::VolumeSubdivision;
-use crate::volume::octree::top_down_tree::TopDownTree;
+use crate::volume::BrickedMultiResolutionMultiVolumeMeta;
+use crate::GPUContext;
+use glam::UVec3;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 pub mod direct_access_tree;
 pub mod subdivision;
 pub mod top_down_tree;
 
 pub trait PageTableOctree {
-    fn with_subdivision(subdivisions: &Vec<VolumeSubdivision>) -> Self;
+    type Node: bytemuck::Pod;
+
+    fn with_subdivisions(subdivisions: &Vec<VolumeSubdivision>) -> Self;
+
+    fn write_to_buffer(&self, buffer: TypedBuffer<Self::Node>, offset: u32);
 
     // todo: update
     //   - on new brick received
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
+pub struct MultiChannelPageTableOctreeDescriptor<'a> {
+    pub volume: &'a BrickedMultiResolutionMultiVolumeMeta,
+    pub brick_size: UVec3,
+    pub num_channels: u32,
+}
+
+#[derive(Debug)]
+struct GpuData {}
+
+#[derive(Clone, Debug)]
 pub struct MultiChannelPageTableOctree<Tree: PageTableOctree> {
-    subdivision: VolumeSubdivision,
+    #[allow(unused)]
+    gpu: Arc<GPUContext>,
+    #[allow(unused)]
+    subdivisions: Vec<VolumeSubdivision>,
+    #[allow(unused)]
     octrees: HashMap<usize, Tree>,
 }
 
 impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
-    pub fn new(volume_descriptor: &BrickedMultiResolutionMultiVolumeMeta) -> Self {
+    pub fn new(descriptor: MultiChannelPageTableOctreeDescriptor, gpu: &Arc<GPUContext>) -> Self {
+        let subdivisions = VolumeSubdivision::from_input_and_target_shape(
+            descriptor.volume.resolutions[0].volume_size,
+            descriptor.brick_size,
+        );
+
         Self {
-            subdivision: VolumeSubdivision::default(),
-            octrees: HashMap::new()
+            gpu: gpu.clone(),
+            subdivisions,
+            octrees: HashMap::new(),
         }
     }
 

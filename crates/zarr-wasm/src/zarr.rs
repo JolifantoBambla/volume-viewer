@@ -196,7 +196,7 @@ impl ZarrArray {
             path: Some(path),
             ..Default::default()
         };
-        let array = open_array(JsValue::from_serde(&options).unwrap()).await;
+        let array = open_array(serde_wasm_bindgen::to_value(&options).unwrap()).await;
         array.unchecked_into()
     }
 
@@ -206,14 +206,14 @@ impl ZarrArray {
         options: GetOptions,
     ) -> RawArray {
         self.get_raw(
-            JsValue::from_serde(&selection).unwrap(),
-            JsValue::from_serde(&options).unwrap(),
+            serde_wasm_bindgen::to_value(&selection).unwrap(),
+            serde_wasm_bindgen::to_value(&options).unwrap(),
         )
         .await
         .unchecked_into::<RawArray>()
     }
 
     pub fn data_type(&self) -> DataType {
-        self.data_type_js().into_serde().unwrap()
+        serde_wasm_bindgen::from_value(self.data_type_js()).unwrap()
     }
 }

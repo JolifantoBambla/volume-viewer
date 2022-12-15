@@ -1,27 +1,17 @@
 mod lru_update;
 
 use glam::UVec3;
-use std::collections::HashSet;
-use std::mem::size_of;
-use std::rc::Rc;
 use std::sync::Arc;
-use web_sys::console::time;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{
-    BindGroup, BindingResource, Buffer, BufferAddress, BufferUsages, CommandEncoder, Extent3d,
-    MapMode,
-};
+use wgpu::{BindingResource, Buffer, CommandEncoder, Extent3d};
 use wgsl_preprocessor::WGSLPreprocessor;
 
-use crate::resource::{MappableBuffer, Texture};
+use crate::resource::{buffer::ReadableStorageBuffer, Texture};
 use crate::util::extent::{
     box_volume, extent_to_uvec, index_to_subscript, uvec_to_extent, uvec_to_origin,
 };
+use crate::util::multi_buffer::MultiBuffered;
 use crate::{GPUContext, Input};
 
-use crate::resource::buffer::{BufferMapError, ReadableStorageBuffer, TypedBuffer};
-
-use crate::util::multi_buffer::MultiBuffered;
 use lru_update::{LRUUpdate, LRUUpdateResources};
 
 #[repr(C)]
@@ -123,8 +113,6 @@ pub struct LRUCache {
 
     lru_local: Vec<u32>,
 
-    lru_buffer_size: BufferAddress,
-
     num_used_entries_local: u32,
 
     lru_stuff: MultiBuffered<LRUCacheGpuOps>,
@@ -146,7 +134,6 @@ impl LRUCache {
         let next_empty_index = num_entries;
         let lru_local = Vec::from_iter((0..num_entries).rev());
         let lru_last_update = vec![u32::MAX; num_entries as usize];
-        let lru_buffer_size = (size_of::<u32>() * num_entries as usize) as BufferAddress;
 
         // 1:1 mapping, 1 timestamp per brick in cache
         let usage_buffer = Texture::create_u32_storage_3d(
@@ -194,7 +181,6 @@ impl LRUCache {
             time_to_live: settings.time_to_live,
             next_empty_index,
             lru_local,
-            lru_buffer_size,
             num_used_entries_local: 0,
             lru_stuff,
         }
@@ -276,6 +262,7 @@ impl LRUCache {
         Err(CacheFullError {})
     }
 
+    #[allow(unused)]
     pub fn cache_entry_size(&self) -> UVec3 {
         self.cache_entry_size
     }

@@ -1,7 +1,7 @@
 mod cache_management;
 mod page_table;
 
-use glam::{UVec3, Vec3};
+use glam::Vec3;
 use std::cmp::min;
 use std::collections::HashSet;
 use std::sync::Arc;

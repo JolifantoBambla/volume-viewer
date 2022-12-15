@@ -136,7 +136,6 @@ pub struct PageTableDirectory {
     meta: PageDirectoryMeta,
     max_visible_channels: u32,
     max_resolutions: u32,
-    volume_meta: BrickedMultiResolutionMultiVolumeMeta,
 }
 
 impl PageTableDirectory {
@@ -153,10 +152,10 @@ impl PageTableDirectory {
         );
 
         let res_meta_data: Vec<ResMeta> = meta
-            .page_tables
+            .page_tables()
             .iter()
             .map(|pt| ResMeta {
-                brick_size: meta.brick_size.extend(0),
+                brick_size: meta.brick_size().extend(0),
                 page_table_offset: pt.offset.extend(0),
                 page_table_extent: pt.extent.extend(0),
                 volume_size: pt.volume_meta.volume_size.extend(0),
@@ -187,13 +186,12 @@ impl PageTableDirectory {
 
         // 1 page table entry per brick
         let (page_directory, local_page_directory) =
-            Texture::create_page_directory(&ctx.device, &ctx.queue, uvec_to_extent(&meta.extent));
+            Texture::create_page_directory(&ctx.device, &ctx.queue, uvec_to_extent(&meta.extent()));
 
         Self {
             ctx: ctx.clone(),
             max_visible_channels,
             max_resolutions,
-            volume_meta: volume_meta.clone(),
             page_directory_meta_buffer,
             page_table_meta_buffer,
             page_directory,
@@ -263,11 +261,11 @@ impl PageTableDirectory {
 
     pub fn volume_scale(&self) -> Vec3 {
         let size = Vec3::new(
-            self.meta.page_tables[0].volume_meta.volume_size[0] as f32,
-            self.meta.page_tables[0].volume_meta.volume_size[1] as f32,
-            self.meta.page_tables[0].volume_meta.volume_size[2] as f32,
+            self.meta.page_tables()[0].volume_meta.volume_size[0] as f32,
+            self.meta.page_tables()[0].volume_meta.volume_size[1] as f32,
+            self.meta.page_tables()[0].volume_meta.volume_size[2] as f32,
         );
-        size * (self.meta.scale / self.meta.scale.max_element())
+        size * (self.meta.scale() / self.meta.scale().max_element())
     }
 
     pub fn get_page_directory_meta_as_binding_resource(&self) -> BindingResource {

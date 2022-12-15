@@ -1,21 +1,15 @@
 use crate::renderer::pass::scan::Scan;
-use crate::renderer::pass::{
-    AsBindGroupEntries, ComputeEncodeDescriptor, ComputePipelineData, GPUPass,
-};
+use crate::renderer::pass::{ComputeEncodeDescriptor, ComputePipelineData};
 use crate::resource::buffer::TypedBuffer;
 use crate::resource::sparse_residency::texture3d::cache_management::lru::NumUsedEntries;
 use crate::resource::Texture;
-use crate::util::extent::extent_volume;
 use crate::GPUContext;
 use std::borrow::Cow;
-use std::mem::size_of;
 use std::rc::Rc;
 use std::sync::Arc;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, Buffer, BufferAddress,
-    BufferDescriptor, BufferUsages, CommandEncoder, ComputePass, ComputePassDescriptor,
-    ComputePipelineDescriptor, Device, Label,
+    BindGroup, BindGroupDescriptor, BindGroupEntry, Buffer, BufferUsages, CommandEncoder,
+    ComputePassDescriptor, ComputePipelineDescriptor, Device, Label,
 };
 use wgsl_preprocessor::WGSLPreprocessor;
 

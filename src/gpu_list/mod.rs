@@ -3,13 +3,9 @@ use crate::renderer::pass::AsBindGroupEntries;
 use crate::resource::buffer::TypedBuffer;
 use crate::resource::MappableBuffer;
 use std::cmp::min;
-use std::marker::PhantomData;
-use std::mem::size_of;
 use std::sync::Arc;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages,
-    CommandEncoder, Maintain, MapMode,
+    BindGroupEntry, BindingResource, BufferAddress, BufferUsages, CommandEncoder, Maintain, MapMode,
 };
 
 #[repr(C)]
@@ -36,14 +32,12 @@ pub struct GpuList<T: bytemuck::Pod + bytemuck::Zeroable> {
     capacity: u32,
     list_buffer: TypedBuffer<T>,
     list_read_buffer: MappableBuffer<T>,
-    list_buffer_size: BufferAddress,
     meta_buffer: TypedBuffer<GpuListMeta>,
     meta_read_buffer: MappableBuffer<GpuListMeta>,
 }
 
 impl<T: bytemuck::Pod> GpuList<T> {
     pub fn new(label: &str, capacity: u32, ctx: &Arc<GPUContext>) -> Self {
-        let list_buffer_size = (size_of::<T>() * capacity as usize) as BufferAddress;
         let meta = GpuListMeta {
             capacity,
             fill_pointer: 0,
@@ -70,7 +64,6 @@ impl<T: bytemuck::Pod> GpuList<T> {
             capacity,
             list_buffer,
             list_read_buffer,
-            list_buffer_size,
             meta_buffer,
             meta_read_buffer,
         }

@@ -36,14 +36,14 @@ impl PageTableMeta {
 pub struct PageDirectoryMeta {
     /// The size of a brick in the brick cache. This is constant across all resolutions of the
     /// bricked multi-resolution volume.
-    pub(crate) brick_size: UVec3,
+    brick_size: UVec3,
 
-    pub(crate) scale: Vec3,
+    scale: Vec3,
 
-    pub(crate) extent: UVec3,
+    extent: UVec3,
 
     /// The resolutions
-    pub(crate) page_tables: Vec<PageTableMeta>,
+    page_tables: Vec<PageTableMeta>,
 
     num_channels: usize,
     num_resolutions: usize,

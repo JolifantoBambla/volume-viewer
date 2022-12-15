@@ -36,6 +36,7 @@ impl<'a> Default for ContextDescriptor<'a> {
 }
 
 ///
+#[derive(Debug)]
 pub struct GPUContext {
     pub instance: wgpu::Instance,
     pub adapter: wgpu::Adapter,

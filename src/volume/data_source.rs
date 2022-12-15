@@ -89,7 +89,7 @@ impl VolumeDataSource for HtmlEventTargetVolumeDataSource {
             BRICK_REQUEST_EVENT,
             false,
             false,
-            &JsValue::from_serde(&request_data).unwrap(),
+            &serde_wasm_bindgen::to_value(&request_data).expect("Could not serialize request data"),
         );
         self.event_target.dispatch_event(&request_event).ok();
     }

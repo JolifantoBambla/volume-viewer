@@ -12,7 +12,10 @@ pub fn create_wgsl_preprocessor() -> WGSLPreprocessor {
         .include("grid_traversal", include_str!("grid_traversal.wgsl"))
         .include("page_table", include_str!("page_table.wgsl"))
         .include("page_table_util", include_str!("page_table_util.wgsl"))
-        .include("page_table_volume_accessor", include_str!("page_table_volume_accessor.wgsl"))
+        .include(
+            "page_table_volume_accessor",
+            include_str!("page_table_volume_accessor.wgsl"),
+        )
         .include("ray", include_str!("ray.wgsl"))
         .include("sphere", include_str!("sphere.wgsl"))
         .include("timestamp", include_str!("timestamp.wgsl"))
