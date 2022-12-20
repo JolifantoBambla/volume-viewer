@@ -1,5 +1,6 @@
 pub mod meta;
 
+use std::collections::HashMap;
 use glam::{UVec3, UVec4, Vec3};
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -12,6 +13,7 @@ use crate::GPUContext;
 
 use crate::resource::buffer::TypedBuffer;
 pub use meta::{PageDirectoryMeta, PageTableMeta};
+use crate::volume::octree::UnmappedBrick;
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -136,6 +138,8 @@ pub struct PageTableDirectory {
     meta: PageDirectoryMeta,
     max_visible_channels: u32,
     max_resolutions: u32,
+
+    cache_addresses_in_use: HashMap<UVec3, usize>,
 }
 
 impl PageTableDirectory {
@@ -197,6 +201,7 @@ impl PageTableDirectory {
             page_directory,
             local_page_directory,
             meta,
+            cache_addresses_in_use: HashMap::new(),
         }
     }
 
@@ -224,14 +229,32 @@ impl PageTableDirectory {
         page_index
     }
 
+    fn page_index_to_brick_address(&self, page_index: usize) -> BrickAddress {
+        todo!()
+    }
+
     pub fn mark_as_empty(&mut self, brick_address: &BrickAddress) {
         let index = self.brick_address_to_page_index(brick_address);
         self.local_page_directory[index] = UVec3::ZERO.extend(PageTableEntryFlag::Empty as u32);
     }
 
-    pub fn mark_as_mapped(&mut self, brick_address: &BrickAddress, brick_location: &UVec3) {
+    pub fn map_brick(&mut self, brick_address: &BrickAddress, cache_address: &UVec3) -> Option<UnmappedBrick> {
+        self.mark_as_mapped(brick_address, cache_address);
+        if let Some(&unmapped_brick_id) = self.cache_addresses_in_use.get(cache_address) {
+            // todo: if cache_address has already been in use:
+            //  - mark as unmapped & return address of unmapped brick
+            let unmapped_brick_address = self.page_index_to_brick_address(unmapped_brick_id);
+
+        } else {
+            self.cache_addresses_in_use.insert(*cache_address, self.brick_address_to_page_index(brick_address));
+        }
+        None
+    }
+
+    // todo: move into map_brick
+    pub fn mark_as_mapped(&mut self, brick_address: &BrickAddress, cache_address: &UVec3) {
         let index = self.brick_address_to_page_index(brick_address);
-        self.local_page_directory[index] = brick_location.extend(PageTableEntryFlag::Mapped as u32);
+        self.local_page_directory[index] = cache_address.extend(PageTableEntryFlag::Mapped as u32);
     }
 
     pub fn invalidate_channel_page_tables(&mut self, channel_index: u32) {

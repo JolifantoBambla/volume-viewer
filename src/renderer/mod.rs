@@ -29,7 +29,7 @@ use crate::input::Input;
 use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::ray_guided_dvr::{ChannelSettings, RayGuidedDVR, Resources};
 use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
-use crate::{MultiChannelVolumeRendererSettings, SparseResidencyTexture3D, VolumeDataSource};
+use crate::{MultiChannelVolumeRendererSettings, VolumeManager, VolumeDataSource};
 pub use trivial_volume_renderer::TrivialVolumeRenderer;
 
 struct ChannelConfiguration {
@@ -48,7 +48,7 @@ pub struct MultiChannelVolumeRenderer {
     ctx: Arc<GPUContext>,
     pub(crate) window_size: PhysicalSize<u32>,
     volume_transform: glam::Mat4,
-    volume_texture: SparseResidencyTexture3D,
+    volume_texture: VolumeManager,
 
     volume_render_pass: RayGuidedDVR,
     volume_render_bind_group: BindGroup,
@@ -92,7 +92,7 @@ impl MultiChannelVolumeRenderer {
             .collect();
 
         let wgsl_preprocessor = create_wgsl_preprocessor();
-        let volume_texture = SparseResidencyTexture3D::new(
+        let volume_texture = VolumeManager::new(
             volume_source,
             SparseResidencyTexture3DOptions {
                 max_visible_channels: render_settings.create_options.max_visible_channels,

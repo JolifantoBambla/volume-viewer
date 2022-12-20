@@ -25,6 +25,7 @@ use cache_management::{
     process_requests::{ProcessRequests, Resources},
     Timestamp,
 };
+use crate::volume::octree::MappedBrick;
 
 pub struct SparseResidencyTexture3DOptions {
     pub max_visible_channels: u32,
@@ -117,7 +118,7 @@ impl Default for ChannelConfigurationState {
 
 /// Manages a 3D sparse residency texture.
 /// A sparse residency texture is not necessarily present in GPU memory as a whole.
-pub struct SparseResidencyTexture3D {
+pub struct VolumeManager {
     ctx: Arc<GPUContext>,
 
     source: Box<dyn VolumeDataSource>,
@@ -142,7 +143,7 @@ pub struct SparseResidencyTexture3D {
     channel_configuration: Vec<ChannelConfigurationState>,
 }
 
-impl SparseResidencyTexture3D {
+impl VolumeManager {
     pub fn new(
         source: Box<dyn VolumeDataSource>,
         settings: SparseResidencyTexture3DOptions,
@@ -278,9 +279,11 @@ impl SparseResidencyTexture3D {
 
         // write bricks to cache
         if !bricks.is_empty() {
-            for (address, brick) in bricks {
-                if let Some(local_address) = self.map_to_page_table(&address, None) {
-                    let brick_id = address.into();
+            let mut mapped_bricks = Vec::new();
+            let mut unmapped_bricks = Vec::new();
+            for (global_address, brick) in bricks {
+                if let Some(local_address) = self.map_to_page_table(&global_address, None) {
+                    let brick_id = global_address.clone().into();
                     if brick.data.is_empty() {
                         self.page_table_directory.mark_as_empty(&local_address);
                     } else {
@@ -288,10 +291,23 @@ impl SparseResidencyTexture3D {
                         let brick_location = self.lru_cache.add_cache_entry(&brick.data, input);
                         match brick_location {
                             Ok(brick_location) => {
+                                // todo: if brick did override another one:
+                                //  - find brick address that was unmapped
+                                //  - mark as unmapped
+
                                 // mark brick as mapped
-                                self.page_table_directory
-                                    .mark_as_mapped(&local_address, &brick_location);
+                                let unmapped_brick = self.page_table_directory
+                                    .map_brick(&local_address, &brick_location);
                                 self.cached_bricks.insert(brick_id);
+
+                                mapped_bricks.push(MappedBrick::new(
+                                    global_address,
+                                    local_address,
+                                    brick
+                                ));
+                                if let Some(unmapped_brick) = unmapped_brick {
+                                    unmapped_bricks.push(unmapped_brick);
+                                }
                             }
                             Err(_) => {
                                 // todo: error handling
@@ -301,13 +317,16 @@ impl SparseResidencyTexture3D {
                     }
                     self.requested_bricks.remove(&brick_id);
                 } else {
-                    let brick_id = address.into();
+                    let brick_id = global_address.into();
                     self.requested_bricks.remove(&brick_id);
                 }
             }
 
             // update the page directory
             self.page_table_directory.commit_changes();
+
+            // todo: send mapped bricks to listeners
+            // todo: send unmapped bricks to listeners
         }
     }
 
@@ -422,7 +441,7 @@ impl SparseResidencyTexture3D {
     }
 }
 
-impl AsBindGroupEntries for SparseResidencyTexture3D {
+impl AsBindGroupEntries for VolumeManager {
     fn as_bind_group_entries(&self) -> Vec<BindGroupEntry> {
         vec![
             BindGroupEntry {

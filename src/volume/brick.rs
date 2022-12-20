@@ -2,7 +2,7 @@ use glam::UVec3;
 use serde::{Deserialize, Serialize};
 
 #[readonly::make]
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Brick {
     pub data: Vec<u8>,
     pub min: u8,

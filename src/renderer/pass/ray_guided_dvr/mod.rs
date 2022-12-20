@@ -4,7 +4,7 @@ use crate::renderer::{
     context::GPUContext,
     pass::{AsBindGroupEntries, GPUPass},
 };
-use crate::{MultiChannelVolumeRendererSettings, SparseResidencyTexture3D};
+use crate::{MultiChannelVolumeRendererSettings, VolumeManager};
 use bytemuck::Contiguous;
 use glam::{UVec4, Vec4};
 use std::{borrow::Cow, sync::Arc};
@@ -132,7 +132,7 @@ pub struct RayGuidedDVR {
 
 impl RayGuidedDVR {
     pub fn new(
-        volume_texture: &SparseResidencyTexture3D,
+        volume_texture: &VolumeManager,
         wgsl_preprocessor: &WGSLPreprocessor,
         ctx: &Arc<GPUContext>,
     ) -> Self {

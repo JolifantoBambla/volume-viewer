@@ -6,11 +6,41 @@ use wgpu::{BufferAddress, Queue};
 use crate::GPUContext;
 use crate::resource::TypedBuffer;
 use crate::volume::octree::subdivision::VolumeSubdivision;
-use crate::volume::BrickedMultiResolutionMultiVolumeMeta;
+use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 
 pub mod direct_access_tree;
 pub mod subdivision;
 pub mod top_down_tree;
+
+#[derive(Clone, Debug)]
+pub struct MappedBrick {
+    global_address: BrickAddress,
+    local_address: BrickAddress,
+    brick: Brick,
+}
+
+impl MappedBrick {
+    pub fn new(global_address: BrickAddress, local_address: BrickAddress, brick: Brick) -> Self {
+        Self { global_address, local_address, brick }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct UnmappedBrick {
+    global_address: BrickAddress,
+    local_address: BrickAddress,
+}
+
+impl UnmappedBrick {
+    pub fn new(global_address: BrickAddress, local_address: BrickAddress) -> Self {
+        Self { global_address, local_address }
+    }
+}
+
+pub trait BrickCacheUpdateListener {
+    fn on_mapped_bricks(&mut self, bricks: &Vec<MappedBrick>);
+    fn on_unmapped_bricks(&mut self, bricks: &Vec<UnmappedBrick>);
+}
 
 pub trait PageTableOctree {
     type Node: bytemuck::Pod;
@@ -64,8 +94,14 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
             octrees: HashMap::new(),
         }
     }
+}
 
-    // todo: update
-    //   - on new brick received
-    //   - on channel selection change? -> no, each tree corresponds to one channel
+impl<Tree: PageTableOctree> BrickCacheUpdateListener for MultiChannelPageTableOctree<Tree> {
+    fn on_mapped_bricks(&mut self, bricks: &Vec<MappedBrick>) {
+        todo!("update tree")
+    }
+
+    fn on_unmapped_bricks(&mut self, bricks: &Vec<UnmappedBrick>) {
+        todo!("update tree")
+    }
 }

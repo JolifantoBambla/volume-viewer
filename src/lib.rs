@@ -35,7 +35,7 @@ use crate::renderer::geometry::Bounds3D;
 use crate::renderer::settings::MultiChannelVolumeRendererSettings;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::renderer::MultiChannelVolumeRenderer;
-use crate::resource::SparseResidencyTexture3D;
+use crate::resource::VolumeManager;
 use crate::volume::{
     BrickedMultiResolutionMultiVolumeMeta, HtmlEventTargetVolumeDataSource, VolumeDataSource,
 };
