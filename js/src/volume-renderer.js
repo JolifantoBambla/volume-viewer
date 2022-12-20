@@ -4,10 +4,8 @@ import init, {main, initThreadPool, dispatchChunkReceived} from '../../pkg/volum
 import { toWrappedEvent } from './event.js';
 import { BRICK_REQUEST_EVENT, BRICK_RESPONSE_EVENT } from './volume-data-source.js';
 
-export const RENDER_MODE_GRID_TRAVERSAL = 'grid_traversal';
 export const RENDER_MODE_DIRECT = 'direct';
 export const RENDER_MODES = [
-    RENDER_MODE_GRID_TRAVERSAL,
     RENDER_MODE_DIRECT,
 ];
 

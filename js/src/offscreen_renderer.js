@@ -4,7 +4,6 @@ import { toWrappedEvent } from './event.js';
 import {
     ChannelSettings,
     VolumeRendererSettings,
-    RENDER_MODE_GRID_TRAVERSAL,
     RENDER_MODE_DIRECT
 } from './volume-renderer.js';
 
@@ -87,7 +86,6 @@ async function createUI(offscreenRenderer, config) {
         volumeRendererSettings, 'renderMode',
         {
             options: {
-                'Grid Traversal': RENDER_MODE_GRID_TRAVERSAL,
                 Direct: RENDER_MODE_DIRECT,
             }
         }
