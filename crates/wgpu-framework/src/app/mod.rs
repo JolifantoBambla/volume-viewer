@@ -17,15 +17,7 @@ use crate::input::Input;
 use crate::util::web::get_or_create_window;
 use crate::util::window::WindowConfig;
 
-pub trait GpuApp: OnUserEvent {
-    fn init(
-        &mut self,
-        window: &Window,
-        event_loop: &EventLoop<Self::UserEvent>,
-        context: &SurfaceContext,
-    );
-    fn render(&mut self, view: &TextureView, input: &Input) -> SubmissionIndex;
-
+pub trait MapToWindowEvent: OnUserEvent {
     /// Maps an instance of `Self::UserEvent` to a `WindowEvent`.
     /// This is a work-around to move a `WindowEvent` out of a custom event type and pass it to an
     /// `Input` object.
@@ -34,22 +26,28 @@ pub trait GpuApp: OnUserEvent {
     /// deserialized to a `WindowEvent` do not exist in web workers.
     /// In all other cases this can just return `None`.
     fn map_to_window_event(&self, user_event: &Self::UserEvent) -> Option<WindowEvent>;
+}
+
+pub trait GpuApp: OnUserEvent + PrepareRender + Update + OnCommandsSubmitted {
+    fn init(
+        &mut self,
+        window: &Window,
+        event_loop: &EventLoop<Self::UserEvent>,
+        context: &SurfaceContext,
+    );
+    fn render(&mut self, view: &TextureView, input: &Input) -> SubmissionIndex;
 
     fn get_context_descriptor() -> ContextDescriptor<'static>;
 }
 
-pub struct AppRunner<
-    G: 'static + GpuApp + OnResize + OnWindowEvent + Update + PrepareRender + OnCommandsSubmitted,
-> {
+pub struct AppRunner<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> {
     ctx: WgpuContext,
     event_loop: Option<EventLoop<G::UserEvent>>,
     window: Window,
     phantom_data: PhantomData<G>,
 }
 
-impl<
-        G: 'static + GpuApp + OnResize + OnWindowEvent + Update + PrepareRender + OnCommandsSubmitted,
-    > AppRunner<G>
+impl<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> AppRunner<G>
 {
     #[cfg(target_arch = "wasm32")]
     pub async fn new(window_config: WindowConfig) -> Self {

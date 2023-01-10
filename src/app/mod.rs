@@ -1,26 +1,23 @@
-use wgpu::{SubmissionIndex, TextureView};
+use std::sync::Arc;
+use wgpu::{SubmissionIndex, SurfaceConfiguration, TextureView};
 use winit::event::WindowEvent;
 use winit::event_loop::EventLoop;
 use winit::window::Window;
-use wgpu_framework::app::GpuApp;
-use wgpu_framework::context::{ContextDescriptor, SurfaceContext};
-use wgpu_framework::event::window::OnUserEvent;
+use wgpu_framework::app::{GpuApp, MapToWindowEvent};
+use wgpu_framework::context::{ContextDescriptor, Gpu, SurfaceContext};
+use wgpu_framework::event::lifecycle::{OnCommandsSubmitted, PrepareRender, Update};
+use wgpu_framework::event::window::{OnResize, OnUserEvent};
 use wgpu_framework::input::Input;
 use crate::event::Event;
 
 pub struct App {}
 
 impl App {
-    async fn new() -> Self {
+    async fn new(
+        gpu: &Arc<Gpu>,
+        surface_configuration: &SurfaceConfiguration,
+    ) -> Self {
         Self {}
-    }
-}
-
-impl OnUserEvent for App {
-    type UserEvent = Event<()>;
-
-    fn on_user_event(&mut self, event: &Self::UserEvent) {
-        todo!()
     }
 }
 
@@ -33,14 +30,48 @@ impl GpuApp for App {
         todo!()
     }
 
+    fn get_context_descriptor() -> ContextDescriptor<'static> {
+        todo!()
+    }
+}
+
+impl OnUserEvent for App {
+    type UserEvent = Event<()>;
+
+    fn on_user_event(&mut self, event: &Self::UserEvent) {
+        todo!()
+    }
+}
+
+impl MapToWindowEvent for App {
     fn map_to_window_event(&self, user_event: &Self::UserEvent) -> Option<WindowEvent> {
         match user_event {
             Self::UserEvent::Window(e) => Some(e.clone()),
             _ => None
         }
     }
+}
 
-    fn get_context_descriptor() -> ContextDescriptor<'static> {
+impl PrepareRender for App {
+    fn prepare_render(&mut self, input: &Input) {
+        todo!()
+    }
+}
+
+impl Update for App {
+    fn update(&mut self, input: &Input) {
+        todo!()
+    }
+}
+
+impl OnCommandsSubmitted for App {
+    fn on_commands_submitted(&mut self, input: &Input, submission_index: &SubmissionIndex) {
+        todo!()
+    }
+}
+
+impl OnResize for App {
+    fn on_resize(&mut self, width: u32, height: u32) {
         todo!()
     }
 }
