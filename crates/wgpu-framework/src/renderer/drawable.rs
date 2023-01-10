@@ -85,7 +85,7 @@ impl DrawInstanced for GpuMesh {
     fn draw_instanced<'a>(&'a self, pass: &mut RenderPass<'a>, num_instances: u32) {
         pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint32);
         pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        pass.draw_indexed(0..self.index_count as u32, 0, 0..num_instances);
+        pass.draw_indexed(0..self.index_count, 0, 0..num_instances);
     }
 }
 

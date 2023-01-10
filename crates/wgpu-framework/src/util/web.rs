@@ -97,12 +97,16 @@ pub fn get_or_create_window<T>(
                 width: canvas.width(),
                 height: canvas.height(),
             };
-            builder = builder.with_canvas(Some(canvas.clone())).with_inner_size(canvas_size);
+            builder = builder
+                .with_canvas(Some(canvas.clone()))
+                .with_inner_size(canvas_size);
         }
         CanvasConfig::OffscreenCanvas(offscreen_canvas) => {
             builder = builder.with_canvas(Some(
-                offscreen_canvas.clone().unchecked_into::<HtmlCanvasElement>())
-            );
+                offscreen_canvas
+                    .clone()
+                    .unchecked_into::<HtmlCanvasElement>(),
+            ));
         }
         CanvasConfig::CanvasId(canvas_id) => {
             let canvas = get_canvas_by_id(canvas_id.as_str());
@@ -110,21 +114,19 @@ pub fn get_or_create_window<T>(
                 width: canvas.width(),
                 height: canvas.height(),
             };
-            builder = builder.with_canvas(Some(canvas.clone())).with_inner_size(canvas_size);
+            builder = builder
+                .with_canvas(Some(canvas))
+                .with_inner_size(canvas_size);
         }
         CanvasConfig::AttachToParent(attach_to_parent_config) => {
             builder = builder.with_inner_size(attach_to_parent_config.size());
         }
     }
 
-    let window = builder.build(event_loop)
-        .expect("Could not build window");
+    let window = builder.build(event_loop).expect("Could not build window");
 
-    match window_config.canvas_config() {
-        CanvasConfig::AttachToParent(attach_to_parent_config) => {
-            attach_canvas(window.canvas(), attach_to_parent_config.parent_id());
-        }
-        _ => {}
+    if let CanvasConfig::AttachToParent(attach_to_parent_config) = window_config.canvas_config() {
+        attach_canvas(window.canvas(), attach_to_parent_config.parent_id());
     }
 
     window

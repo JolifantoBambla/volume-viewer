@@ -25,7 +25,7 @@ impl fmt::Display for ConversionError {
     }
 }
 
-pub fn convert_js_event<'a, T>(js_event: JsValue) -> Result<Event<T>, ConversionError> {
+pub fn convert_js_event<T>(js_event: JsValue) -> Result<Event<T>, ConversionError> {
     let event = js_event.unchecked_into::<web_sys::Event>();
     match event.type_().as_str() {
         "mousedown" | "mouseup" => convert_mouse_input_event(event.unchecked_into::<MouseEvent>()),
@@ -42,9 +42,7 @@ pub fn convert_js_event<'a, T>(js_event: JsValue) -> Result<Event<T>, Conversion
     }
 }
 
-pub fn convert_mouse_input_event<T>(
-    event: MouseEvent,
-) -> Result<Event<T>, ConversionError> {
+pub fn convert_mouse_input_event<T>(event: MouseEvent) -> Result<Event<T>, ConversionError> {
     let button = match event.button() {
         0 => MouseButton::Left,
         1 => MouseButton::Middle,
@@ -75,9 +73,7 @@ pub fn convert_mouse_input_event<T>(
     }))
 }
 
-pub fn convert_cursor_moved_event<T>(
-    event: MouseEvent,
-) -> Result<Event<T>, ConversionError> {
+pub fn convert_cursor_moved_event<T>(event: MouseEvent) -> Result<Event<T>, ConversionError> {
     #[allow(deprecated)]
     Ok(Event::Window(WindowEvent::CursorMoved {
         device_id: unsafe { DeviceId::dummy() },
@@ -89,9 +85,7 @@ pub fn convert_cursor_moved_event<T>(
     }))
 }
 
-pub fn convert_mouse_wheel_event<T>(
-    event: WheelEvent,
-) -> Result<Event<T>, ConversionError> {
+pub fn convert_mouse_wheel_event<T>(event: WheelEvent) -> Result<Event<T>, ConversionError> {
     let x = -event.delta_x();
     let y = -event.delta_y();
 
@@ -117,9 +111,7 @@ pub fn convert_mouse_wheel_event<T>(
     }))
 }
 
-pub fn convert_keyboard_event<T>(
-    event: KeyboardEvent,
-) -> Result<Event<T>, ConversionError> {
+pub fn convert_keyboard_event<T>(event: KeyboardEvent) -> Result<Event<T>, ConversionError> {
     let scan_code = match event.key_code() {
         0 => event.char_code(),
         i => i,
@@ -312,9 +304,7 @@ pub fn convert_keyboard_event<T>(
     }))
 }
 
-pub fn convert_render_settings_event<T>(
-    event: CustomEvent,
-) -> Result<Event<T>, ConversionError> {
+pub fn convert_render_settings_event<T>(event: CustomEvent) -> Result<Event<T>, ConversionError> {
     // event.detail.setting & event.detail.value
     let detail = serde_wasm_bindgen::from_value(event.detail());
     if let Ok(detail) = detail {

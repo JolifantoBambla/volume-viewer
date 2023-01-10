@@ -1,9 +1,7 @@
 pub mod vertex;
 
 use crate::geometry::bounds::Bounds3;
-use crate::mesh::vertex::{
-    FromPositionNormal, FromPositionNormalTextureCoordinates, Position,
-};
+use crate::mesh::vertex::{FromPositionNormal, FromPositionNormalTextureCoordinates, Position};
 use crate::util::math::f32::PHI;
 use glam::{Vec2, Vec3};
 use obj::{load_obj, Obj, ObjError, TexturedVertex};

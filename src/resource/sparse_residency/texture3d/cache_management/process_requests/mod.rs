@@ -1,7 +1,5 @@
 use crate::gpu_list::{GpuList, GpuListReadResult};
-use crate::renderer::{
-    pass::{AsBindGroupEntries, GPUPass},
-};
+use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use crate::resource::Texture;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Buffer, CommandEncoder};
@@ -42,11 +40,7 @@ pub struct ProcessRequests {
 }
 
 impl ProcessRequests {
-    pub fn new(
-        max_requests: u32,
-        wgsl_preprocessor: &WGSLPreprocessor,
-        ctx: &Arc<Gpu>,
-    ) -> Self {
+    pub fn new(max_requests: u32, wgsl_preprocessor: &WGSLPreprocessor, ctx: &Arc<Gpu>) -> Self {
         let request_list = GpuList::new("brick requests", max_requests, ctx);
         let shader_module = ctx
             .device()

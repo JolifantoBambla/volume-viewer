@@ -1,18 +1,16 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use glam::{UVec3, Vec2, Vec3};
-use wasm_bindgen::{prelude::*, JsCast};
-use winit::event::{
-    ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
-};
-use winit::event_loop::{EventLoop, EventLoopBuilder};
-use winit::platform::web::EventLoopExtWebSys;
-use winit::window::Window;
+use crate::app::{App, GLOBAL_EVENT_LOOP_PROXY};
+use crate::event::{Event, RawArrayReceived};
+use crate::renderer::settings::MultiChannelVolumeRendererSettings;
+use crate::renderer::volume::RawVolumeBlock;
+use crate::util::init;
+use crate::volume::BrickedMultiResolutionMultiVolumeMeta;
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+use wgpu_framework::app::AppRunner;
+use wgpu_framework::util::window::WindowConfig;
 
 pub mod app;
 pub mod event;
-pub mod framework;
 pub mod gpu_list;
 pub mod input;
 pub mod preprocessing;
@@ -21,31 +19,6 @@ pub mod resource;
 pub mod util;
 pub mod volume;
 pub mod wgsl;
-
-use crate::event::{ChannelSettingsChange, Event, RawArrayReceived, SettingsChange};
-use util::init;
-use util::window;
-use wgpu_framework::app::AppRunner;
-use wgpu_framework::util::window::WindowConfig;
-use crate::app::App;
-
-use crate::event::handler::register_default_js_event_handlers;
-use crate::framework::event::lifecycle::OnCommandsSubmitted;
-use crate::input::Input;
-use crate::renderer::camera::{Camera, CameraView, Projection};
-use crate::renderer::context::GPUContext;
-use crate::renderer::geometry::Bounds3D;
-use crate::renderer::settings::MultiChannelVolumeRendererSettings;
-use crate::renderer::volume::RawVolumeBlock;
-use crate::resource::VolumeManager;
-use crate::volume::{
-    BrickedMultiResolutionMultiVolumeMeta, HtmlEventTargetVolumeDataSource, VolumeDataSource,
-};
-use crate::window::window_builder_without_size;
-
-use crate::util::vec::vec_equals;
-use crate::volume::octree::direct_access_tree::DirectAccessTree;
-use crate::volume::octree::{MultiChannelPageTableOctree, MultiChannelPageTableOctreeDescriptor};
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -59,10 +32,6 @@ pub fn initialize() {
     // note: init stuff used to happen here, but when using WebAssembly threads this function is
     // called once per thread and not once globally, so this moved to `main
 }
-
-/// The `GLOBAL_EVENT_LOOP_PROXY` is a means to send data to the running application.
-/// It is initialized by `start_event_loop`.
-static mut GLOBAL_EVENT_LOOP_PROXY: Option<winit::event_loop::EventLoopProxy<Event<()>>> = None;
 
 ///
 #[wasm_bindgen(js_name = "dispatchChunkReceived")]
@@ -106,7 +75,7 @@ async fn start_event_loop(
 ) {
     let window_config = WindowConfig::new_with_offscreen_canvas(
         "Volume Viewer".to_string(),
-        canvas.unchecked_into()
+        canvas.unchecked_into(),
     );
     let app_runner = AppRunner::<App>::new(window_config).await;
     let app = App::new(
@@ -114,14 +83,13 @@ async fn start_event_loop(
         app_runner.window(),
         app_runner.ctx().surface_configuration(),
         volume_meta,
-        render_settings
-    ).await;
+        render_settings,
+    )
+    .await;
 
     // NOTE: All resource allocations should happen before the main render loop
     // The reason for this is that receiving allocation errors is async, but
-    let start_closure = Closure::once_into_js(move || {
-        app_runner.run(app)
-    });
+    let start_closure = Closure::once_into_js(move || app_runner.run(app));
 
     // make sure to handle JS exceptions thrown inside start_closure.
     // Otherwise wasm_bindgen_futures Queue would break and never handle any tasks again.

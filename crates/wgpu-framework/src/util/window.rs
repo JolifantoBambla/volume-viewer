@@ -43,7 +43,10 @@ impl WindowConfig {
             #[cfg(not(target_arch = "wasm32"))]
             size,
             #[cfg(target_arch = "wasm32")]
-            canvas_config: CanvasConfig::AttachToParent(AttachToParentConfig {parent_id: None, size}),
+            canvas_config: CanvasConfig::AttachToParent(AttachToParentConfig {
+                parent_id: None,
+                size,
+            }),
         }
     }
 
@@ -75,7 +78,10 @@ impl WindowConfig {
     pub fn new_with_parent_id(title: String, size: PhysicalSize<u32>, parent_id: String) -> Self {
         Self {
             title,
-            canvas_config: CanvasConfig::AttachToParent(AttachToParentConfig {parent_id: Some(parent_id), size}),
+            canvas_config: CanvasConfig::AttachToParent(AttachToParentConfig {
+                parent_id: Some(parent_id),
+                size,
+            }),
         }
     }
 
@@ -109,7 +115,7 @@ impl Default for WindowConfig {
                 size: PhysicalSize {
                     width: 800,
                     height: 600,
-                }
+                },
             }),
         }
     }

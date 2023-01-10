@@ -3,7 +3,8 @@ use crate::renderer::{
     camera::CameraUniform,
     pass::{AsBindGroupEntries, GPUPass},
 };
-use crate::{MultiChannelVolumeRendererSettings, VolumeManager};
+use crate::resource::VolumeManager;
+use crate::MultiChannelVolumeRendererSettings;
 use bytemuck::Contiguous;
 use glam::{UVec4, Vec4};
 use std::{borrow::Cow, sync::Arc};

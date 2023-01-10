@@ -1,6 +1,4 @@
-use crate::renderer::{
-    pass::{AsBindGroupEntries, GPUPass},
-};
+use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, SurfaceConfiguration, TextureView};
 use wgpu_framework::context::Gpu;
@@ -54,9 +52,7 @@ impl PresentToScreen {
                 fragment: Some(wgpu::FragmentState {
                     module: &shader_module,
                     entry_point: "frag_main",
-                    targets: &[Some(
-                        surface_configuration.format.into(),
-                    )],
+                    targets: &[Some(surface_configuration.format.into())],
                 }),
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,

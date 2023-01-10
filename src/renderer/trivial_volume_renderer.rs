@@ -1,29 +1,27 @@
-use crate::renderer::context::ContextDescriptor;
-use crate::renderer::pass::GPUPass;
 use crate::renderer::pass::{dvr, present_to_screen};
-use crate::resource;
-use crate::wgsl::create_wgsl_preprocessor;
-use crate::{Camera, RawVolumeBlock};
-use bytemuck;
 use std::sync::Arc;
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use web_sys::OffscreenCanvas;
-use wgpu::util::DeviceExt;
 use wgpu_framework::context::Gpu;
 
 pub struct TrivialVolumeRenderer {
+    #[allow(unused)]
     pub(crate) ctx: Arc<Gpu>,
 
+    #[allow(unused)]
     dvr_pass: dvr::DVR,
+    #[allow(unused)]
     present_to_screen: present_to_screen::PresentToScreen,
 
+    #[allow(unused)]
     dvr_bind_group: wgpu::BindGroup,
+    #[allow(unused)]
     present_to_screen_bind_group: wgpu::BindGroup,
 
+    #[allow(unused)]
     dvr_result_extent: wgpu::Extent3d,
 
+    #[allow(unused)]
     volume_transform: glam::Mat4,
+    #[allow(unused)]
     uniform_buffer: wgpu::Buffer,
 }
 

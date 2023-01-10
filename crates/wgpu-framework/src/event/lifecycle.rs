@@ -1,5 +1,5 @@
-use wgpu::SubmissionIndex;
 use crate::input::Input;
+use wgpu::SubmissionIndex;
 
 pub trait Update {
     fn update(&mut self, input: &Input);

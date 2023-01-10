@@ -1,5 +1,7 @@
 use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
-use crate::volume::octree::{BrickCacheUpdateListener, MappedBrick, PageTableOctree, UnmappedBrick};
+use crate::volume::octree::{
+    BrickCacheUpdateListener, MappedBrick, PageTableOctree, UnmappedBrick,
+};
 
 /*
 #[modular_bitfield::bitfield]

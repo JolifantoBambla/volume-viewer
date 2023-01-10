@@ -105,8 +105,11 @@ impl PageTableDirectory {
         });
 
         // 1 page table entry per brick
-        let (page_directory, local_page_directory) =
-            Texture::create_page_directory(ctx.device(), ctx.queue(), uvec_to_extent(&meta.extent()));
+        let (page_directory, local_page_directory) = Texture::create_page_directory(
+            ctx.device(),
+            ctx.queue(),
+            uvec_to_extent(&meta.extent()),
+        );
 
         Self {
             ctx: ctx.clone(),

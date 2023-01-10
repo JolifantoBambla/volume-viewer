@@ -10,7 +10,6 @@ use winit::{
 };
 
 use crate::context::{ContextDescriptor, SurfaceContext, SurfaceTarget, WgpuContext};
-use crate::context::WgpuContext::Surface;
 use crate::event::lifecycle::{OnCommandsSubmitted, PrepareRender, Update};
 use crate::event::window::{OnResize, OnUserEvent, OnWindowEvent};
 use crate::input::Input;
@@ -57,15 +56,11 @@ impl<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> AppRunne
         let surface_target = match window_config.canvas_config() {
             CanvasConfig::OffscreenCanvas(offscreen_canvas) => {
                 SurfaceTarget::OffscreenCanvas(offscreen_canvas)
-            },
-            _ => SurfaceTarget::Window(&window)
+            }
+            _ => SurfaceTarget::Window(&window),
         };
 
-        let context = WgpuContext::new(
-            &G::get_context_descriptor(),
-            Some(surface_target),
-        )
-        .await;
+        let context = WgpuContext::new(&G::get_context_descriptor(), Some(surface_target)).await;
 
         AppRunner {
             ctx: context,

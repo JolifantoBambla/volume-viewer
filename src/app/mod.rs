@@ -1,29 +1,39 @@
-use std::sync::Arc;
+use crate::event::handler::register_default_js_event_handlers;
+use crate::event::{ChannelSettingsChange, Event, SettingsChange};
+use crate::renderer::camera::{Camera, CameraView, Projection};
+use crate::renderer::geometry::Bounds3D;
+use crate::renderer::pass::present_to_screen::PresentToScreen;
+use crate::renderer::pass::ray_guided_dvr::{ChannelSettings, RayGuidedDVR, Resources};
+use crate::renderer::pass::{present_to_screen, ray_guided_dvr, GPUPass};
+use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
+use crate::resource::VolumeManager;
+use crate::util::vec::vec_equals;
+use crate::volume::HtmlEventTargetVolumeDataSource;
+use crate::wgsl::create_wgsl_preprocessor;
+use crate::{resource, BrickedMultiResolutionMultiVolumeMeta, MultiChannelVolumeRendererSettings};
 use glam::{Vec2, Vec3};
+use std::sync::Arc;
 use wasm_bindgen::JsCast;
-use wgpu::{BindGroup, Buffer, Extent3d, SamplerDescriptor, SubmissionIndex, SurfaceConfiguration, TextureView};
 use wgpu::util::DeviceExt;
-use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
-use winit::event_loop::EventLoop;
-use winit::platform::web::WindowExtWebSys;
-use winit::window::Window;
+use wgpu::{
+    BindGroup, Buffer, Extent3d, SamplerDescriptor, SubmissionIndex, SurfaceConfiguration,
+    TextureView,
+};
 use wgpu_framework::app::{GpuApp, MapToWindowEvent};
 use wgpu_framework::context::{ContextDescriptor, Gpu, SurfaceContext};
 use wgpu_framework::event::lifecycle::{OnCommandsSubmitted, PrepareRender, Update};
 use wgpu_framework::event::window::{OnResize, OnUserEvent, OnWindowEvent};
 use wgpu_framework::input::Input;
-use crate::{Bounds3D, BrickedMultiResolutionMultiVolumeMeta, Camera, CameraView, ChannelSettingsChange, HtmlEventTargetVolumeDataSource, MultiChannelVolumeRendererSettings, Projection, register_default_js_event_handlers, resource, SettingsChange, vec_equals, VolumeManager};
-use crate::event::Event;
-use crate::renderer::pass::{GPUPass, present_to_screen, ray_guided_dvr};
-use crate::renderer::pass::present_to_screen::PresentToScreen;
-use crate::renderer::pass::ray_guided_dvr::{ChannelSettings, RayGuidedDVR, Resources};
-use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
-use crate::wgsl::create_wgsl_preprocessor;
+use winit::event::{
+    ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
+};
+use winit::event_loop::EventLoop;
+use winit::platform::web::WindowExtWebSys;
+use winit::window::Window;
 
 /// The `GLOBAL_EVENT_LOOP_PROXY` is a means to send data to the running application.
 /// It is initialized by `start_event_loop`.
-static mut GLOBAL_EVENT_LOOP_PROXY: Option<winit::event_loop::EventLoopProxy<Event<()>>> = None;
+pub static mut GLOBAL_EVENT_LOOP_PROXY: Option<winit::event_loop::EventLoopProxy<Event<()>>> = None;
 
 // todo: refactor into fields
 const TRANSLATION_SPEED: f32 = 5.0;
@@ -44,7 +54,6 @@ impl ChannelConfiguration {
 
 pub struct App {
     ctx: Arc<Gpu>,
-    pub(crate) window_size: PhysicalSize<u32>,
     volume_transform: glam::Mat4,
     volume_texture: VolumeManager,
 
@@ -109,7 +118,7 @@ impl App {
                 ..Default::default()
             },
             &wgsl_preprocessor,
-            &gpu,
+            gpu,
         );
 
         let channel_mapping = volume_texture
@@ -131,7 +140,7 @@ impl App {
 
         // todo: make size configurable
         let dvr_result = resource::Texture::create_storage_texture(
-            &gpu.device(),
+            gpu.device(),
             volume_render_result_extent.width,
             volume_render_result_extent.height,
         );
@@ -195,7 +204,6 @@ impl App {
                 source_texture: &dvr_result.view,
             });
 
-
         // TODO: use framework::camera instead
         // TODO: refactor these params
         let distance_from_center = 500.;
@@ -225,7 +233,6 @@ impl App {
 
         Self {
             ctx: gpu.clone(),
-            window_size,
             volume_transform,
             volume_texture,
             volume_render_pass,
@@ -269,9 +276,14 @@ impl App {
 }
 
 impl GpuApp for App {
-    fn init(&mut self, window: &Window, event_loop: &EventLoop<Self::UserEvent>, _context: &SurfaceContext) {
+    fn init(
+        &mut self,
+        window: &Window,
+        event_loop: &EventLoop<Self::UserEvent>,
+        _context: &SurfaceContext,
+    ) {
         let canvas = window.canvas();
-        register_default_js_event_handlers(&canvas, &event_loop);
+        register_default_js_event_handlers(&canvas, event_loop);
 
         // instantiate global event proxy
         unsafe {
@@ -289,11 +301,8 @@ impl GpuApp for App {
             &self.volume_render_bind_group,
             &self.volume_render_result_extent,
         );
-        self.present_to_screen_pass.encode(
-            &mut encoder,
-            &self.present_to_screen_bind_group,
-            view,
-        );
+        self.present_to_screen_pass
+            .encode(&mut encoder, &self.present_to_screen_bind_group, view);
 
         // todo: process request & usage buffers
         self.volume_texture
@@ -308,8 +317,7 @@ impl GpuApp for App {
 }
 
 impl OnWindowEvent for App {
-    fn on_window_event(&mut self, _event: &WindowEvent) {
-    }
+    fn on_window_event(&mut self, _event: &WindowEvent) {}
 }
 
 impl OnUserEvent for App {
@@ -321,11 +329,11 @@ impl OnUserEvent for App {
             Self::UserEvent::Window(event) => match event {
                 WindowEvent::KeyboardInput {
                     input:
-                    KeyboardInput {
-                        virtual_keycode: Some(virtual_keycode),
-                        state: ElementState::Pressed,
-                        ..
-                    },
+                        KeyboardInput {
+                            virtual_keycode: Some(virtual_keycode),
+                            state: ElementState::Pressed,
+                            ..
+                        },
                     ..
                 } => match virtual_keycode {
                     VirtualKeyCode::D => self.camera.view.move_right(TRANSLATION_SPEED),
@@ -363,8 +371,7 @@ impl OnUserEvent for App {
                     ..
                 } => {
                     self.camera.view.move_forward(
-                        (f64::min(delta.y.abs(), 1.) * delta.y.signum()) as f32
-                            * TRANSLATION_SPEED,
+                        (f64::min(delta.y.abs(), 1.) * delta.y.signum()) as f32 * TRANSLATION_SPEED,
                     );
                 }
                 WindowEvent::MouseInput { state, button, .. } => match button {
@@ -375,12 +382,12 @@ impl OnUserEvent for App {
                         self.right_mouse_pressed = *state == ElementState::Pressed;
                     }
                     _ => {}
-                }
+                },
                 _ => {}
-            }
+            },
             Self::UserEvent::Settings(settings_change) => match settings_change {
                 SettingsChange::RenderMode(mode) => {
-                    self.settings.render_mode = mode.clone();
+                    self.settings.render_mode = *mode;
                 }
                 SettingsChange::StepScale(step_scale) => {
                     if *step_scale > 0. {
@@ -400,18 +407,18 @@ impl OnUserEvent for App {
                     match channel_setting.channel_setting {
                         ChannelSettingsChange::Color(color) => {
                             self.settings.channel_settings[i].color = color;
-                        },
+                        }
                         ChannelSettingsChange::Visible(visible) => {
                             self.settings.channel_settings[i].visible = visible;
-                        },
+                        }
                         ChannelSettingsChange::Threshold(range) => {
                             self.settings.channel_settings[i].threshold_lower = range.min;
                             self.settings.channel_settings[i].threshold_upper = range.max;
-                        },
+                        }
                         ChannelSettingsChange::LoD(range) => {
                             self.settings.channel_settings[i].max_lod = range.min;
                             self.settings.channel_settings[i].min_lod = range.max;
-                        },
+                        }
                         ChannelSettingsChange::LoDFactor(lod_factor) => {
                             self.settings.channel_settings[i].lod_factor = lod_factor;
                         }
@@ -427,17 +434,17 @@ impl MapToWindowEvent for App {
     fn map_to_window_event(&self, user_event: &Self::UserEvent) -> Option<WindowEvent> {
         match user_event {
             Self::UserEvent::Window(e) => Some(e.clone()),
-            _ => None
+            _ => None,
         }
     }
 }
 
 impl PrepareRender for App {
-    fn prepare_render(&mut self, input: &Input) {
+    fn prepare_render(&mut self, _input: &Input) {
         let channel_selection = self.settings.get_sorted_visible_channel_indices();
 
         if !vec_equals(&channel_selection, &self.last_channel_selection) {
-            self.last_channel_selection = channel_selection.clone();
+            self.last_channel_selection = channel_selection;
             self.channel_selection_changed = true;
         };
     }
@@ -499,7 +506,7 @@ impl OnCommandsSubmitted for App {
 }
 
 impl OnResize for App {
-    fn on_resize(&mut self, width: u32, height: u32) {
+    fn on_resize(&mut self, _width: u32, _height: u32) {
         todo!()
     }
 }

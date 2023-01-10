@@ -1,4 +1,3 @@
-use crate::renderer::context::GPUContext;
 use crate::renderer::pass::{ComputeEncodeDescriptor, ComputePipelineData};
 use crate::resource::buffer::{map_buffer, TypedBuffer};
 use crate::resource::MappableBuffer;

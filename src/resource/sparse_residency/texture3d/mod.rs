@@ -12,13 +12,14 @@ use wgpu::{
 };
 use wgsl_preprocessor::WGSLPreprocessor;
 
-use wgpu_framework::input::Input;
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use crate::resource::Texture;
 use crate::volume::{BrickAddress, VolumeDataSource};
+use wgpu_framework::input::Input;
 
 use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
 use crate::resource::sparse_residency::texture3d::page_table::PageTableDirectory;
+use crate::util::vec_hash_map::VecHashMap;
 use crate::volume::octree::{BrickCacheUpdateResult, MappedBrick, UnmappedBrick};
 use cache_management::{
     lru::LRUCache,
@@ -26,7 +27,6 @@ use cache_management::{
     Timestamp,
 };
 use wgpu_framework::context::Gpu;
-use crate::util::vec_hash_map::VecHashMap;
 
 pub struct SparseResidencyTexture3DOptions {
     pub max_visible_channels: u32,
@@ -333,10 +333,7 @@ impl VolumeManager {
             // update the page directory
             self.page_table_directory.commit_changes();
         }
-        BrickCacheUpdateResult::new(
-            mapped_bricks,
-            unmapped_bricks,
-        )
+        BrickCacheUpdateResult::new(mapped_bricks, unmapped_bricks)
     }
 
     /// Call this after rendering has completed to read back requests & usages
