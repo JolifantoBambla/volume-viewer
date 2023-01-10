@@ -10,9 +10,9 @@ use winit::event_loop::{EventLoop, EventLoopBuilder};
 use winit::platform::web::EventLoopExtWebSys;
 use winit::window::Window;
 
-pub mod framework;
 pub mod app;
 pub mod event;
+pub mod framework;
 pub mod gpu_list;
 pub mod input;
 pub mod preprocessing;
