@@ -56,11 +56,11 @@ impl PageTableOctree for TopDownTree {
 }
 
 impl BrickCacheUpdateListener for TopDownTree {
-    fn on_mapped_bricks(&mut self, bricks: &[MappedBrick]) {
+    fn on_mapped_bricks(&mut self, _bricks: &[MappedBrick]) {
         todo!()
     }
 
-    fn on_unmapped_bricks(&mut self, bricks: &[UnmappedBrick]) {
+    fn on_unmapped_bricks(&mut self, _bricks: &[UnmappedBrick]) {
         todo!()
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::hash_map::Iter;
+use std::collections::hash_map::{Entry, Iter};
 use std::collections::HashMap;
 use std::hash::Hash;
 
@@ -6,16 +6,14 @@ pub struct VecHashMap<K, V> {
     data: HashMap<K, Vec<V>>,
 }
 
-impl<K: Eq + Hash, V> VecHashMap<K, V> {
+impl<K: Copy + Eq + Hash, V> VecHashMap<K, V> {
     pub fn new() -> Self {
-        Self {
-            data: HashMap::new()
-        }
+        Self::default()
     }
 
     pub fn insert(&mut self, key: K, value: V) {
-        if !self.data.contains_key(&key) {
-            self.data.insert(key, vec![value]);
+        if let Entry::Vacant(e) = self.data.entry(key) {
+            e.insert(vec![value]);
         } else {
             self.data.get_mut(&key).unwrap().push(value);
         }
@@ -27,5 +25,13 @@ impl<K: Eq + Hash, V> VecHashMap<K, V> {
 
     pub fn iter(&self) -> Iter<'_, K, Vec<V>> {
         self.data.iter()
+    }
+}
+
+impl<K, V> Default for VecHashMap<K, V> {
+    fn default() -> Self {
+        Self {
+            data: HashMap::new(),
+        }
     }
 }

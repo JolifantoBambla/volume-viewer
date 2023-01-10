@@ -1,6 +1,5 @@
 use glam::UVec3;
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::sync::Arc;
 use wgpu::{BufferAddress, Queue};
 
@@ -140,11 +139,11 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
         }
     }
 
-    pub fn set_visible_channels(&mut self, visible_channels: &Vec<u32>) {
-        self.visible_channels = visible_channels.clone();
+    pub fn set_visible_channels(&mut self, visible_channels: &[u32]) {
+        self.visible_channels = visible_channels.to_owned();
         for &c in self.visible_channels.iter() {
-            if !self.octrees.contains_key(&c) {
-                self.octrees.insert(c, Tree::with_subdivisions(self.subdivisions.as_slice()));
+            if let std::collections::hash_map::Entry::Vacant(e) = self.octrees.entry(c) {
+                e.insert(Tree::with_subdivisions(self.subdivisions.as_slice()));
             }
         }
     }
