@@ -7,7 +7,7 @@ use web_sys::{Document, Element, HtmlCanvasElement, HtmlElement, HtmlInputElemen
 use winit::platform::web::{WindowBuilderExtWebSys, WindowExtWebSys};
 use winit::{dpi::PhysicalSize, event_loop::EventLoop, window, window::WindowBuilder};
 
-use crate::util::window::WindowConfig;
+use crate::util::window::{CanvasConfig, WindowConfig};
 
 #[inline]
 pub fn window() -> Window {
@@ -91,24 +91,40 @@ pub fn get_or_create_window<T>(
     event_loop: &EventLoop<T>,
 ) -> window::Window {
     let mut builder = WindowBuilder::new().with_title(window_config.title());
-    if let Some(canvas_id) = window_config.canvas_id() {
-        let canvas = get_canvas_by_id(canvas_id.as_str());
-        let canvas_size = PhysicalSize {
-            width: canvas.width(),
-            height: canvas.height(),
-        };
-        log::info!("w {}, h {}", canvas.width(), canvas.height());
-        builder = builder
-            .with_canvas(Some(canvas))
-            .with_inner_size(canvas_size);
-    } else {
-        builder = builder.with_inner_size(window_config.size());
+    match window_config.canvas_config() {
+        CanvasConfig::Canvas(canvas) => {
+            let canvas_size = PhysicalSize {
+                width: canvas.width(),
+                height: canvas.height(),
+            };
+            builder = builder.with_canvas(Some(canvas.clone())).with_inner_size(canvas_size);
+        }
+        CanvasConfig::OffscreenCanvas(offscreen_canvas) => {
+            builder = builder.with_canvas(Some(
+                offscreen_canvas.clone().unchecked_into::<HtmlCanvasElement>())
+            );
+        }
+        CanvasConfig::CanvasId(canvas_id) => {
+            let canvas = get_canvas_by_id(canvas_id.as_str());
+            let canvas_size = PhysicalSize {
+                width: canvas.width(),
+                height: canvas.height(),
+            };
+            builder = builder.with_canvas(Some(canvas.clone())).with_inner_size(canvas_size);
+        }
+        CanvasConfig::AttachToParent(attach_to_parent_config) => {
+            builder = builder.with_inner_size(attach_to_parent_config.size());
+        }
     }
 
-    let window = builder.build(event_loop).unwrap();
+    let window = builder.build(event_loop)
+        .expect("Could not build window");
 
-    if window_config.canvas_id().is_none() {
-        attach_canvas(window.canvas(), window_config.parent_id());
+    match window_config.canvas_config() {
+        CanvasConfig::AttachToParent(attach_to_parent_config) => {
+            attach_canvas(window.canvas(), attach_to_parent_config.parent_id());
+        }
+        _ => {}
     }
 
     window

@@ -10,12 +10,13 @@ use winit::{
 };
 
 use crate::context::{ContextDescriptor, SurfaceContext, SurfaceTarget, WgpuContext};
+use crate::context::WgpuContext::Surface;
 use crate::event::lifecycle::{OnCommandsSubmitted, PrepareRender, Update};
 use crate::event::window::{OnResize, OnUserEvent, OnWindowEvent};
 use crate::input::Input;
 #[cfg(target_arch = "wasm32")]
 use crate::util::web::get_or_create_window;
-use crate::util::window::WindowConfig;
+use crate::util::window::{CanvasConfig, WindowConfig};
 
 pub trait MapToWindowEvent: OnUserEvent {
     /// Maps an instance of `Self::UserEvent` to a `WindowEvent`.
@@ -47,16 +48,22 @@ pub struct AppRunner<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindo
     phantom_data: PhantomData<G>,
 }
 
-impl<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> AppRunner<G>
-{
+impl<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> AppRunner<G> {
     #[cfg(target_arch = "wasm32")]
     pub async fn new(window_config: WindowConfig) -> Self {
         let event_loop = EventLoopBuilder::<G::UserEvent>::with_user_event().build();
         let window = get_or_create_window(&window_config, &event_loop);
 
+        let surface_target = match window_config.canvas_config() {
+            CanvasConfig::OffscreenCanvas(offscreen_canvas) => {
+                SurfaceTarget::OffscreenCanvas(offscreen_canvas)
+            },
+            _ => SurfaceTarget::Window(&window)
+        };
+
         let context = WgpuContext::new(
             &G::get_context_descriptor(),
-            Some(SurfaceTarget::Window(&window)),
+            Some(surface_target),
         )
         .await;
 
