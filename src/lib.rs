@@ -10,6 +10,7 @@ use winit::event_loop::{EventLoop, EventLoopBuilder};
 use winit::platform::web::EventLoopExtWebSys;
 use winit::window::Window;
 
+pub mod app;
 pub mod event;
 pub mod framework;
 pub mod gpu_list;
@@ -88,8 +89,6 @@ pub fn main(canvas: JsValue, volume_meta: JsValue, render_settings: JsValue) {
     let volume_meta: BrickedMultiResolutionMultiVolumeMeta =
         serde_wasm_bindgen::from_value(volume_meta)
             .expect("Received invalid volume meta. Shutting down.");
-
-    //Octree::new(&volume_meta);
 
     let render_settings: MultiChannelVolumeRendererSettings =
         serde_wasm_bindgen::from_value(render_settings)

@@ -62,8 +62,8 @@ pub enum SettingsChange {
     ChannelSetting(ChannelSetting),
 }
 
-pub enum Event<'a, T: 'static> {
-    Window(WindowEvent<'a>),
+pub enum Event<T: 'static> {
+    Window(WindowEvent<'static>),
     RawArray(RawArrayReceived),
     Settings(SettingsChange),
     Custom(T),

@@ -58,6 +58,8 @@ impl PageTableOctree for DirectAccessTree {
 
 impl BrickCacheUpdateListener for DirectAccessTree {
     fn on_mapped_bricks(&mut self, _bricks: &[MappedBrick]) {
+        // todo: map brick address to node address
+        // todo: handle empty bricks
         todo!()
     }
 

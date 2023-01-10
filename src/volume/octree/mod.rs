@@ -130,6 +130,7 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
                 .on_unmapped_bricks(bricks.as_slice());
         }
 
+        // todo: update GPU buffers (either only those portions that changed or all of them)
         for channel in self.visible_channels.iter() {
             /*
                 self.octrees.get(c)
