@@ -50,9 +50,7 @@ pub struct PageDirectoryMeta {
     /// of the bricked multi-resolution volume.
     brick_size: UVec3,
 
-    scale: Vec3,
-
-    volume_scale: Vec3,
+    normalized_volume_size: Vec3,
 
     extent: UVec3,
 
@@ -112,13 +110,10 @@ impl PageDirectoryMeta {
             .iter()
             .fold(UVec3::ZERO, |a, b| a.max(b.get_max_location()));
 
-        let volume_size = page_tables[0].resolution_meta().volume_scale();
-
         Self {
             brick_size: volume_meta.brick_size,
-            scale: volume_meta.scale,
             extent,
-            volume_scale: volume_meta.top_level_volume_scale(),
+            normalized_volume_size: volume_meta.top_level_normalized_size(),
             page_tables,
             num_channels,
             num_resolutions,
@@ -139,14 +134,11 @@ impl PageDirectoryMeta {
     pub fn brick_size(&self) -> UVec3 {
         self.brick_size
     }
-    pub fn scale(&self) -> Vec3 {
-        self.scale
-    }
     pub fn extent(&self) -> UVec3 {
         self.extent
     }
-    pub fn volume_scale(&self) -> Vec3 {
-        self.volume_scale
+    pub fn normalized_volume_size(&self) -> Vec3 {
+        self.normalized_volume_size
     }
     pub fn page_tables(&self) -> &Vec<PageTableMeta> {
         &self.page_tables

@@ -248,8 +248,8 @@ impl PageTableDirectory {
             .write(self.local_page_directory.as_slice(), &self.ctx);
     }
 
-    pub fn volume_scale(&self) -> Vec3 {
-        self.meta.volume_scale()
+    pub fn normalized_volume_size(&self) -> Vec3 {
+        self.meta.normalized_volume_size()
     }
 
     pub fn get_page_directory_meta_as_binding_resource(&self) -> BindingResource {

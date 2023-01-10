@@ -217,8 +217,8 @@ impl VolumeManager {
         }
     }
 
-    pub fn volume_scale(&self) -> Vec3 {
-        self.page_table_directory.volume_scale()
+    pub fn normalized_volume_size(&self) -> Vec3 {
+        self.page_table_directory.normalized_volume_size()
     }
 
     pub fn encode_cache_management(&self, command_encoder: &mut CommandEncoder, timestamp: u32) {

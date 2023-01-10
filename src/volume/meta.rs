@@ -27,14 +27,18 @@ pub struct ResolutionMeta {
 
 impl ResolutionMeta {
     pub fn volume_size_f32(&self) -> Vec3 {
-        Vec3::new(self.volume_size.x as f32, self.volume_size.y as f32, self.volume_size.z as f32)
+        Vec3::new(
+            self.volume_size.x as f32,
+            self.volume_size.y as f32,
+            self.volume_size.z as f32,
+        )
     }
 
     pub fn normalized_scale(&self) -> Vec3 {
         self.scale / self.scale.max_element()
     }
 
-    pub fn volume_scale(&self) -> Vec3 {
+    pub fn normalized_volume_size(&self) -> Vec3 {
         self.volume_size_f32() * self.normalized_scale()
     }
 }
@@ -66,7 +70,10 @@ impl BrickedMultiResolutionMultiVolumeMeta {
         box_volume(&self.bricks_per_dimension(level))
     }
 
-    pub fn top_level_volume_scale(&self) -> Vec3 {
-        self.resolutions.first().map(|r| r.volume_scale()).unwrap_or(Vec3::ONE)
+    pub fn top_level_normalized_size(&self) -> Vec3 {
+        self.resolutions
+            .first()
+            .map(|r| r.normalized_volume_size())
+            .unwrap_or(Vec3::ONE)
     }
 }

@@ -144,9 +144,10 @@ impl MultiChannelVolumeRenderer {
         // todo: refactor multi-volume into scene object or whatever
         // the volume is a unit cube ([0,1]^3)
         // we translate it s.t. its center is the origin and scale it to its original dimensions
-        let volume_transform = glam::Mat4::from_scale(volume_texture.volume_scale()).mul_mat4(
-            &glam::Mat4::from_translation(glam::Vec3::new(-0.5, -0.5, -0.5)),
-        );
+        let volume_transform = glam::Mat4::from_scale(volume_texture.normalized_volume_size())
+            .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(
+                -0.5, -0.5, -0.5,
+            )));
         let uniforms = ray_guided_dvr::Uniforms::default();
         let volume_render_global_settings_buffer =
             ctx.device
