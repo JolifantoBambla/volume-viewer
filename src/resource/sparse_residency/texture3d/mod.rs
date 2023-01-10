@@ -20,12 +20,12 @@ use crate::volume::{BrickAddress, VolumeDataSource};
 
 use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
 use crate::resource::sparse_residency::texture3d::page_table::PageTableDirectory;
+use crate::volume::octree::{MappedBrick, UnmappedBrick};
 use cache_management::{
     lru::LRUCache,
     process_requests::{ProcessRequests, Resources},
     Timestamp,
 };
-use crate::volume::octree::MappedBrick;
 
 pub struct SparseResidencyTexture3DOptions {
     pub max_visible_channels: u32,
@@ -96,7 +96,7 @@ impl ChannelConfigurationState {
         self.page_table_to_data_set[channel_index as usize]
     }
 
-    pub fn map_channel_indices(&self, channel_indices: &Vec<u32>) -> Vec<Option<usize>> {
+    pub fn map_channel_indices(&self, channel_indices: &[u32]) -> Vec<Option<usize>> {
         channel_indices
             .iter()
             .map(|&i| self.dataset_to_page_table(i))
@@ -192,7 +192,7 @@ impl VolumeManager {
         let process_requests_pass =
             ProcessRequests::new(brick_request_limit as u32, wgsl_preprocessor, ctx);
         let process_requests_bind_group = process_requests_pass.create_bind_group(Resources {
-            page_table_meta: &page_table_directory.page_table_meta_buffer(),
+            page_table_meta: page_table_directory.page_table_meta_buffer(),
             request_buffer: &request_buffer,
             timestamp: &timestamp_uniform_buffer,
         });
@@ -252,7 +252,7 @@ impl VolumeManager {
                 Vec::with_capacity(min(requested_ids.len(), self.brick_request_limit));
             for id in requested_ids {
                 let brick_address = self.map_from_page_table(
-                    self.page_table_directory.page_index_to_address(id),
+                    self.page_table_directory.page_index_to_brick_address(id),
                     timestamp,
                 );
                 let brick_id = brick_address.into();
@@ -283,7 +283,7 @@ impl VolumeManager {
             let mut unmapped_bricks = Vec::new();
             for (global_address, brick) in bricks {
                 if let Some(local_address) = self.map_to_page_table(&global_address, None) {
-                    let brick_id = global_address.clone().into();
+                    let brick_id = global_address.into();
                     if brick.data.is_empty() {
                         self.page_table_directory.mark_as_empty(&local_address);
                     } else {
@@ -296,17 +296,24 @@ impl VolumeManager {
                                 //  - mark as unmapped
 
                                 // mark brick as mapped
-                                let unmapped_brick = self.page_table_directory
+                                let unmapped_brick = self
+                                    .page_table_directory
                                     .map_brick(&local_address, &brick_location);
                                 self.cached_bricks.insert(brick_id);
 
                                 mapped_bricks.push(MappedBrick::new(
                                     global_address,
                                     local_address,
-                                    brick
+                                    brick,
                                 ));
                                 if let Some(unmapped_brick) = unmapped_brick {
-                                    unmapped_bricks.push(unmapped_brick);
+                                    unmapped_bricks.push(UnmappedBrick::new(
+                                        self.map_from_page_table(
+                                            unmapped_brick,
+                                            input.frame.number,
+                                        ),
+                                        unmapped_brick,
+                                    ));
                                 }
                             }
                             Err(_) => {
@@ -352,15 +359,11 @@ impl VolumeManager {
         } else {
             self.channel_configuration.last().unwrap()
         };
-        if let Some(channel) = channel_configuration.dataset_to_page_table(brick_address.channel) {
-            Some(BrickAddress::new(
-                brick_address.index,
-                channel as u32,
-                brick_address.level,
-            ))
-        } else {
-            None
-        }
+        channel_configuration
+            .dataset_to_page_table(brick_address.channel)
+            .map(|channel| {
+                BrickAddress::new(brick_address.index, channel as u32, brick_address.level)
+            })
     }
 
     fn map_from_page_table(&self, brick_address: BrickAddress, timestamp: u32) -> BrickAddress {
@@ -407,7 +410,7 @@ impl VolumeManager {
         let mut new_pt2d = last_configuration.page_table_to_data_set.clone();
         let new_num_channels = selected_channel_indices.len() + no_longer_selected.len();
         let channel_capacity = self.page_table_directory.channel_capacity();
-        if new_num_channels <= channel_capacity as usize {
+        if new_num_channels <= channel_capacity {
             new_pt2d.append(&mut new_selected);
         } else {
             for i in 0..new_selected.len() {
@@ -428,7 +431,7 @@ impl VolumeManager {
         self.channel_configuration
             .last()
             .unwrap()
-            .map_channel_indices(selected_channel_indices)
+            .map_channel_indices(selected_channel_indices.as_slice())
     }
 
     pub fn get_channel_configuration(&self, timestamp: u32) -> &ChannelConfigurationState {

@@ -161,7 +161,7 @@ pub fn run_event_loop(
     event_loop: EventLoop<Event<()>>,
 ) {
     let renderer = Rc::new(RefCell::new(renderer));
-    let mut settings = render_settings.clone();
+    let mut settings = render_settings;
     let mut last_channel_selection = settings.get_sorted_visible_channel_indices();
     let mut last_input = Input::default();
 

@@ -14,6 +14,10 @@ impl<T> MultiBuffered<T> {
         self.resources.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.resources.len() == 0
+    }
+
     pub fn get(&self, index: usize) -> &T {
         let i = index % self.len();
         &self.resources[i]

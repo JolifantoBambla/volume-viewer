@@ -68,7 +68,7 @@ impl Scan {
 
         let mut passes = Vec::new();
         Scan::create_recursive_bind_groups(
-            &input_buffer,
+            input_buffer,
             &scan_pipeline,
             &sum_pipeline,
             &mut passes,
@@ -175,9 +175,9 @@ pub async fn test_scan(ctx: &Arc<GPUContext>) {
         .collect();
     let mut scan_result = Vec::new();
     let mut prefix = 0;
-    for i in 0..data.len() {
+    for d in &data {
         scan_result.push(prefix);
-        prefix += data[i];
+        prefix += d;
     }
 
     let buffer = TypedBuffer::from_data(

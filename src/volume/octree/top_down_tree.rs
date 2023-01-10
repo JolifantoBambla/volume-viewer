@@ -45,7 +45,7 @@ pub struct TopDownTree {
 impl PageTableOctree for TopDownTree {
     type Node = Node;
 
-    fn with_subdivisions(subdivisions: &Vec<VolumeSubdivision>) -> Self {
+    fn with_subdivisions(subdivisions: &[VolumeSubdivision]) -> Self {
         let nodes = vec![Node::default(); total_number_of_nodes(subdivisions) as usize];
         Self { nodes }
     }

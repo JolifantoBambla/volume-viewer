@@ -99,8 +99,8 @@ impl PageDirectoryMeta {
             .fold(UVec3::ZERO, |a, b| a.max(b.get_max_location()));
 
         Self {
-            brick_size: UVec3::from(volume_meta.brick_size),
-            scale: Vec3::from(volume_meta.scale),
+            brick_size: volume_meta.brick_size,
+            scale: volume_meta.scale,
             extent,
             page_tables,
             num_channels,

@@ -157,7 +157,7 @@ impl LRUCache {
                         lru.storage_buffer().clone(),
                         num_used_entries.storage_buffer().clone(),
                         &usage_buffer,
-                        &timestamp_uniform_buffer,
+                        timestamp_uniform_buffer,
                     ),
                     wgsl_preprocessor,
                     ctx,

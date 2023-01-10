@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use wgpu::{BufferAddress, Queue};
 
-use crate::GPUContext;
 use crate::resource::TypedBuffer;
 use crate::volume::octree::subdivision::VolumeSubdivision;
 use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
+use crate::GPUContext;
 
 pub mod direct_access_tree;
 pub mod subdivision;
@@ -21,7 +21,11 @@ pub struct MappedBrick {
 
 impl MappedBrick {
     pub fn new(global_address: BrickAddress, local_address: BrickAddress, brick: Brick) -> Self {
-        Self { global_address, local_address, brick }
+        Self {
+            global_address,
+            local_address,
+            brick,
+        }
     }
 }
 
@@ -33,19 +37,22 @@ pub struct UnmappedBrick {
 
 impl UnmappedBrick {
     pub fn new(global_address: BrickAddress, local_address: BrickAddress) -> Self {
-        Self { global_address, local_address }
+        Self {
+            global_address,
+            local_address,
+        }
     }
 }
 
 pub trait BrickCacheUpdateListener {
-    fn on_mapped_bricks(&mut self, bricks: &Vec<MappedBrick>);
-    fn on_unmapped_bricks(&mut self, bricks: &Vec<UnmappedBrick>);
+    fn on_mapped_bricks(&mut self, bricks: &[MappedBrick]);
+    fn on_unmapped_bricks(&mut self, bricks: &[UnmappedBrick]);
 }
 
 pub trait PageTableOctree {
     type Node: bytemuck::Pod;
 
-    fn with_subdivisions(subdivisions: &Vec<VolumeSubdivision>) -> Self;
+    fn with_subdivisions(subdivisions: &[VolumeSubdivision]) -> Self;
 
     fn nodes(&self) -> &Vec<Self::Node>;
 
@@ -53,7 +60,7 @@ pub trait PageTableOctree {
         queue.write_buffer(
             buffer.buffer(),
             offset as BufferAddress,
-            bytemuck::cast_slice(self.nodes().as_slice())
+            bytemuck::cast_slice(self.nodes().as_slice()),
         );
     }
 
@@ -97,11 +104,11 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
 }
 
 impl<Tree: PageTableOctree> BrickCacheUpdateListener for MultiChannelPageTableOctree<Tree> {
-    fn on_mapped_bricks(&mut self, bricks: &Vec<MappedBrick>) {
+    fn on_mapped_bricks(&mut self, bricks: &[MappedBrick]) {
         todo!("update tree")
     }
 
-    fn on_unmapped_bricks(&mut self, bricks: &Vec<UnmappedBrick>) {
+    fn on_unmapped_bricks(&mut self, bricks: &[UnmappedBrick]) {
         todo!("update tree")
     }
 }

@@ -29,7 +29,7 @@ use crate::input::Input;
 use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::ray_guided_dvr::{ChannelSettings, RayGuidedDVR, Resources};
 use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
-use crate::{MultiChannelVolumeRendererSettings, VolumeManager, VolumeDataSource};
+use crate::{MultiChannelVolumeRendererSettings, VolumeDataSource, VolumeManager};
 pub use trivial_volume_renderer::TrivialVolumeRenderer;
 
 struct ChannelConfiguration {
@@ -106,7 +106,7 @@ impl MultiChannelVolumeRenderer {
 
         let channel_mapping = volume_texture
             .get_channel_configuration(0)
-            .map_channel_indices(&visible_channel_indices)
+            .map_channel_indices(visible_channel_indices.as_slice())
             .iter()
             .map(|c| c.unwrap() as u32)
             .collect();
@@ -227,7 +227,7 @@ impl MultiChannelVolumeRenderer {
         input: &Input,
         settings: &MultiChannelVolumeRendererSettings,
     ) {
-        let channel_settings = self.map_channel_settings(&settings);
+        let channel_settings = self.map_channel_settings(settings);
 
         // todo: do this properly
         // a new channel selection might not have been propagated at this point -> remove some channel settings

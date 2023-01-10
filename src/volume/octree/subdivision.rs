@@ -89,6 +89,6 @@ impl Default for VolumeSubdivision {
     }
 }
 
-pub fn total_number_of_nodes(subdivisions: &Vec<VolumeSubdivision>) -> u32 {
+pub fn total_number_of_nodes(subdivisions: &[VolumeSubdivision]) -> u32 {
     subdivisions.iter().fold(0, |acc, s| acc + s.num_nodes())
 }
