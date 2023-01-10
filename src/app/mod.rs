@@ -1,4 +1,5 @@
 use wgpu::{SubmissionIndex, TextureView};
+use winit::event::WindowEvent;
 use winit::event_loop::EventLoop;
 use winit::window::Window;
 use wgpu_framework::app::GpuApp;
@@ -30,6 +31,13 @@ impl GpuApp for App {
 
     fn render(&mut self, view: &TextureView, input: &Input) -> SubmissionIndex {
         todo!()
+    }
+
+    fn map_to_window_event(&self, user_event: &Self::UserEvent) -> Option<WindowEvent> {
+        match user_event {
+            Self::UserEvent::Window(e) => Some(e.clone()),
+            _ => None
+        }
     }
 
     fn get_context_descriptor() -> ContextDescriptor<'static> {

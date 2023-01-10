@@ -25,6 +25,16 @@ pub trait GpuApp: OnUserEvent {
         context: &SurfaceContext,
     );
     fn render(&mut self, view: &TextureView, input: &Input) -> SubmissionIndex;
+
+    /// Maps an instance of `Self::UserEvent` to a `WindowEvent`.
+    /// This is a work-around to move a `WindowEvent` out of a custom event type and pass it to an
+    /// `Input` object.
+    /// This makes sense in a web worker context where `WindowEvent`s can not be passed to the
+    /// `EventLoop` from an `web_sys::OffscreenCanvas` because the base types that are usually
+    /// deserialized to a `WindowEvent` do not exist in web workers.
+    /// In all other cases this can just return `None`.
+    fn map_to_window_event(&self, user_event: &Self::UserEvent) -> Option<WindowEvent>;
+
     fn get_context_descriptor() -> ContextDescriptor<'static>;
 }
 
@@ -117,6 +127,10 @@ impl<
                 },
                 event::Event::UserEvent(e) => {
                     app.on_user_event(&e);
+                    let window_event = app.map_to_window_event(&e);
+                    if let Some(window_event) = window_event {
+                        input.on_window_event(&window_event);
+                    }
                 }
                 event::Event::RedrawRequested(_) => {
                     let frame_input = input.prepare_next();
