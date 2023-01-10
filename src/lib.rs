@@ -25,6 +25,9 @@ pub mod wgsl;
 use crate::event::{ChannelSettingsChange, Event, RawArrayReceived, SettingsChange};
 use util::init;
 use util::window;
+use wgpu_framework::app::AppRunner;
+use wgpu_framework::util::window::WindowConfig;
+use crate::app::App;
 
 use crate::event::handler::register_default_js_event_handlers;
 use crate::framework::event::lifecycle::OnCommandsSubmitted;
@@ -34,7 +37,6 @@ use crate::renderer::context::GPUContext;
 use crate::renderer::geometry::Bounds3D;
 use crate::renderer::settings::MultiChannelVolumeRendererSettings;
 use crate::renderer::volume::RawVolumeBlock;
-use crate::renderer::MultiChannelVolumeRenderer;
 use crate::resource::VolumeManager;
 use crate::volume::{
     BrickedMultiResolutionMultiVolumeMeta, HtmlEventTargetVolumeDataSource, VolumeDataSource,
@@ -102,42 +104,23 @@ async fn start_event_loop(
     volume_meta: BrickedMultiResolutionMultiVolumeMeta,
     render_settings: MultiChannelVolumeRendererSettings,
 ) {
-    let html_canvas = canvas
-        .clone()
-        .unchecked_into::<web_sys::HtmlCanvasElement>();
-
-    let builder = window_builder_without_size("Offscreen DVR".to_string(), html_canvas.clone());
-    let event_loop = EventLoopBuilder::with_user_event().build();
-    let window = builder.build(&event_loop).unwrap();
-
-    // instantiate global event proxy
-    unsafe {
-        GLOBAL_EVENT_LOOP_PROXY = Some(event_loop.create_proxy());
-    }
-
-    register_default_js_event_handlers(&html_canvas, &event_loop);
-
-    let volume_source = Box::new(HtmlEventTargetVolumeDataSource::new(
-        volume_meta.clone(),
-        html_canvas.clone().unchecked_into::<web_sys::EventTarget>(),
-    ));
-
-    let renderer = MultiChannelVolumeRenderer::new(canvas, volume_source, &render_settings).await;
-
-    let _octree: MultiChannelPageTableOctree<DirectAccessTree> = MultiChannelPageTableOctree::new(
-        MultiChannelPageTableOctreeDescriptor {
-            volume: &volume_meta,
-            brick_size: UVec3::new(32, 32, 32),
-            num_channels: 0,
-            visible_channels: vec![0],
-        },
-        renderer.ctx(),
+    let window_config = WindowConfig::new_with_offscreen_canvas(
+        "Volume Viewer".to_string(),
+        canvas.unchecked_into()
     );
+    let app_runner = AppRunner::<App>::new(window_config).await;
+    let app = App::new(
+        app_runner.ctx().gpu(),
+        app_runner.window(),
+        app_runner.ctx().surface_configuration(),
+        volume_meta,
+        render_settings
+    ).await;
 
     // NOTE: All resource allocations should happen before the main render loop
     // The reason for this is that receiving allocation errors is async, but
     let start_closure = Closure::once_into_js(move || {
-        run_event_loop(renderer, render_settings, window, event_loop)
+        app_runner.run(app)
     });
 
     // make sure to handle JS exceptions thrown inside start_closure.
@@ -151,259 +134,6 @@ async fn start_event_loop(
         #[wasm_bindgen(catch, js_namespace = Function, js_name = "prototype.call.call")]
         fn call_catch(this: &JsValue) -> Result<(), JsValue>;
     }
-}
-
-pub fn run_event_loop(
-    renderer: MultiChannelVolumeRenderer,
-    render_settings: MultiChannelVolumeRendererSettings,
-    window: Window,
-    event_loop: EventLoop<Event<()>>,
-) {
-    let renderer = Rc::new(RefCell::new(renderer));
-    let mut settings = render_settings;
-    let mut last_channel_selection = settings.get_sorted_visible_channel_indices();
-    let mut last_input = Input::default();
-
-    // TODO: refactor these params
-    let distance_from_center = 500.;
-
-    let window_size = renderer.as_ref().borrow().window_size;
-
-    let resolution = Vec2::new(window_size.width as f32, window_size.height as f32);
-
-    const TRANSLATION_SPEED: f32 = 5.0;
-
-    const NEAR: f32 = 0.0001;
-    const FAR: f32 = 1000.0;
-    let perspective = Projection::new_perspective(
-        f32::to_radians(45.),
-        window_size.width as f32 / window_size.height as f32,
-        NEAR,
-        FAR,
-    );
-    let orthographic = Projection::new_orthographic(Bounds3D::new(
-        (resolution * -0.5).extend(NEAR),
-        (resolution * 0.5).extend(FAR),
-    ));
-
-    let mut camera = Camera::new(
-        CameraView::new(
-            Vec3::new(1., 1., 1.) * distance_from_center,
-            Vec3::new(0., 0., 0.),
-            Vec3::new(0., 1., 0.),
-        ),
-        perspective,
-    );
-    let mut last_mouse_position = Vec2::new(0., 0.);
-    let mut left_mouse_pressed = false;
-    let mut right_mouse_pressed = false;
-
-    let window = Rc::new(window);
-
-    event_loop.spawn(move |event, _, control_flow| {
-        // force ownership by the closure
-        //let _ = (&renderer.as_ref().borrow().ctx.instance, &renderer.as_ref().borrow().ctx.adapter);
-
-        *control_flow = winit::event_loop::ControlFlow::Poll;
-
-        // todo: refactor input handling
-        match event {
-            winit::event::Event::RedrawEventsCleared => {
-                window.request_redraw();
-            }
-            // todo: handle events
-            winit::event::Event::UserEvent(e) => match e {
-                event::Event::Window(window_event) => match window_event {
-                    WindowEvent::Resized(_) => {}
-                    WindowEvent::Moved(_) => {}
-                    WindowEvent::CloseRequested => {}
-                    WindowEvent::Destroyed => {}
-                    WindowEvent::DroppedFile(_) => {}
-                    WindowEvent::HoveredFile(_) => {}
-                    WindowEvent::HoveredFileCancelled => {}
-                    WindowEvent::ReceivedCharacter(_) => {}
-                    WindowEvent::Focused(_) => {}
-                    WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                virtual_keycode: Some(virtual_keycode),
-                                state: ElementState::Pressed,
-                                ..
-                            },
-                        ..
-                    } => match virtual_keycode {
-                        VirtualKeyCode::D => camera.view.move_right(TRANSLATION_SPEED),
-                        VirtualKeyCode::A => camera.view.move_left(TRANSLATION_SPEED),
-                        VirtualKeyCode::W | VirtualKeyCode::Up => {
-                            camera.view.move_forward(TRANSLATION_SPEED)
-                        }
-                        VirtualKeyCode::S | VirtualKeyCode::Down => {
-                            camera.view.move_backward(TRANSLATION_SPEED)
-                        }
-                        VirtualKeyCode::C => {
-                            if camera.projection().is_orthographic() {
-                                camera.set_projection(perspective);
-                            } else {
-                                camera.set_projection(orthographic);
-                            }
-                        }
-                        _ => {}
-                    },
-                    WindowEvent::ModifiersChanged(_) => {}
-                    WindowEvent::CursorMoved { position, .. } => {
-                        let mouse_position = glam::Vec2::new(position.x as f32, position.y as f32);
-                        let delta = (mouse_position - last_mouse_position) / resolution;
-                        last_mouse_position = mouse_position;
-
-                        if left_mouse_pressed {
-                            camera.view.orbit(delta, false);
-                        } else if right_mouse_pressed {
-                            let translation = delta * TRANSLATION_SPEED * 20.;
-                            camera.view.move_right(translation.x);
-                            camera.view.move_down(translation.y);
-                        }
-                    }
-                    WindowEvent::CursorEntered { .. } => {}
-                    WindowEvent::CursorLeft { .. } => {}
-                    WindowEvent::MouseWheel {
-                        delta: MouseScrollDelta::PixelDelta(delta),
-                        ..
-                    } => {
-                        camera.view.move_forward(
-                            (f64::min(delta.y.abs(), 1.) * delta.y.signum()) as f32
-                                * TRANSLATION_SPEED,
-                        );
-                    }
-                    WindowEvent::MouseInput { state, button, .. } => match button {
-                        MouseButton::Left => {
-                            left_mouse_pressed = state == ElementState::Pressed;
-                        }
-                        MouseButton::Right => {
-                            right_mouse_pressed = state == ElementState::Pressed;
-                        }
-                        _ => {}
-                    },
-                    WindowEvent::TouchpadPressure { .. } => {}
-                    WindowEvent::AxisMotion { .. } => {}
-                    WindowEvent::Touch(_) => {}
-                    WindowEvent::ScaleFactorChanged { .. } => {}
-                    WindowEvent::ThemeChanged(_) => {}
-                    _ => {}
-                },
-                Event::RawArray(raw_array) => {
-                    log::info!("got raw array {:?}", raw_array.shape);
-                }
-                Event::Settings(settings_change) => match settings_change {
-                    SettingsChange::RenderMode(mode) => {
-                        settings.render_mode = mode;
-                    }
-                    SettingsChange::StepScale(step_scale) => {
-                        if step_scale > 0. {
-                            settings.step_scale = step_scale;
-                        } else {
-                            log::error!("Illegal step size: {}", step_scale);
-                        }
-                    }
-                    SettingsChange::MaxSteps(max_steps) => {
-                        settings.max_steps = max_steps;
-                    }
-                    SettingsChange::BackgroundColor(color) => {
-                        settings.background_color = color;
-                    }
-                    SettingsChange::ChannelSetting(channel_setting) => {
-                        let i = channel_setting.channel_index as usize;
-                        match channel_setting.channel_setting {
-                            ChannelSettingsChange::Color(color) => {
-                                settings.channel_settings[i].color = color;
-                            }
-                            ChannelSettingsChange::Visible(visible) => {
-                                settings.channel_settings[i].visible = visible;
-                            }
-                            ChannelSettingsChange::Threshold(range) => {
-                                settings.channel_settings[i].threshold_lower = range.min;
-                                settings.channel_settings[i].threshold_upper = range.max;
-                            }
-                            ChannelSettingsChange::LoD(range) => {
-                                settings.channel_settings[i].max_lod = range.min;
-                                settings.channel_settings[i].min_lod = range.max;
-                            }
-                            ChannelSettingsChange::LoDFactor(lod_factor) => {
-                                settings.channel_settings[i].lod_factor = lod_factor;
-                            }
-                        }
-                    }
-                },
-                _ => {}
-            },
-            // todo: refactor this
-            winit::event::Event::RedrawRequested(_) => {
-                let channel_selection = settings.get_sorted_visible_channel_indices();
-
-                let input = if vec_equals(&channel_selection, &last_channel_selection) {
-                    Input::from_last(&last_input)
-                } else {
-                    last_channel_selection = channel_selection.clone();
-                    Input::from_last_with_channel_selection(&last_input, channel_selection)
-                };
-
-                renderer
-                    .as_ref()
-                    .borrow()
-                    .update(&camera, &input, &settings);
-
-                let frame = match renderer
-                    .as_ref()
-                    .borrow()
-                    .ctx()
-                    .surface
-                    .as_ref()
-                    .unwrap()
-                    .get_current_texture()
-                {
-                    Ok(frame) => frame,
-                    Err(_) => {
-                        renderer
-                            .as_ref()
-                            .borrow()
-                            .ctx()
-                            .surface
-                            .as_ref()
-                            .unwrap()
-                            .configure(
-                                &renderer.as_ref().borrow().ctx().device,
-                                renderer
-                                    .as_ref()
-                                    .borrow()
-                                    .ctx()
-                                    .surface_configuration
-                                    .as_ref()
-                                    .unwrap(),
-                            );
-                        renderer
-                            .as_ref()
-                            .borrow()
-                            .ctx()
-                            .surface
-                            .as_ref()
-                            .unwrap()
-                            .get_current_texture()
-                            .expect("Failed to acquire next surface texture!")
-                    }
-                };
-                let view = frame
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-
-                let submission_index = renderer.as_ref().borrow().render(&view, &input);
-                renderer.as_ref().borrow_mut().on_commands_submitted(&input, &submission_index);
-
-                frame.present();
-
-                last_input = input;
-            }
-            _ => {}
-        }
-    });
 }
 
 pub fn make_raw_volume_block(data: Vec<u16>, shape: Vec<u32>) -> RawVolumeBlock {

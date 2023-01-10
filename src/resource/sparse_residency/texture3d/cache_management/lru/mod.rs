@@ -10,9 +10,10 @@ use crate::util::extent::{
     box_volume, extent_to_uvec, index_to_subscript, uvec_to_extent, uvec_to_origin,
 };
 use crate::util::multi_buffer::MultiBuffered;
-use crate::{GPUContext, Input};
+use wgpu_framework::input::Input;
 
 use lru_update::{LRUUpdate, LRUUpdateResources};
+use wgpu_framework::context::Gpu;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -94,7 +95,7 @@ impl LRUCacheGpuOps {
 }
 
 pub struct LRUCache {
-    ctx: Arc<GPUContext>,
+    ctx: Arc<Gpu>,
 
     cache: Texture,
     cache_entry_size: UVec3,
@@ -123,9 +124,9 @@ impl LRUCache {
         settings: LRUCacheSettings,
         timestamp_uniform_buffer: &Buffer,
         wgsl_preprocessor: &WGSLPreprocessor,
-        ctx: &Arc<GPUContext>,
+        ctx: &Arc<Gpu>,
     ) -> Self {
-        let cache = Texture::create_brick_cache(&ctx.device, settings.cache_size);
+        let cache = Texture::create_brick_cache(ctx.device(), settings.cache_size);
 
         let usage_buffer_size = extent_to_uvec(&settings.cache_size) / settings.cache_entry_size;
         let num_entries = box_volume(&usage_buffer_size);
@@ -138,18 +139,18 @@ impl LRUCache {
         // 1:1 mapping, 1 timestamp per brick in cache
         let usage_buffer = Texture::create_u32_storage_3d(
             "Usage Buffer".to_string(),
-            &ctx.device,
-            &ctx.queue,
+            ctx.device(),
+            ctx.queue(),
             uvec_to_extent(&usage_buffer_size),
         );
 
         let lru_stuff = MultiBuffered::new(
             || {
-                let lru = ReadableStorageBuffer::from_data("lru", &lru_local, &ctx.device);
+                let lru = ReadableStorageBuffer::from_data("lru", &lru_local, ctx.device());
                 let num_used_entries = ReadableStorageBuffer::from_data(
                     "num used entries",
                     &vec![num_unused_entries],
-                    &ctx.device,
+                    ctx.device(),
                 );
 
                 let lru_update_pass = LRUUpdate::new(
@@ -236,8 +237,8 @@ impl LRUCache {
         for i in ((self.num_used_entries_local as usize)..(self.next_empty_index as usize)).rev() {
             let cache_entry_index = self.lru_local[i];
             let last_written = self.lru_last_writes[cache_entry_index as usize];
-            if last_written > input.frame.number
-                || (input.frame.number - last_written) > self.time_to_live
+            if last_written > input.frame().number()
+                || (input.frame().number() - last_written) > self.time_to_live
             {
                 let extent = uvec_to_extent(
                     &(index_to_subscript(
@@ -254,7 +255,7 @@ impl LRUCache {
                     extent,
                     &self.ctx,
                 );
-                self.lru_last_writes[cache_entry_index as usize] = input.frame.number;
+                self.lru_last_writes[cache_entry_index as usize] = input.frame().number();
                 self.next_empty_index = i as u32; // if i > 0 { i as u32 - 1 } else { 0 };
                 return Ok(cache_entry_location);
             }

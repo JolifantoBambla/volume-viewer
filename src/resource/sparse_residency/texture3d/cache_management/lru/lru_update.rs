@@ -3,7 +3,6 @@ use crate::renderer::pass::{ComputeEncodeDescriptor, ComputePipelineData};
 use crate::resource::buffer::TypedBuffer;
 use crate::resource::sparse_residency::texture3d::cache_management::lru::NumUsedEntries;
 use crate::resource::Texture;
-use crate::GPUContext;
 use std::borrow::Cow;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -11,6 +10,7 @@ use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, Buffer, BufferUsages, CommandEncoder,
     ComputePassDescriptor, ComputePipelineDescriptor, Device, Label,
 };
+use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
 
 const WORKGROUP_SIZE: u32 = 256;
@@ -40,7 +40,7 @@ impl<'a> LRUUpdateResources<'a> {
 }
 
 pub(crate) struct LRUUpdate {
-    ctx: Arc<GPUContext>,
+    ctx: Arc<Gpu>,
 
     // these two resources get updated
     lru_cache: Arc<TypedBuffer<u32>>,
@@ -90,13 +90,13 @@ impl LRUUpdate {
     pub fn new<'a>(
         resources: &'a LRUUpdateResources<'a>,
         wgsl_preprocessor: &WGSLPreprocessor,
-        ctx: &Arc<GPUContext>,
+        ctx: &Arc<Gpu>,
     ) -> Self {
         let mut preprocessor = wgsl_preprocessor.clone();
         preprocessor.include("lru_update_base", include_str!("lru_update_base.wgsl"));
 
         let init_shader = ctx
-            .device
+            .device()
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
@@ -108,7 +108,7 @@ impl LRUUpdate {
             });
 
         let sort_shader = ctx
-            .device
+            .device()
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
@@ -127,7 +127,7 @@ impl LRUUpdate {
                     module: &init_shader,
                     entry_point: "main",
                 },
-                &ctx.device,
+                ctx.device(),
             ));
         let lru_update_sort_pipeline: Rc<ComputePipelineData<2>> =
             Rc::new(ComputePipelineData::new(
@@ -137,27 +137,27 @@ impl LRUUpdate {
                     module: &sort_shader,
                     entry_point: "main",
                 },
-                &ctx.device,
+                ctx.device(),
             ));
 
         let offsets: TypedBuffer<u32> = TypedBuffer::new_zeroed(
             "offsets",
             resources.lru_cache.num_elements(),
             BufferUsages::STORAGE,
-            &ctx.device,
+            ctx.device(),
         );
         let used: TypedBuffer<u32> = TypedBuffer::new_zeroed(
             "used",
             resources.lru_cache.num_elements(),
             BufferUsages::STORAGE,
-            &ctx.device,
+            ctx.device(),
         );
 
         let lru_updated: TypedBuffer<u32> = TypedBuffer::new_zeroed(
             "lru updated",
             resources.lru_cache.num_elements(),
             BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            &ctx.device,
+            ctx.device(),
         );
 
         let scan = Scan::new(&offsets, wgsl_preprocessor, ctx);
@@ -171,9 +171,9 @@ impl LRUUpdate {
                     resources,
                     &offsets,
                     &used,
-                    &ctx.device,
+                    ctx.device(),
                 ),
-                ctx.device.create_bind_group(&BindGroupDescriptor {
+                ctx.device().create_bind_group(&BindGroupDescriptor {
                     label: Label::from("LRU update init 1"),
                     layout: lru_update_init_pipeline.bind_group_layout(1),
                     entries: &[
@@ -201,9 +201,9 @@ impl LRUUpdate {
                     resources,
                     &offsets,
                     &used,
-                    &ctx.device,
+                    ctx.device(),
                 ),
-                ctx.device.create_bind_group(&BindGroupDescriptor {
+                ctx.device().create_bind_group(&BindGroupDescriptor {
                     label: Label::from("LRU update sort 1"),
                     layout: lru_update_sort_pipeline.bind_group_layout(1),
                     entries: &[BindGroupEntry {
@@ -227,7 +227,7 @@ impl LRUUpdate {
     }
 
     pub fn encode(&self, command_encoder: &mut CommandEncoder) {
-        self.ctx.queue.write_buffer(
+        self.ctx.queue().write_buffer(
             self.num_used_entries.buffer(),
             0,
             bytemuck::bytes_of(&NumUsedEntries { num: 0 }),

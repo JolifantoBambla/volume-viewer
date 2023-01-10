@@ -1,4 +1,3 @@
-use crate::renderer::context::GPUContext;
 use crate::renderer::pass::AsBindGroupEntries;
 use crate::resource::buffer::TypedBuffer;
 use crate::resource::MappableBuffer;
@@ -7,6 +6,7 @@ use std::sync::Arc;
 use wgpu::{
     BindGroupEntry, BindingResource, BufferAddress, BufferUsages, CommandEncoder, Maintain, MapMode,
 };
+use wgpu_framework::context::Gpu;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -28,7 +28,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> From<GpuListReadResult<T>> for (Vec<
 }
 
 pub struct GpuList<T: bytemuck::Pod + bytemuck::Zeroable> {
-    ctx: Arc<GPUContext>,
+    ctx: Arc<Gpu>,
     capacity: u32,
     list_buffer: TypedBuffer<T>,
     list_read_buffer: MappableBuffer<T>,
@@ -37,7 +37,7 @@ pub struct GpuList<T: bytemuck::Pod + bytemuck::Zeroable> {
 }
 
 impl<T: bytemuck::Pod> GpuList<T> {
-    pub fn new(label: &str, capacity: u32, ctx: &Arc<GPUContext>) -> Self {
+    pub fn new(label: &str, capacity: u32, ctx: &Arc<Gpu>) -> Self {
         let meta = GpuListMeta {
             capacity,
             fill_pointer: 0,
@@ -47,17 +47,17 @@ impl<T: bytemuck::Pod> GpuList<T> {
             format!("{} [list]", label).as_str(),
             capacity as usize,
             BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            &ctx.device,
+            ctx.device(),
         );
         let meta_buffer = TypedBuffer::new_single_element(
             format!("{} [meta]", label).as_str(),
             meta,
             BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
-            &ctx.device,
+            ctx.device(),
         );
 
-        let list_read_buffer = MappableBuffer::from_buffer(&list_buffer, &ctx.device);
-        let meta_read_buffer = MappableBuffer::from_buffer(&meta_buffer, &ctx.device);
+        let list_read_buffer = MappableBuffer::from_buffer(&list_buffer, ctx.device());
+        let meta_read_buffer = MappableBuffer::from_buffer(&meta_buffer, ctx.device());
 
         Self {
             ctx: ctx.clone(),
@@ -116,7 +116,7 @@ impl<T: bytemuck::Pod> GpuList<T> {
 
     pub fn read(&self) -> Option<GpuListReadResult<T>> {
         self.map_for_reading();
-        self.ctx.device.poll(Maintain::Wait);
+        self.ctx.device().poll(Maintain::Wait);
         self.read_mapped()
     }
 
@@ -127,7 +127,7 @@ impl<T: bytemuck::Pod> GpuList<T> {
             fill_pointer: 0,
             written_at: 0,
         };
-        self.ctx.queue.write_buffer(
+        self.ctx.queue().write_buffer(
             self.meta_buffer.buffer(),
             0 as BufferAddress,
             bytemuck::bytes_of(&meta),

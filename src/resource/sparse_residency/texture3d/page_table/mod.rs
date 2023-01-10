@@ -9,10 +9,10 @@ use wgpu::{BindingResource, Buffer, BufferUsages, Extent3d};
 use crate::resource::Texture;
 use crate::util::extent::{subscript_to_index, uvec_to_extent, IndexToSubscript};
 use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
-use crate::GPUContext;
 
 use crate::resource::buffer::TypedBuffer;
 pub use meta::{PageDirectoryMeta, PageTableMeta};
+use wgpu_framework::context::Gpu;
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -46,7 +46,7 @@ struct PageDirectoryMetaGPUData {
 }
 
 pub struct PageTableDirectory {
-    ctx: Arc<GPUContext>,
+    ctx: Arc<Gpu>,
     local_page_directory: Vec<UVec4>,
     page_directory_meta_buffer: TypedBuffer<PageDirectoryMetaGPUData>,
     page_table_meta_buffer: Buffer,
@@ -63,7 +63,7 @@ impl PageTableDirectory {
         volume_meta: &BrickedMultiResolutionMultiVolumeMeta,
         max_visible_channels: u32,
         max_resolutions: u32,
-        ctx: &Arc<GPUContext>,
+        ctx: &Arc<Gpu>,
     ) -> Self {
         let meta = PageDirectoryMeta::new(
             volume_meta,
@@ -95,10 +95,10 @@ impl PageTableDirectory {
                 ..Default::default()
             },
             BufferUsages::UNIFORM,
-            &ctx.device,
+            ctx.device(),
         );
 
-        let page_table_meta_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
+        let page_table_meta_buffer = ctx.device().create_buffer_init(&BufferInitDescriptor {
             label: Some("Page Table Meta"),
             contents: bytemuck::cast_slice(res_meta_data.as_slice()),
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
@@ -106,7 +106,7 @@ impl PageTableDirectory {
 
         // 1 page table entry per brick
         let (page_directory, local_page_directory) =
-            Texture::create_page_directory(&ctx.device, &ctx.queue, uvec_to_extent(&meta.extent()));
+            Texture::create_page_directory(ctx.device(), ctx.queue(), uvec_to_extent(&meta.extent()));
 
         Self {
             ctx: ctx.clone(),

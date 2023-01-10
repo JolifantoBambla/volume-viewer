@@ -1,11 +1,11 @@
 use crate::gpu_list::{GpuList, GpuListReadResult};
 use crate::renderer::{
-    context::GPUContext,
     pass::{AsBindGroupEntries, GPUPass},
 };
 use crate::resource::Texture;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Buffer, CommandEncoder};
+use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
 
 pub struct Resources<'a> {
@@ -34,7 +34,7 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
 }
 
 pub struct ProcessRequests {
-    ctx: Arc<GPUContext>,
+    ctx: Arc<Gpu>,
     pipeline: wgpu::ComputePipeline,
     bind_group_layout: BindGroupLayout,
     internal_bind_group: BindGroup,
@@ -45,11 +45,11 @@ impl ProcessRequests {
     pub fn new(
         max_requests: u32,
         wgsl_preprocessor: &WGSLPreprocessor,
-        ctx: &Arc<GPUContext>,
+        ctx: &Arc<Gpu>,
     ) -> Self {
         let request_list = GpuList::new("brick requests", max_requests, ctx);
         let shader_module = ctx
-            .device
+            .device()
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
@@ -60,7 +60,7 @@ impl ProcessRequests {
                 )),
             });
         let pipeline = ctx
-            .device
+            .device()
             .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: None,
                 layout: None,
@@ -71,7 +71,7 @@ impl ProcessRequests {
         let bind_group_layout = pipeline.get_bind_group_layout(0);
 
         let internal_bind_group_layout = pipeline.get_bind_group_layout(1);
-        let internal_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let internal_bind_group = ctx.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &internal_bind_group_layout,
             entries: &request_list.as_bind_group_entries(),
@@ -122,7 +122,7 @@ impl ProcessRequests {
 }
 
 impl<'a> GPUPass<Resources<'a>> for ProcessRequests {
-    fn ctx(&self) -> &Arc<GPUContext> {
+    fn ctx(&self) -> &Arc<Gpu> {
         &self.ctx
     }
 

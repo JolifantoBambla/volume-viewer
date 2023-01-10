@@ -1,9 +1,9 @@
 use crate::renderer::{
-    context::GPUContext,
     pass::{AsBindGroupEntries, GPUPass},
 };
 use std::{borrow::Cow, sync::Arc};
-use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, TextureView};
+use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, SurfaceConfiguration, TextureView};
+use wgpu_framework::context::Gpu;
 
 pub struct Resources<'a> {
     pub sampler: &'a wgpu::Sampler,
@@ -26,15 +26,15 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
 }
 
 pub struct PresentToScreen {
-    ctx: Arc<GPUContext>,
+    ctx: Arc<Gpu>,
     pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl PresentToScreen {
-    pub fn new(ctx: &Arc<GPUContext>) -> Self {
+    pub fn new(ctx: &Arc<Gpu>, surface_configuration: &SurfaceConfiguration) -> Self {
         let shader_module = ctx
-            .device
+            .device()
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(
@@ -42,7 +42,7 @@ impl PresentToScreen {
                 ))),
             });
         let pipeline = ctx
-            .device
+            .device()
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: None,
                 layout: None,
@@ -55,7 +55,7 @@ impl PresentToScreen {
                     module: &shader_module,
                     entry_point: "frag_main",
                     targets: &[Some(
-                        ctx.surface_configuration.as_ref().unwrap().format.into(),
+                        surface_configuration.format.into(),
                     )],
                 }),
                 primitive: wgpu::PrimitiveState {
@@ -105,7 +105,7 @@ impl PresentToScreen {
 }
 
 impl<'a> GPUPass<Resources<'a>> for PresentToScreen {
-    fn ctx(&self) -> &Arc<GPUContext> {
+    fn ctx(&self) -> &Arc<Gpu> {
         &self.ctx
     }
 

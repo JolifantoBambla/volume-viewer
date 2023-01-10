@@ -1,7 +1,6 @@
 use crate::renderer::camera::TransformUniform;
 use crate::renderer::{
     camera::CameraUniform,
-    context::GPUContext,
     pass::{AsBindGroupEntries, GPUPass},
 };
 use crate::{MultiChannelVolumeRendererSettings, VolumeManager};
@@ -9,6 +8,7 @@ use bytemuck::Contiguous;
 use glam::{UVec4, Vec4};
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
+use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
 
 #[repr(C)]
@@ -124,7 +124,7 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
 }
 
 pub struct RayGuidedDVR {
-    ctx: Arc<GPUContext>,
+    ctx: Arc<Gpu>,
     pipeline: wgpu::ComputePipeline,
     bind_group_layout: BindGroupLayout,
     internal_bind_group: BindGroup,
@@ -134,10 +134,10 @@ impl RayGuidedDVR {
     pub fn new(
         volume_texture: &VolumeManager,
         wgsl_preprocessor: &WGSLPreprocessor,
-        ctx: &Arc<GPUContext>,
+        ctx: &Arc<Gpu>,
     ) -> Self {
         let shader_module = ctx
-            .device
+            .device()
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
@@ -148,7 +148,7 @@ impl RayGuidedDVR {
                 )),
             });
         let pipeline = ctx
-            .device
+            .device()
             .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: None,
                 layout: None,
@@ -158,7 +158,7 @@ impl RayGuidedDVR {
         let bind_group_layout = pipeline.get_bind_group_layout(0);
 
         let internal_bind_group_layout = pipeline.get_bind_group_layout(1);
-        let internal_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let internal_bind_group = ctx.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &internal_bind_group_layout,
             entries: &volume_texture.as_bind_group_entries(),
@@ -194,7 +194,7 @@ impl RayGuidedDVR {
 }
 
 impl<'a> GPUPass<Resources<'a>> for RayGuidedDVR {
-    fn ctx(&self) -> &Arc<GPUContext> {
+    fn ctx(&self) -> &Arc<Gpu> {
         &self.ctx
     }
 

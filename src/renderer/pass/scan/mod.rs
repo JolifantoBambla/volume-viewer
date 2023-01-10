@@ -9,6 +9,7 @@ use wgpu::{
     ComputePass, ComputePassDescriptor, ComputePipelineDescriptor, Device, Label,
     ShaderModuleDescriptor, ShaderSource,
 };
+use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
 
 const WORKGROUP_SIZE: u32 = 256;
@@ -22,13 +23,13 @@ impl Scan {
     pub fn new(
         input_buffer: &TypedBuffer<u32>,
         wgsl_preprocessor: &WGSLPreprocessor,
-        ctx: &Arc<GPUContext>,
+        ctx: &Arc<Gpu>,
     ) -> Self {
         if !input_buffer.supports(BufferUsages::STORAGE) {
             panic!("buffer to scan needs to support STORAGE");
         }
 
-        let scan_shader_module = ctx.device.create_shader_module(ShaderModuleDescriptor {
+        let scan_shader_module = ctx.device().create_shader_module(ShaderModuleDescriptor {
             label: Label::from("Sum"),
             source: ShaderSource::Wgsl(Cow::Borrowed(
                 &*wgsl_preprocessor
@@ -44,10 +45,10 @@ impl Scan {
                 module: &scan_shader_module,
                 entry_point: "main",
             },
-            &ctx.device,
+            ctx.device(),
         );
 
-        let sum_shader_module = ctx.device.create_shader_module(ShaderModuleDescriptor {
+        let sum_shader_module = ctx.device().create_shader_module(ShaderModuleDescriptor {
             label: Label::from("Sum"),
             source: ShaderSource::Wgsl(Cow::Borrowed(
                 &*wgsl_preprocessor
@@ -63,7 +64,7 @@ impl Scan {
                 module: &sum_shader_module,
                 entry_point: "main",
             },
-            &ctx.device,
+            ctx.device(),
         );
 
         let mut passes = Vec::new();
@@ -72,7 +73,7 @@ impl Scan {
             &scan_pipeline,
             &sum_pipeline,
             &mut passes,
-            &ctx.device,
+            ctx.device(),
         );
 
         Self { passes }
@@ -168,7 +169,7 @@ impl Scan {
 }
 
 // todo: remove (debug)!
-pub async fn test_scan(ctx: &Arc<GPUContext>) {
+pub async fn test_scan(ctx: &Arc<Gpu>) {
     let num_chunks = (1024 * 1024 * 1024) / (32 * 32 * 32);
     let data: Vec<u32> = (0..num_chunks)
         .map(|_| if js_sys::Math::random() > 0.5 { 1 } else { 0 })
@@ -184,15 +185,15 @@ pub async fn test_scan(ctx: &Arc<GPUContext>) {
         "data",
         &data,
         BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
-        &ctx.device,
+        ctx.device(),
     );
-    let read_buffer = MappableBuffer::from_buffer(&buffer, &ctx.device);
+    let read_buffer = MappableBuffer::from_buffer(&buffer, ctx.device());
 
     let prep = WGSLPreprocessor::default();
     let scan = Scan::new(&buffer, &prep, ctx);
 
     let mut command_encoder = ctx
-        .device
+        .device()
         .create_command_encoder(&CommandEncoderDescriptor {
             label: Label::from("scan test"),
         });
@@ -207,7 +208,7 @@ pub async fn test_scan(ctx: &Arc<GPUContext>) {
         buffer.size(),
     );
 
-    ctx.queue.submit(vec![command_encoder.finish()]);
+    ctx.queue().submit(vec![command_encoder.finish()]);
 
     map_buffer(read_buffer.buffer(), ..).await;
     let mapped_range = read_buffer.buffer().slice(..).get_mapped_range();

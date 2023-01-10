@@ -2,11 +2,11 @@ use glam::UVec3;
 use std::collections::HashMap;
 use std::sync::Arc;
 use wgpu::{BufferAddress, Queue};
+use wgpu_framework::context::Gpu;
 
 use crate::resource::TypedBuffer;
 use crate::volume::octree::subdivision::VolumeSubdivision;
 use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
-use crate::GPUContext;
 use crate::util::vec_hash_map::VecHashMap;
 
 pub mod direct_access_tree;
@@ -86,14 +86,14 @@ struct GpuData {}
 #[derive(Clone, Debug)]
 pub struct MultiChannelPageTableOctree<Tree: PageTableOctree> {
     #[allow(unused)]
-    gpu: Arc<GPUContext>,
+    gpu: Arc<Gpu>,
     subdivisions: Vec<VolumeSubdivision>,
     octrees: HashMap<u32, Tree>,
     visible_channels: Vec<u32>,
 }
 
 impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
-    pub fn new(descriptor: MultiChannelPageTableOctreeDescriptor, gpu: &Arc<GPUContext>) -> Self {
+    pub fn new(descriptor: MultiChannelPageTableOctreeDescriptor, gpu: &Arc<Gpu>) -> Self {
         let subdivisions = VolumeSubdivision::from_input_and_target_shape(
             descriptor.volume.resolutions[0].volume_size,
             descriptor.brick_size,

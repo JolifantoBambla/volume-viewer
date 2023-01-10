@@ -1,10 +1,10 @@
 use crate::renderer::{
     camera::CameraUniform,
-    context::GPUContext,
     pass::{AsBindGroupEntries, GPUPass},
 };
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
+use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
 
 #[repr(C)]
@@ -69,15 +69,15 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
 }
 
 pub struct DVR {
-    ctx: Arc<GPUContext>,
+    ctx: Arc<Gpu>,
     pipeline: wgpu::ComputePipeline,
     bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl DVR {
-    pub fn new(wgsl_preprocessor: &WGSLPreprocessor, ctx: &Arc<GPUContext>) -> Self {
+    pub fn new(wgsl_preprocessor: &WGSLPreprocessor, ctx: &Arc<Gpu>) -> Self {
         let shader_module = ctx
-            .device
+            .device()
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
@@ -88,7 +88,7 @@ impl DVR {
                 )),
             });
         let pipeline = ctx
-            .device
+            .device()
             .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: None,
                 layout: None,
@@ -124,7 +124,7 @@ impl DVR {
 }
 
 impl<'a> GPUPass<Resources<'a>> for DVR {
-    fn ctx(&self) -> &Arc<GPUContext> {
+    fn ctx(&self) -> &Arc<Gpu> {
         &self.ctx
     }
 

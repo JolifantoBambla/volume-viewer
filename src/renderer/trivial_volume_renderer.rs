@@ -1,4 +1,4 @@
-use crate::renderer::context::{ContextDescriptor, GPUContext};
+use crate::renderer::context::ContextDescriptor;
 use crate::renderer::pass::GPUPass;
 use crate::renderer::pass::{dvr, present_to_screen};
 use crate::resource;
@@ -10,9 +10,10 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::OffscreenCanvas;
 use wgpu::util::DeviceExt;
+use wgpu_framework::context::Gpu;
 
 pub struct TrivialVolumeRenderer {
-    pub(crate) ctx: Arc<GPUContext>,
+    pub(crate) ctx: Arc<Gpu>,
 
     dvr_pass: dvr::DVR,
     present_to_screen: present_to_screen::PresentToScreen,
@@ -26,11 +27,12 @@ pub struct TrivialVolumeRenderer {
     uniform_buffer: wgpu::Buffer,
 }
 
+/*
 impl TrivialVolumeRenderer {
     pub async fn new(canvas: JsValue, volume: RawVolumeBlock) -> Self {
         let canvas = canvas.unchecked_into::<OffscreenCanvas>();
         let ctx = Arc::new(
-            GPUContext::new(&ContextDescriptor::default())
+            Gpu::new(&ContextDescriptor::default())
                 .await
                 .with_surface_from_offscreen_canvas(&canvas),
         );
@@ -102,14 +104,14 @@ impl TrivialVolumeRenderer {
     pub fn update(&self, camera: &Camera) {
         let uniforms = dvr::Uniforms::new(camera.create_uniform(), self.volume_transform);
         self.ctx
-            .queue
+            .queue()
             .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
     }
 
     pub fn render(&self, canvas_view: &wgpu::TextureView) {
         let mut encoder = self
             .ctx
-            .device
+            .device()
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         self.dvr_pass
             .encode(&mut encoder, &self.dvr_bind_group, &self.dvr_result_extent);
@@ -118,6 +120,8 @@ impl TrivialVolumeRenderer {
             &self.present_to_screen_bind_group,
             canvas_view,
         );
-        self.ctx.queue.submit(Some(encoder.finish()));
+        self.ctx.queue().submit(Some(encoder.finish()));
     }
 }
+
+ */

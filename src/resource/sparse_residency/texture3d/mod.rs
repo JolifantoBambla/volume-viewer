@@ -12,8 +12,7 @@ use wgpu::{
 };
 use wgsl_preprocessor::WGSLPreprocessor;
 
-use crate::input::Input;
-use crate::renderer::context::GPUContext;
+use wgpu_framework::input::Input;
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use crate::resource::Texture;
 use crate::volume::{BrickAddress, VolumeDataSource};
@@ -26,6 +25,7 @@ use cache_management::{
     process_requests::{ProcessRequests, Resources},
     Timestamp,
 };
+use wgpu_framework::context::Gpu;
 use crate::util::vec_hash_map::VecHashMap;
 
 pub struct SparseResidencyTexture3DOptions {
@@ -120,7 +120,7 @@ impl Default for ChannelConfigurationState {
 /// Manages a 3D sparse residency texture.
 /// A sparse residency texture is not necessarily present in GPU memory as a whole.
 pub struct VolumeManager {
-    ctx: Arc<GPUContext>,
+    ctx: Arc<Gpu>,
 
     source: Box<dyn VolumeDataSource>,
     brick_transfer_limit: usize,
@@ -148,10 +148,10 @@ impl VolumeManager {
         source: Box<dyn VolumeDataSource>,
         settings: SparseResidencyTexture3DOptions,
         wgsl_preprocessor: &WGSLPreprocessor,
-        ctx: &Arc<GPUContext>,
+        ctx: &Arc<Gpu>,
     ) -> Self {
         let timestamp = Timestamp::default();
-        let timestamp_uniform_buffer = ctx.device.create_buffer_init(&BufferInitDescriptor {
+        let timestamp_uniform_buffer = ctx.device().create_buffer_init(&BufferInitDescriptor {
             label: None,
             contents: bytemuck::bytes_of(&timestamp),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
@@ -182,8 +182,8 @@ impl VolumeManager {
         // 1:1 mapping, 1 timestamp per brick in multi-res volume
         let request_buffer = Texture::create_u32_storage_3d(
             "Request Buffer".to_string(),
-            &ctx.device,
-            &ctx.queue,
+            ctx.device(),
+            ctx.queue(),
             page_table_directory.extent(),
         );
 
@@ -222,7 +222,7 @@ impl VolumeManager {
     }
 
     pub fn encode_cache_management(&self, command_encoder: &mut CommandEncoder, timestamp: u32) {
-        self.ctx.queue.write_buffer(
+        self.ctx.queue().write_buffer(
             &self.timestamp_uniform_buffer,
             0 as BufferAddress,
             bytemuck::bytes_of(&Timestamp::new(timestamp)),
@@ -270,7 +270,7 @@ impl VolumeManager {
 
     fn process_new_bricks(&mut self, input: &Input) -> BrickCacheUpdateResult {
         // update CPU local LRU cache
-        self.lru_cache.update_local_lru(input.frame.number);
+        self.lru_cache.update_local_lru(input.frame().number());
 
         let bricks = self.source.poll_bricks(min(
             self.brick_transfer_limit,
@@ -306,7 +306,7 @@ impl VolumeManager {
                                 if let Some(unmapped_brick_local_address) = unmapped_brick_address {
                                     let unmapped_brick_global_address = self.map_from_page_table(
                                         unmapped_brick_local_address,
-                                        input.frame.number,
+                                        input.frame().number(),
                                     );
                                     let unmapped_brick_id = unmapped_brick_global_address.into();
                                     self.cached_bricks.remove(&unmapped_brick_id);

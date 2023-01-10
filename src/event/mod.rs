@@ -11,13 +11,13 @@ pub struct RawArrayReceived {
     pub shape: Vec<u32>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Copy, Clone, Deserialize, Serialize)]
 pub struct Range<T> {
     pub min: T,
     pub max: T,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Copy, Clone, Deserialize, Serialize)]
 pub enum ChannelSettingsChange {
     #[serde(rename = "lod")]
     LoD(Range<u32>),
@@ -35,7 +35,7 @@ pub enum ChannelSettingsChange {
     Visible(bool),
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Copy, Clone, Deserialize, Serialize)]
 pub struct ChannelSetting {
     #[serde(rename = "channelIndex")]
     pub channel_index: u32,
