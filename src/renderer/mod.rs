@@ -25,6 +25,7 @@ use wgpu::util::DeviceExt;
 use wgpu::{BindGroup, Buffer, Extent3d, SamplerDescriptor, SubmissionIndex};
 use winit::dpi::PhysicalSize;
 
+use crate::framework::event::lifecycle::OnCommandsSubmitted;
 use crate::input::Input;
 use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::ray_guided_dvr::{ChannelSettings, RayGuidedDVR, Resources};
@@ -221,6 +222,7 @@ impl MultiChannelVolumeRenderer {
         channel_settings
     }
 
+    // todo: refactor this into a lifecycle::Update implementation
     pub fn update(
         &self,
         camera: &Camera,
@@ -280,7 +282,13 @@ impl MultiChannelVolumeRenderer {
         self.ctx.queue.submit(Some(encoder.finish()))
     }
 
-    pub fn post_render(&mut self, input: &Input) {
+    pub fn ctx(&self) -> &Arc<GPUContext> {
+        &self.ctx
+    }
+}
+
+impl OnCommandsSubmitted for MultiChannelVolumeRenderer {
+    fn on_commands_submitted(&mut self, input: &Input, _submission_index: &SubmissionIndex) {
         // todo: both of these should go into volume_texture's post_render & add_channel_configuration should not be exposed
         if let Some(new_channel_selection) = input.new_channel_selection.as_ref() {
             let channel_mapping = self
@@ -297,9 +305,5 @@ impl MultiChannelVolumeRenderer {
         }
         // todo: pass result to an octree
         let _ = self.volume_texture.update_cache(input);
-    }
-
-    pub fn ctx(&self) -> &Arc<GPUContext> {
-        &self.ctx
     }
 }

@@ -10,6 +10,7 @@ use winit::event_loop::{EventLoop, EventLoopBuilder};
 use winit::platform::web::EventLoopExtWebSys;
 use winit::window::Window;
 
+pub mod framework;
 pub mod app;
 pub mod event;
 pub mod gpu_list;
@@ -26,6 +27,7 @@ use util::init;
 use util::window;
 
 use crate::event::handler::register_default_js_event_handlers;
+use crate::framework::event::lifecycle::OnCommandsSubmitted;
 use crate::input::Input;
 use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::context::GPUContext;
@@ -394,8 +396,8 @@ pub fn run_event_loop(
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
-                renderer.as_ref().borrow().render(&view, &input);
-                renderer.as_ref().borrow_mut().post_render(&input);
+                let submission_index = renderer.as_ref().borrow().render(&view, &input);
+                renderer.as_ref().borrow_mut().on_commands_submitted(&input, &submission_index);
 
                 frame.present();
 
