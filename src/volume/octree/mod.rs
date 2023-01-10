@@ -1,12 +1,14 @@
 use glam::UVec3;
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::sync::Arc;
 use wgpu::{BufferAddress, Queue};
 
 use crate::resource::TypedBuffer;
 use crate::volume::octree::subdivision::VolumeSubdivision;
-use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
+use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 use crate::GPUContext;
+use crate::util::vec_hash_map::VecHashMap;
 
 pub mod direct_access_tree;
 pub mod subdivision;
@@ -15,32 +17,38 @@ pub mod top_down_tree;
 #[derive(Clone, Debug)]
 pub struct MappedBrick {
     global_address: BrickAddress,
-    local_address: BrickAddress,
-    brick: Brick,
+    min: u8,
+    max: u8,
 }
 
 impl MappedBrick {
-    pub fn new(global_address: BrickAddress, local_address: BrickAddress, brick: Brick) -> Self {
-        Self {
-            global_address,
-            local_address,
-            brick,
-        }
+    pub fn new(global_address: BrickAddress, min: u8, max: u8) -> Self {
+        Self { global_address, min, max }
     }
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct UnmappedBrick {
     global_address: BrickAddress,
-    local_address: BrickAddress,
 }
 
 impl UnmappedBrick {
-    pub fn new(global_address: BrickAddress, local_address: BrickAddress) -> Self {
+    pub fn new(global_address: BrickAddress) -> Self {
         Self {
             global_address,
-            local_address,
         }
+    }
+}
+
+#[readonly::make]
+pub struct BrickCacheUpdateResult {
+    mapped_bricks: VecHashMap<u32, MappedBrick>,
+    unmapped_bricks: VecHashMap<u32, UnmappedBrick>,
+}
+
+impl BrickCacheUpdateResult {
+    pub fn new(mapped_bricks: VecHashMap<u32, MappedBrick>, unmapped_bricks: VecHashMap<u32, UnmappedBrick>) -> Self {
+        Self { mapped_bricks, unmapped_bricks }
     }
 }
 
@@ -49,7 +57,7 @@ pub trait BrickCacheUpdateListener {
     fn on_unmapped_bricks(&mut self, bricks: &[UnmappedBrick]);
 }
 
-pub trait PageTableOctree {
+pub trait PageTableOctree: BrickCacheUpdateListener {
     type Node: bytemuck::Pod;
 
     fn with_subdivisions(subdivisions: &[VolumeSubdivision]) -> Self;
@@ -63,9 +71,6 @@ pub trait PageTableOctree {
             bytemuck::cast_slice(self.nodes().as_slice()),
         );
     }
-
-    // todo: update
-    //   - on new brick received
 }
 
 #[derive(Clone, Debug)]
@@ -73,6 +78,7 @@ pub struct MultiChannelPageTableOctreeDescriptor<'a> {
     pub volume: &'a BrickedMultiResolutionMultiVolumeMeta,
     pub brick_size: UVec3,
     pub num_channels: u32,
+    pub visible_channels: Vec<u32>,
 }
 
 #[derive(Debug)]
@@ -82,10 +88,9 @@ struct GpuData {}
 pub struct MultiChannelPageTableOctree<Tree: PageTableOctree> {
     #[allow(unused)]
     gpu: Arc<GPUContext>,
-    #[allow(unused)]
     subdivisions: Vec<VolumeSubdivision>,
-    #[allow(unused)]
-    octrees: HashMap<usize, Tree>,
+    octrees: HashMap<u32, Tree>,
+    visible_channels: Vec<u32>,
 }
 
 impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
@@ -95,20 +100,52 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
             descriptor.brick_size,
         );
 
+        let mut octrees = HashMap::new();
+        for &c in descriptor.visible_channels.iter() {
+            octrees.insert(c, Tree::with_subdivisions(subdivisions.as_slice()));
+        }
+
         Self {
             gpu: gpu.clone(),
             subdivisions,
-            octrees: HashMap::new(),
+            octrees,
+            visible_channels: descriptor.visible_channels
         }
     }
-}
 
-impl<Tree: PageTableOctree> BrickCacheUpdateListener for MultiChannelPageTableOctree<Tree> {
-    fn on_mapped_bricks(&mut self, bricks: &[MappedBrick]) {
-        todo!("update tree")
+    pub fn on_brick_cache_updated(&mut self, update_result: &BrickCacheUpdateResult) {
+        for (channel, bricks) in update_result.mapped_bricks.iter() {
+            if !self.octrees.contains_key(channel) {
+                self.octrees.insert(*channel, Tree::with_subdivisions(self.subdivisions.as_slice()));
+            }
+            self.octrees.get_mut(channel)
+                .unwrap()
+                .on_mapped_bricks(bricks.as_slice());
+        }
+        for (channel, bricks) in update_result.unmapped_bricks.iter() {
+            if !self.octrees.contains_key(channel) {
+                self.octrees.insert(*channel, Tree::with_subdivisions(self.subdivisions.as_slice()));
+            }
+            self.octrees.get_mut(channel)
+                .unwrap()
+                .on_unmapped_bricks(bricks.as_slice());
+        }
+
+        for channel in self.visible_channels.iter() {
+            /*
+                self.octrees.get(c)
+                    .unwrap()
+                    .write_to_buffer();
+            */
+        }
     }
 
-    fn on_unmapped_bricks(&mut self, bricks: &[UnmappedBrick]) {
-        todo!("update tree")
+    pub fn set_visible_channels(&mut self, visible_channels: &Vec<u32>) {
+        self.visible_channels = visible_channels.clone();
+        for &c in self.visible_channels.iter() {
+            if !self.octrees.contains_key(&c) {
+                self.octrees.insert(c, Tree::with_subdivisions(self.subdivisions.as_slice()));
+            }
+        }
     }
 }

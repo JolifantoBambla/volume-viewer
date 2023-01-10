@@ -20,12 +20,13 @@ use crate::volume::{BrickAddress, VolumeDataSource};
 
 use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
 use crate::resource::sparse_residency::texture3d::page_table::PageTableDirectory;
-use crate::volume::octree::{MappedBrick, UnmappedBrick};
+use crate::volume::octree::{BrickCacheUpdateResult, MappedBrick, UnmappedBrick};
 use cache_management::{
     lru::LRUCache,
     process_requests::{ProcessRequests, Resources},
     Timestamp,
 };
+use crate::util::vec_hash_map::VecHashMap;
 
 pub struct SparseResidencyTexture3DOptions {
     pub max_visible_channels: u32,
@@ -138,7 +139,6 @@ pub struct VolumeManager {
 
     // state tracking
     requested_bricks: HashSet<u64>,
-    // todo: needs to be updated when cache entries are overridden
     cached_bricks: HashSet<u64>,
     channel_configuration: Vec<ChannelConfigurationState>,
 }
@@ -268,7 +268,7 @@ impl VolumeManager {
         }
     }
 
-    fn process_new_bricks(&mut self, input: &Input) {
+    fn process_new_bricks(&mut self, input: &Input) -> BrickCacheUpdateResult {
         // update CPU local LRU cache
         self.lru_cache.update_local_lru(input.frame.number);
 
@@ -277,10 +277,11 @@ impl VolumeManager {
             self.lru_cache.num_writable_bricks(),
         ));
 
+        let mut mapped_bricks = VecHashMap::new();
+        let mut unmapped_bricks = VecHashMap::new();
+
         // write bricks to cache
         if !bricks.is_empty() {
-            let mut mapped_bricks = Vec::new();
-            let mut unmapped_bricks = Vec::new();
             for (global_address, brick) in bricks {
                 if let Some(local_address) = self.map_to_page_table(&global_address, None) {
                     let brick_id = global_address.into();
@@ -291,29 +292,29 @@ impl VolumeManager {
                         let brick_location = self.lru_cache.add_cache_entry(&brick.data, input);
                         match brick_location {
                             Ok(brick_location) => {
-                                // todo: if brick did override another one:
-                                //  - find brick address that was unmapped
-                                //  - mark as unmapped
-
                                 // mark brick as mapped
-                                let unmapped_brick = self
+                                let unmapped_brick_address = self
                                     .page_table_directory
                                     .map_brick(&local_address, &brick_location);
                                 self.cached_bricks.insert(brick_id);
 
-                                mapped_bricks.push(MappedBrick::new(
-                                    global_address,
-                                    local_address,
-                                    brick,
-                                ));
-                                if let Some(unmapped_brick) = unmapped_brick {
-                                    unmapped_bricks.push(UnmappedBrick::new(
-                                        self.map_from_page_table(
-                                            unmapped_brick,
-                                            input.frame.number,
-                                        ),
-                                        unmapped_brick,
-                                    ));
+                                mapped_bricks.insert(
+                                    global_address.channel,
+                                    MappedBrick::new(global_address, brick.min, brick.max),
+                                );
+
+                                if let Some(unmapped_brick_local_address) = unmapped_brick_address {
+                                    let unmapped_brick_global_address = self.map_from_page_table(
+                                        unmapped_brick_local_address,
+                                        input.frame.number,
+                                    );
+                                    let unmapped_brick_id = unmapped_brick_global_address.into();
+                                    self.cached_bricks.remove(&unmapped_brick_id);
+
+                                    unmapped_bricks.insert(
+                                        unmapped_brick_global_address.channel,
+                                        UnmappedBrick::new(unmapped_brick_global_address),
+                                    );
                                 }
                             }
                             Err(_) => {
@@ -331,16 +332,17 @@ impl VolumeManager {
 
             // update the page directory
             self.page_table_directory.commit_changes();
-
-            // todo: send mapped bricks to listeners
-            // todo: send unmapped bricks to listeners
         }
+        BrickCacheUpdateResult::new(
+            mapped_bricks,
+            unmapped_bricks,
+        )
     }
 
     /// Call this after rendering has completed to read back requests & usages
-    pub fn update_cache(&mut self, input: &Input) {
+    pub fn update_cache(&mut self, input: &Input) -> BrickCacheUpdateResult {
         self.process_requests();
-        self.process_new_bricks(input);
+        self.process_new_bricks(input)
     }
 
     pub fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>) {
@@ -381,14 +383,6 @@ impl VolumeManager {
     ///
     /// * `visible_channel_indices`: The list of indices of channels in the data set that are to be rendered.
     /// * `timestamp`: The timestamp at which the created channel configuration is active.
-    ///
-    /// returns: ()
-    ///
-    /// # Examples
-    ///
-    /// ```
-    ///
-    /// ```
     pub fn add_channel_configuration(
         &mut self,
         selected_channel_indices: &Vec<u32>,

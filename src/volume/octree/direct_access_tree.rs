@@ -1,5 +1,5 @@
 use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
-use crate::volume::octree::PageTableOctree;
+use crate::volume::octree::{BrickCacheUpdateListener, MappedBrick, PageTableOctree, UnmappedBrick};
 
 /*
 #[modular_bitfield::bitfield]
@@ -53,5 +53,15 @@ impl PageTableOctree for DirectAccessTree {
 
     fn nodes(&self) -> &Vec<Self::Node> {
         &self.nodes
+    }
+}
+
+impl BrickCacheUpdateListener for DirectAccessTree {
+    fn on_mapped_bricks(&mut self, bricks: &[MappedBrick]) {
+        todo!()
+    }
+
+    fn on_unmapped_bricks(&mut self, bricks: &[UnmappedBrick]) {
+        todo!()
     }
 }

@@ -1,5 +1,3 @@
-extern crate core;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -131,6 +129,7 @@ async fn start_event_loop(
             volume: &volume_meta,
             brick_size: UVec3::new(32, 32, 32),
             num_channels: 0,
+            visible_channels: vec![0],
         },
         renderer.ctx(),
     );

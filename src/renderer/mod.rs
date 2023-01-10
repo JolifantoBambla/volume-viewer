@@ -139,7 +139,6 @@ impl MultiChannelVolumeRenderer {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        log::info!("4.6");
 
         // todo: refactor multi-volume into scene object or whatever
         // the volume is a unit cube ([0,1]^3)
@@ -294,8 +293,10 @@ impl MultiChannelVolumeRenderer {
                 visible_channel_indices: new_channel_selection.clone(),
                 channel_mapping,
             };
+            // todo: update visible channels of octree
         }
-        self.volume_texture.update_cache(input);
+        // todo: pass result to an octree
+        let _ = self.volume_texture.update_cache(input);
     }
 
     pub fn ctx(&self) -> &Arc<GPUContext> {
