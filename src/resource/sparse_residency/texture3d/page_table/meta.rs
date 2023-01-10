@@ -7,15 +7,15 @@ use std::cmp::min;
 #[derive(Clone)]
 pub struct PageTableMeta {
     /// The offset of this page table in the page directory.
-    pub(crate) offset: UVec3,
+    offset: UVec3,
 
     /// The extent of this page table in the page directory.
     /// The extent of the full volume represented by this page table is the component-wise product
     /// `self.extent * brick_size`, where `brick_size` is the size of one page in cache.
-    pub(crate) extent: UVec3,
+    extent: UVec3,
 
     ///
-    pub(crate) volume_meta: ResolutionMeta,
+    resolution_meta: ResolutionMeta,
 }
 
 impl PageTableMeta {
@@ -23,22 +23,36 @@ impl PageTableMeta {
         Self {
             offset,
             extent,
-            volume_meta,
+            resolution_meta: volume_meta,
         }
     }
 
     pub fn get_max_location(&self) -> UVec3 {
         self.offset + self.extent
     }
+
+    pub fn offset(&self) -> UVec3 {
+        self.offset
+    }
+
+    pub fn extent(&self) -> UVec3 {
+        self.extent
+    }
+
+    pub fn resolution_meta(&self) -> &ResolutionMeta {
+        &self.resolution_meta
+    }
 }
 
 #[derive(Clone)]
 pub struct PageDirectoryMeta {
-    /// The size of a brick in the brick cache. This is constant across all resolutions of the
-    /// bricked multi-resolution volume.
+    /// The size of a brick in the brick cache. This is constant across all channels and resolutions
+    /// of the bricked multi-resolution volume.
     brick_size: UVec3,
 
     scale: Vec3,
+
+    volume_scale: Vec3,
 
     extent: UVec3,
 
@@ -98,10 +112,13 @@ impl PageDirectoryMeta {
             .iter()
             .fold(UVec3::ZERO, |a, b| a.max(b.get_max_location()));
 
+        let volume_size = page_tables[0].resolution_meta().volume_scale();
+
         Self {
             brick_size: volume_meta.brick_size,
             scale: volume_meta.scale,
             extent,
+            volume_scale: volume_meta.top_level_volume_scale(),
             page_tables,
             num_channels,
             num_resolutions,
@@ -109,13 +126,13 @@ impl PageDirectoryMeta {
     }
 
     // todo: find a better name
-    pub fn get_page_table_size(&self) -> UVec2 {
+    pub fn get_page_table_directory_shape(&self) -> UVec2 {
         UVec2::new(self.num_channels as u32, self.num_resolutions as u32)
     }
 
     pub fn get_page_table(&self, resolution: u32, channel: u32) -> &PageTableMeta {
         let subscript = UVec2::new(channel, resolution);
-        let size = self.get_page_table_size();
+        let size = self.get_page_table_directory_shape();
         &self.page_tables[subscript.to_index(&size) as usize]
     }
 
@@ -127,6 +144,9 @@ impl PageDirectoryMeta {
     }
     pub fn extent(&self) -> UVec3 {
         self.extent
+    }
+    pub fn volume_scale(&self) -> Vec3 {
+        self.volume_scale
     }
     pub fn page_tables(&self) -> &Vec<PageTableMeta> {
         &self.page_tables

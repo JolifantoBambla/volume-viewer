@@ -76,9 +76,9 @@ impl PageTableDirectory {
             .iter()
             .map(|pt| ResMeta {
                 brick_size: meta.brick_size().extend(0),
-                page_table_offset: pt.offset.extend(0),
-                page_table_extent: pt.extent.extend(0),
-                volume_size: pt.volume_meta.volume_size.extend(0),
+                page_table_offset: pt.offset().extend(0),
+                page_table_extent: pt.extent().extend(0),
+                volume_size: pt.resolution_meta().volume_size.extend(0),
             })
             .collect();
 
@@ -131,7 +131,7 @@ impl PageTableDirectory {
     pub fn page_index_to_brick_address(&self, page_index: u32) -> BrickAddress {
         let bytes: [u8; 4] = page_index.to_be_bytes();
 
-        let size = self.meta.get_page_table_size();
+        let size = self.meta.get_page_table_directory_shape();
         let subscript = size.index_to_subscript(bytes[3] as u32);
 
         BrickAddress::new(
@@ -152,7 +152,7 @@ impl PageTableDirectory {
         let page_table = self
             .meta
             .get_page_table(brick_address.level, brick_address.channel);
-        let offset = page_table.offset;
+        let offset = page_table.offset();
         let location = brick_address.index;
         subscript_to_index(&(offset + location), &self.page_directory.extent) as usize
     }
@@ -230,8 +230,8 @@ impl PageTableDirectory {
     /// * `channel_index`: the channel index of the page table to invalidate
     pub fn invalidate_page_table(&mut self, resolution_index: u32, channel_index: u32) {
         let page_table = self.meta.get_page_table(resolution_index, channel_index);
-        let offset = page_table.offset;
-        let last = offset + page_table.extent;
+        let offset = page_table.offset();
+        let last = offset + page_table.extent();
 
         let begin = subscript_to_index(&(offset), &self.page_directory.extent) as usize;
         let end = subscript_to_index(&last, &self.page_directory.extent) as usize;
@@ -249,12 +249,7 @@ impl PageTableDirectory {
     }
 
     pub fn volume_scale(&self) -> Vec3 {
-        let size = Vec3::new(
-            self.meta.page_tables()[0].volume_meta.volume_size[0] as f32,
-            self.meta.page_tables()[0].volume_meta.volume_size[1] as f32,
-            self.meta.page_tables()[0].volume_meta.volume_size[2] as f32,
-        );
-        size * (self.meta.scale() / self.meta.scale().max_element())
+        self.meta.volume_scale()
     }
 
     pub fn get_page_directory_meta_as_binding_resource(&self) -> BindingResource {
