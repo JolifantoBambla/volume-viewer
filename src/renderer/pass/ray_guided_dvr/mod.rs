@@ -124,6 +124,7 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct RayGuidedDVR {
     ctx: Arc<Gpu>,
     pipeline: wgpu::ComputePipeline,

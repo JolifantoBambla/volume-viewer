@@ -23,6 +23,7 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct PresentToScreen {
     ctx: Arc<Gpu>,
     pipeline: wgpu::RenderPipeline,

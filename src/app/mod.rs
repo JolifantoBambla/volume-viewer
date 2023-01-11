@@ -1,3 +1,6 @@
+pub mod renderer;
+pub mod scene;
+
 use crate::event::handler::register_default_js_event_handlers;
 use crate::event::{ChannelSettingsChange, Event, SettingsChange};
 use crate::renderer::camera::{Camera, CameraView, Projection};
@@ -452,6 +455,7 @@ impl PrepareRender for App {
 
 impl Update for App {
     fn update(&mut self, input: &Input) {
+        // todo: find out why this happens before settings are updated - thanks for not commenting on this, past lukas :/
         let channel_settings = self.map_channel_settings(&self.settings);
 
         // todo: do this properly
