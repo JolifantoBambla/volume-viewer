@@ -25,6 +25,9 @@ impl Camera {
     pub fn projection_mut(&mut self) -> &mut Projection {
         &mut self.projection
     }
+    pub fn set_projection(&mut self, projection: Projection) {
+        self.projection = projection;
+    }
     pub fn view_mat(&self) -> Mat4 {
         self.view.view()
     }

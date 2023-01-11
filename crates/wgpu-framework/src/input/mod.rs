@@ -3,6 +3,7 @@ use crate::input::frame::Frame;
 use crate::input::mouse::{Mouse, MouseEvent};
 use crate::input::time::Time;
 use winit::event::WindowEvent;
+use crate::input::keyboard::{Keyboard, KeyboardEvent};
 
 pub mod frame;
 pub mod keyboard;
@@ -12,6 +13,7 @@ pub mod time;
 #[derive(Clone, Debug)]
 pub enum Event {
     Mouse(MouseEvent),
+    Keyboard(KeyboardEvent),
 }
 
 #[derive(Clone, Debug)]
@@ -19,6 +21,7 @@ pub struct Input {
     time: Time,
     frame: Frame,
     mouse: Mouse,
+    keyboard: Keyboard,
     events: Vec<Event>,
 }
 
@@ -28,6 +31,7 @@ impl Input {
             time: Time::default(),
             frame: Frame::default(),
             mouse: Mouse::new(width, height),
+            keyboard: Keyboard::default(),
             events: Vec::new(),
         }
     }
@@ -38,6 +42,7 @@ impl Input {
         self.time = self.time.next();
         self.frame = self.frame.next();
         self.mouse = self.mouse.next();
+        self.keyboard = self.keyboard.next();
         self.events = Vec::new();
 
         last
@@ -63,6 +68,8 @@ impl OnWindowEvent for Input {
     fn on_window_event(&mut self, event: &WindowEvent) {
         if let Some(e) = self.mouse.handle_event(event) {
             self.events.push(Event::Mouse(e));
+        } else if let Some(e) = self.keyboard.handle_event(event) {
+            self.events.push(Event::Keyboard(e));
         }
     }
 }
