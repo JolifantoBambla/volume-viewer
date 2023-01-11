@@ -12,7 +12,6 @@ use wgpu_framework::util::window::WindowConfig;
 pub mod app;
 pub mod event;
 pub mod gpu_list;
-pub mod input;
 pub mod preprocessing;
 pub mod renderer;
 pub mod resource;

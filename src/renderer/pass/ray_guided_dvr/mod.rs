@@ -1,6 +1,4 @@
-use crate::renderer::camera::TransformUniform;
 use crate::renderer::{
-    camera::CameraUniform,
     pass::{AsBindGroupEntries, GPUPass},
 };
 use crate::resource::VolumeManager;
@@ -11,6 +9,7 @@ use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
+use crate::app::renderer::uniforms::{CameraUniform, TransformUniform};
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
