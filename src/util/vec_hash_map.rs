@@ -2,6 +2,7 @@ use std::collections::hash_map::{Entry, Iter};
 use std::collections::HashMap;
 use std::hash::Hash;
 
+#[derive(Clone, Debug)]
 pub struct VecHashMap<K, V> {
     data: HashMap<K, Vec<V>>,
 }

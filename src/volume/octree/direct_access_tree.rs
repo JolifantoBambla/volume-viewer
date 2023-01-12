@@ -1,8 +1,11 @@
+use crate::util::extent::{ToNormalizedAddress, ToSubscript};
 use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
 use crate::volume::octree::{
     BrickCacheUpdateListener, MappedBrick, PageTableOctree, ResolutionMapping, UnmappedBrick,
 };
+use glam::UVec3;
 use std::rc::Rc;
+use crate::util::vec_hash_map::VecHashMap;
 
 /*
 #[modular_bitfield::bitfield]
@@ -43,6 +46,7 @@ pub struct DirectAccessTree {
     #[allow(unused)]
     nodes: Vec<Node>,
     subdivisions: Rc<Vec<VolumeSubdivision>>,
+    data_subdivisions: Rc<Vec<UVec3>>,
     resolution_mapping: ResolutionMapping,
 }
 
@@ -53,11 +57,13 @@ impl PageTableOctree for DirectAccessTree {
 
     fn new(
         subdivisions: &Rc<Vec<VolumeSubdivision>>,
+        data_subdivisions: &Rc<Vec<UVec3>>,
         resolution_mapping: ResolutionMapping,
     ) -> Self {
         Self {
             nodes: Self::create_nodes_from_subdivisions(subdivisions.as_slice()),
             subdivisions: subdivisions.clone(),
+            data_subdivisions: data_subdivisions.clone(),
             resolution_mapping,
         }
     }
@@ -81,11 +87,11 @@ impl PageTableOctree for DirectAccessTree {
 }
 
 impl BrickCacheUpdateListener for DirectAccessTree {
-    fn on_mapped_bricks(&mut self, bricks: &[MappedBrick]) {
+    fn on_mapped_bricks(&mut self, bricks: &VecHashMap<u32, MappedBrick>) {
         todo!()
     }
 
-    fn on_unmapped_bricks(&mut self, bricks: &[UnmappedBrick]) {
+    fn on_unmapped_bricks(&mut self, bricks: &VecHashMap<u32, UnmappedBrick>) {
         todo!()
     }
 }

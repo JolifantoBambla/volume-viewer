@@ -3,7 +3,7 @@ mod page_table;
 
 use glam::Vec3;
 use std::cmp::min;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
@@ -277,8 +277,8 @@ impl VolumeManager {
             self.lru_cache.num_writable_bricks(),
         ));
 
-        let mut mapped_bricks = VecHashMap::new();
-        let mut unmapped_bricks = VecHashMap::new();
+        let mut mapped_bricks = HashMap::new();
+        let mut unmapped_bricks = HashMap::new();
 
         // write bricks to cache
         if !bricks.is_empty() {
@@ -298,10 +298,18 @@ impl VolumeManager {
                                     .map_brick(&local_address, &brick_location);
                                 self.cached_bricks.insert(brick_id);
 
-                                mapped_bricks.insert(
-                                    global_address.channel,
+                                if !mapped_bricks.contains_key(&global_address.channel) {
+                                    mapped_bricks.insert(
+                                        global_address.channel,
+                                        VecHashMap::new(),
+                                    );
+                                }
+                                mapped_bricks.get_mut(&global_address.channel)
+                                    .unwrap()
+                                    .insert(
+                                        global_address.level,
                                     MappedBrick::new(global_address, brick.min, brick.max),
-                                );
+                                    );
 
                                 if let Some(unmapped_brick_local_address) = unmapped_brick_address {
                                     let unmapped_brick_global_address = self.map_from_page_table(
@@ -311,10 +319,18 @@ impl VolumeManager {
                                     let unmapped_brick_id = unmapped_brick_global_address.into();
                                     self.cached_bricks.remove(&unmapped_brick_id);
 
-                                    unmapped_bricks.insert(
-                                        unmapped_brick_global_address.channel,
-                                        UnmappedBrick::new(unmapped_brick_global_address),
-                                    );
+                                    if !unmapped_bricks.contains_key(&unmapped_brick_global_address.channel) {
+                                        unmapped_bricks.insert(
+                                            unmapped_brick_global_address.channel,
+                                            VecHashMap::new(),
+                                        );
+                                    }
+                                    unmapped_bricks.get_mut(&unmapped_brick_global_address.channel)
+                                        .unwrap()
+                                        .insert(
+                                            unmapped_brick_global_address.level,
+                                            UnmappedBrick::new(unmapped_brick_global_address),
+                                        );
                                 }
                             }
                             Err(_) => {

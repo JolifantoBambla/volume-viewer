@@ -51,25 +51,19 @@ impl UnmappedBrick {
 
 #[readonly::make]
 pub struct BrickCacheUpdateResult {
-    mapped_bricks: VecHashMap<u32, MappedBrick>,
-    unmapped_bricks: VecHashMap<u32, UnmappedBrick>,
+    mapped_bricks: HashMap<u32, VecHashMap<u32, MappedBrick>>,
+    unmapped_bricks: HashMap<u32, VecHashMap<u32, UnmappedBrick>>,
 }
 
 impl BrickCacheUpdateResult {
-    pub fn new(
-        mapped_bricks: VecHashMap<u32, MappedBrick>,
-        unmapped_bricks: VecHashMap<u32, UnmappedBrick>,
-    ) -> Self {
-        Self {
-            mapped_bricks,
-            unmapped_bricks,
-        }
+    pub fn new(mapped_bricks: HashMap<u32, VecHashMap<u32, MappedBrick>>, unmapped_bricks: HashMap<u32, VecHashMap<u32, UnmappedBrick>>) -> Self {
+        Self { mapped_bricks, unmapped_bricks }
     }
 }
 
 pub trait BrickCacheUpdateListener {
-    fn on_mapped_bricks(&mut self, bricks: &[MappedBrick]);
-    fn on_unmapped_bricks(&mut self, bricks: &[UnmappedBrick]);
+    fn on_mapped_bricks(&mut self, bricks: &VecHashMap<u32, MappedBrick>);
+    fn on_unmapped_bricks(&mut self, bricks: &VecHashMap<u32, UnmappedBrick>);
 }
 
 pub trait PageTableOctree: BrickCacheUpdateListener {
@@ -81,6 +75,7 @@ pub trait PageTableOctree: BrickCacheUpdateListener {
 
     fn new(
         subdivisions: &Rc<Vec<VolumeSubdivision>>,
+        data_subdivisions: &Rc<Vec<UVec3>>,
         resolution_mapping: ResolutionMapping,
     ) -> Self;
 
@@ -92,8 +87,8 @@ pub trait PageTableOctree: BrickCacheUpdateListener {
 
     fn set_resolution_mapping(&mut self, resolution_mapping: ResolutionMapping);
 
-    fn map_to_subdivision_level(&self, level: usize) -> u32 {
-        self.resolution_mapping().map_to_subdivision_level(level)
+    fn map_to_subdivision_level(&self, level: usize) -> usize {
+        self.resolution_mapping().map_to_dataset_level(level)
     }
 }
 
@@ -101,7 +96,8 @@ pub trait PageTableOctree: BrickCacheUpdateListener {
 pub struct ResolutionMapping {
     min_resolution: u32,
     max_resolution: u32,
-    resolution_mapping: Vec<u32>,
+    octree_to_dataset: Vec<usize>,
+    dataset_to_octree: VecHashMap<usize, usize>,
 }
 
 impl ResolutionMapping {
@@ -115,7 +111,7 @@ impl ResolutionMapping {
         // data_set_subdivisions are ordered from high res to low res
         // c.min_lod is lowest res for channel
         // c.max_lod is highest res for channel
-        let mut resolution_mapping = Vec::with_capacity(octree_subdivisions.len());
+        let mut octree_to_dataset = Vec::with_capacity(octree_subdivisions.len());
         let mut current_lod = min_lod;
         let mut reached_max_lod = current_lod == max_lod;
         for s in octree_subdivisions.iter() {
@@ -130,17 +126,27 @@ impl ResolutionMapping {
                 current_lod = max_lod.min(current_lod + 1);
                 reached_max_lod = current_lod == max_lod;
             }
-            resolution_mapping.push(current_lod);
+            octree_to_dataset.push(current_lod as usize);
         }
+        let mut dataset_to_octree = VecHashMap::new();
+        for (octree_index, dataset_index) in octree_to_dataset.iter().enumerate() {
+            dataset_to_octree.insert(*dataset_index, octree_index);
+        }
+
         Self {
             min_resolution: min_lod,
             max_resolution: max_lod,
-            resolution_mapping,
+            octree_to_dataset,
+            dataset_to_octree,
         }
     }
 
-    fn map_to_subdivision_level(&self, level: usize) -> u32 {
-        *self.resolution_mapping.get(level).unwrap_or(&0)
+    fn map_to_dataset_level(&self, octree_level: usize) -> usize {
+        *self.octree_to_dataset.get(octree_level).unwrap() as usize
+    }
+
+    fn map_to_octree_subdivision_level(&self, dataset_level: usize) -> &[usize] {
+        self.dataset_to_octree.get(&dataset_level).unwrap().as_slice()
     }
 }
 
@@ -167,7 +173,7 @@ pub struct MultiChannelPageTableOctree<Tree: PageTableOctree> {
     #[allow(unused)]
     gpu: Arc<Gpu>,
     subdivisions: Rc<Vec<VolumeSubdivision>>,
-    data_set_subdivisions: Vec<UVec3>,
+    data_subdivisions: Rc<Vec<UVec3>>,
     resolution_mappings: HashMap<u32, ResolutionMapping>,
     octrees: HashMap<u32, Tree>,
     visible_channels: Vec<u32>,
@@ -203,6 +209,8 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
             );
         }
 
+        let data_subdivisions = Rc::new(data_set_subdivisions);
+
         let mut octrees = HashMap::new();
         for c in descriptor.visible_channels.iter() {
             // todo: pass channel lod mapping to tree constructor
@@ -210,6 +218,7 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
                 *c,
                 Tree::new(
                     &subdivisions,
+                    &data_subdivisions,
                     resolution_mappings.remove(&c).unwrap().clone(),
                 ),
             );
@@ -229,7 +238,7 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
         Self {
             gpu: gpu.clone(),
             subdivisions,
-            data_set_subdivisions,
+            data_subdivisions,
             octrees,
             resolution_mappings,
             visible_channels: descriptor.visible_channels,
@@ -241,7 +250,7 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
     pub fn on_resolution_mapping_updated(&mut self, channel: u32, min_lod: u32, max_lod: u32) {
         let resolution_mapping = ResolutionMapping::new(
             self.subdivisions.as_slice(),
-            self.data_set_subdivisions.as_slice(),
+            self.data_subdivisions.as_slice(),
             min_lod,
             max_lod,
         );
@@ -258,6 +267,7 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
                 channel,
                 Tree::new(
                     &self.subdivisions,
+                    &self.data_subdivisions,
                     self.resolution_mappings.remove(&channel).unwrap().clone(),
                 ),
             );
@@ -270,19 +280,22 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
             self.octrees
                 .get_mut(channel)
                 .unwrap()
-                .on_mapped_bricks(bricks.as_slice());
+                .on_mapped_bricks(bricks);
         }
         for (channel, bricks) in update_result.unmapped_bricks.iter() {
             self.assert_octree(*channel);
             self.octrees
                 .get_mut(channel)
                 .unwrap()
-                .on_unmapped_bricks(bricks.as_slice());
+                .on_unmapped_bricks(bricks);
         }
 
         // todo: update GPU buffers (either only those portions that changed or all of them)
         for (offset, channel) in self.visible_channels.iter().enumerate() {
-            self.gpu_nodes.write_buffer_with_offset(self.octrees.get(channel).unwrap().nodes().as_slice(), offset as BufferAddress);
+            self.gpu_nodes.write_buffer_with_offset(
+                self.octrees.get(channel).unwrap().nodes().as_slice(),
+                offset as BufferAddress,
+            );
         }
     }
 
@@ -292,6 +305,7 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
             if let std::collections::hash_map::Entry::Vacant(e) = self.octrees.entry(c) {
                 e.insert(Tree::new(
                     &self.subdivisions,
+                    &self.data_subdivisions,
                     self.resolution_mappings.remove(&c).unwrap().clone(),
                 ));
             }

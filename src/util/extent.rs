@@ -1,4 +1,4 @@
-use glam::{UVec2, UVec3};
+use glam::{UVec2, UVec3, Vec3};
 use wgpu::{Extent3d, Origin3d};
 
 pub fn origin_to_uvec(origin: &Origin3d) -> UVec3 {
@@ -54,6 +54,18 @@ pub trait SubscriptToIndex<Size = Self> {
     fn to_index(&self, size: &Size) -> u32;
 }
 
+pub trait ToNormalizedAddress<Size = Self> {
+    type NormalizedAddress;
+
+    fn to_normalized_address(&self, size: &Size) -> Self::NormalizedAddress;
+}
+
+pub trait ToSubscript {
+    type Subscript;
+
+    fn to_subscript(&self, size: Self::Subscript) -> Self::Subscript;
+}
+
 impl IndexToSubscript for UVec2 {
     type Size = Self;
 
@@ -84,5 +96,29 @@ impl IndexToSubscript for UVec3 {
 impl SubscriptToIndex for UVec3 {
     fn to_index(&self, size: &Self) -> u32 {
         self.x + size.x * (self.y + size.y * self.z)
+    }
+}
+
+impl ToNormalizedAddress for UVec3 {
+    type NormalizedAddress = Vec3;
+
+    fn to_normalized_address(&self, size: &Self) -> Self::NormalizedAddress {
+        let self_f32 = Vec3::new(self.x as f32, self.y as f32, self.z as f32);
+        let size_f32 = Vec3::new(size.x as f32, size.y as f32, size.z as f32);
+        self_f32 / size_f32
+    }
+}
+
+impl ToSubscript for Vec3 {
+    type Subscript = UVec3;
+
+    fn to_subscript(&self, size: Self::Subscript) -> Self::Subscript {
+        let size_f32 = Vec3::new(size.x as f32, size.y as f32, size.z as f32);
+        let subscript_f32 = *self * size_f32;
+        UVec3::new(
+            (subscript_f32.x.floor() as u32).min(size.x - 1),
+            (subscript_f32.y.floor() as u32).min(size.y - 1),
+            (subscript_f32.z.floor() as u32).min(size.z - 1),
+        )
     }
 }

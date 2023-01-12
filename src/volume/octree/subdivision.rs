@@ -1,4 +1,5 @@
-use glam::{BVec3, UVec3};
+use crate::util::extent::{subscript_to_index, SubscriptToIndex, ToSubscript};
+use glam::{BVec3, UVec3, Vec3};
 
 // todo: this should also store which resolution this maps to
 #[repr(C)]
@@ -73,6 +74,13 @@ impl VolumeSubdivision {
 
     pub fn next_subdivision_offset(&self) -> u32 {
         self.node_offset + self.num_nodes()
+    }
+
+    pub fn to_node_index(&self, normalized_address: Vec3) -> usize {
+        (self.node_offset
+            + normalized_address
+                .to_subscript(self.shape())
+                .to_index(&self.shape)) as usize
     }
 
     pub fn shape(&self) -> UVec3 {
