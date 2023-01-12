@@ -3,45 +3,32 @@ pub mod scene;
 
 use crate::event::handler::register_default_js_event_handlers;
 use crate::event::{ChannelSettingsChange, Event, SettingsChange};
-use crate::renderer::camera::{Camera, CameraView, Projection};
-use crate::renderer::geometry::Bounds3D;
-use crate::renderer::pass::present_to_screen::PresentToScreen;
-use crate::renderer::pass::ray_guided_dvr::{ChannelSettings, RayGuidedDVR, Resources};
-use crate::renderer::pass::{present_to_screen, ray_guided_dvr, GPUPass};
 use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
 use crate::resource::VolumeManager;
 use crate::util::vec::vec_equals;
 use crate::volume::HtmlEventTargetVolumeDataSource;
 use crate::wgsl::create_wgsl_preprocessor;
-use crate::{resource, BrickedMultiResolutionMultiVolumeMeta, MultiChannelVolumeRendererSettings};
-use glam::{Vec2, Vec3};
+use crate::{BrickedMultiResolutionMultiVolumeMeta, MultiChannelVolumeRendererSettings};
+use glam::UVec2;
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
-use wgpu::util::DeviceExt;
-use wgpu::{
-    BindGroup, Buffer, Extent3d, SamplerDescriptor, SubmissionIndex, SurfaceConfiguration,
-    TextureView,
-};
+use wgpu::{SubmissionIndex, SurfaceConfiguration, TextureView};
 use wgpu_framework::app::{GpuApp, MapToWindowEvent};
 use wgpu_framework::context::{ContextDescriptor, Gpu, SurfaceContext};
 use wgpu_framework::event::lifecycle::{OnCommandsSubmitted, PrepareRender, Update};
 use wgpu_framework::event::window::{OnResize, OnUserEvent, OnWindowEvent};
 use wgpu_framework::input::Input;
-use winit::event::{
-    ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
-};
+use winit::event::{WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
+use crate::app::renderer::MultiChannelVolumeRenderer;
+use crate::app::scene::MultiChannelVolumeScene;
+use crate::renderer::pass::ray_guided_dvr::ChannelSettings;
 
 /// The `GLOBAL_EVENT_LOOP_PROXY` is a means to send data to the running application.
 /// It is initialized by `start_event_loop`.
 pub static mut GLOBAL_EVENT_LOOP_PROXY: Option<winit::event_loop::EventLoopProxy<Event<()>>> = None;
-
-// todo: refactor into fields
-const TRANSLATION_SPEED: f32 = 5.0;
-const NEAR: f32 = 0.0001;
-const FAR: f32 = 1000.0;
 
 struct ChannelConfiguration {
     visible_channel_indices: Vec<u32>,
@@ -57,27 +44,12 @@ impl ChannelConfiguration {
 
 pub struct App {
     ctx: Arc<Gpu>,
-    volume_transform: glam::Mat4,
-    volume_texture: VolumeManager,
 
-    volume_render_pass: RayGuidedDVR,
-    volume_render_bind_group: BindGroup,
-    volume_render_global_settings_buffer: Buffer,
-    volume_render_channel_settings_buffer: Buffer,
-    volume_render_result_extent: Extent3d,
-
-    present_to_screen_pass: PresentToScreen,
-    present_to_screen_bind_group: BindGroup,
+    scene: MultiChannelVolumeScene,
+    renderer: MultiChannelVolumeRenderer,
 
     channel_configuration: ChannelConfiguration,
 
-    camera: Camera,
-    orthographic: Projection,
-    perspective: Projection,
-    resolution: Vec2,
-    last_mouse_position: Vec2,
-    left_mouse_pressed: bool,
-    right_mouse_pressed: bool,
     settings: MultiChannelVolumeRendererSettings,
     last_channel_selection: Vec<u32>,
     channel_selection_changed: bool,
@@ -99,7 +71,11 @@ impl App {
             canvas.unchecked_into::<web_sys::EventTarget>(),
         ));
 
-        let window_size = window.inner_size();
+        let window_size = {
+            let window_size = window.inner_size();
+            UVec2::new(window_size.width, window_size.height)
+        };
+
         // todo: sort by channel importance
         // channel settings are created for all channels s.t. the initial buffer size is large enough
         // (could also be achieved by just allocating for max visible channels -> maybe later during cleanup)
@@ -112,7 +88,7 @@ impl App {
             .collect();
 
         let wgsl_preprocessor = create_wgsl_preprocessor();
-        let volume_texture = VolumeManager::new(
+        let volume_manager = VolumeManager::new(
             volume_source,
             SparseResidencyTexture3DOptions {
                 max_visible_channels: render_settings.create_options.max_visible_channels,
@@ -124,7 +100,7 @@ impl App {
             gpu,
         );
 
-        let channel_mapping = volume_texture
+        let channel_mapping = volume_manager
             .get_channel_configuration(0)
             .map_channel_indices(visible_channel_indices.as_slice())
             .iter()
@@ -135,124 +111,23 @@ impl App {
             channel_mapping,
         };
 
-        let volume_render_result_extent = Extent3d {
-            width: window_size.width,
-            height: window_size.height,
-            depth_or_array_layers: 1,
-        };
-
-        // todo: make size configurable
-        let dvr_result = resource::Texture::create_storage_texture(
-            gpu.device(),
-            volume_render_result_extent.width,
-            volume_render_result_extent.height,
+        let renderer = MultiChannelVolumeRenderer::new(
+            window_size,
+            &volume_manager,
+            &render_settings,
+            &wgsl_preprocessor,
+            surface_configuration,
+            gpu
         );
-        // todo: the actual render pass should provide this sampler
-        let volume_sampler = gpu.device().create_sampler(&SamplerDescriptor {
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
+        let scene = MultiChannelVolumeScene::new(window_size, volume_manager);
 
-        let screen_space_sampler = gpu.device().create_sampler(&SamplerDescriptor {
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
-
-        // todo: refactor multi-volume into scene object or whatever
-        // the volume is a unit cube ([0,1]^3)
-        // we translate it s.t. its center is the origin and scale it to its original dimensions
-        let volume_transform = glam::Mat4::from_scale(volume_texture.normalized_volume_size())
-            .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(
-                -0.5, -0.5, -0.5,
-            )));
-        let uniforms = ray_guided_dvr::Uniforms::default();
-        let volume_render_global_settings_buffer =
-            gpu.device()
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: bytemuck::bytes_of(&uniforms),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                });
-
-        // channel settings are created for all channels s.t. the initial buffer size is large enough
-        // (could also be achieved by just allocating for max visible channels -> maybe later during cleanup)
-        // filtered channel settings are uploaded to gpu during update
-        let channel_settings: Vec<ChannelSettings> = render_settings
-            .channel_settings
-            .iter()
-            .map(ChannelSettings::from)
-            .collect();
-        let volume_render_channel_settings_buffer =
-            gpu.device()
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: bytemuck::cast_slice(channel_settings.as_slice()),
-                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                });
-
-        let volume_render_pass = RayGuidedDVR::new(&volume_texture, &wgsl_preprocessor, gpu);
-        let volume_render_bind_group = volume_render_pass.create_bind_group(Resources {
-            volume_sampler: &volume_sampler,
-            output: &dvr_result.view,
-            uniforms: &volume_render_global_settings_buffer,
-            channel_settings: &volume_render_channel_settings_buffer,
-        });
-
-        let present_to_screen_pass = PresentToScreen::new(gpu, surface_configuration);
-        let present_to_screen_bind_group =
-            present_to_screen_pass.create_bind_group(present_to_screen::Resources {
-                sampler: &screen_space_sampler,
-                source_texture: &dvr_result.view,
-            });
-
-        // TODO: use framework::camera instead
-        // TODO: refactor these params
-        let distance_from_center = 500.;
-        let resolution = Vec2::new(window_size.width as f32, window_size.height as f32);
-        let perspective = Projection::new_perspective(
-            f32::to_radians(45.),
-            window_size.width as f32 / window_size.height as f32,
-            NEAR,
-            FAR,
-        );
-        let orthographic = Projection::new_orthographic(Bounds3D::new(
-            (resolution * -0.5).extend(NEAR),
-            (resolution * 0.5).extend(FAR),
-        ));
-        let camera = Camera::new(
-            CameraView::new(
-                Vec3::new(1., 1., 1.) * distance_from_center,
-                Vec3::new(0., 0., 0.),
-                Vec3::new(0., 1., 0.),
-            ),
-            perspective,
-        );
-        let last_mouse_position = Vec2::new(0., 0.);
-        let left_mouse_pressed = false;
-        let right_mouse_pressed = false;
         let last_channel_selection = render_settings.get_sorted_visible_channel_indices();
 
         Self {
             ctx: gpu.clone(),
-            volume_transform,
-            volume_texture,
-            volume_render_pass,
-            volume_render_bind_group,
-            volume_render_global_settings_buffer,
-            volume_render_channel_settings_buffer,
-            volume_render_result_extent,
-            present_to_screen_pass,
-            present_to_screen_bind_group,
+            renderer,
+            scene,
             channel_configuration,
-            camera,
-            orthographic,
-            perspective,
-            resolution,
-            last_mouse_position,
-            left_mouse_pressed,
-            right_mouse_pressed,
             settings: render_settings,
             last_channel_selection,
             channel_selection_changed: false,
@@ -299,16 +174,31 @@ impl GpuApp for App {
             .ctx
             .device()
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        self.volume_render_pass.encode(
-            &mut encoder,
-            &self.volume_render_bind_group,
-            &self.volume_render_result_extent,
+
+        let mut settings = self.settings.clone();
+
+        let channel_settings = self.map_channel_settings(&settings);
+
+        // todo: do this properly
+        // a new channel selection might not have been propagated at this point -> remove some channel settings
+        let mut c_settings = Vec::new();
+        for &channel in self.channel_configuration.visible_channel_indices.iter() {
+            c_settings.push(settings.channel_settings[channel as usize].clone());
+        }
+        settings.channel_settings = c_settings;
+
+        self.renderer.render(
+            view,
+            &self.scene,
+            &settings,
+            &channel_settings,
+            &input,
+            &mut encoder
         );
-        self.present_to_screen_pass
-            .encode(&mut encoder, &self.present_to_screen_bind_group, view);
 
         // todo: process request & usage buffers
-        self.volume_texture
+        self.scene
+            .volume_manager_mut()
             .encode_cache_management(&mut encoder, input.frame().number());
 
         self.ctx.queue().submit(Some(encoder.finish()))
@@ -329,65 +219,7 @@ impl OnUserEvent for App {
     fn on_user_event(&mut self, event: &Self::UserEvent) {
         match event {
             // todo: use input & update instead
-            Self::UserEvent::Window(event) => match event {
-                WindowEvent::KeyboardInput {
-                    input:
-                        KeyboardInput {
-                            virtual_keycode: Some(virtual_keycode),
-                            state: ElementState::Pressed,
-                            ..
-                        },
-                    ..
-                } => match virtual_keycode {
-                    VirtualKeyCode::D => self.camera.view.move_right(TRANSLATION_SPEED),
-                    VirtualKeyCode::A => self.camera.view.move_left(TRANSLATION_SPEED),
-                    VirtualKeyCode::W | VirtualKeyCode::Up => {
-                        self.camera.view.move_forward(TRANSLATION_SPEED)
-                    }
-                    VirtualKeyCode::S | VirtualKeyCode::Down => {
-                        self.camera.view.move_backward(TRANSLATION_SPEED)
-                    }
-                    VirtualKeyCode::C => {
-                        if self.camera.projection().is_orthographic() {
-                            self.camera.set_projection(self.perspective);
-                        } else {
-                            self.camera.set_projection(self.orthographic);
-                        }
-                    }
-                    _ => {}
-                },
-                WindowEvent::CursorMoved { position, .. } => {
-                    let mouse_position = Vec2::new(position.x as f32, position.y as f32);
-                    let delta = (mouse_position - self.last_mouse_position) / self.resolution;
-                    self.last_mouse_position = mouse_position;
-
-                    if self.left_mouse_pressed {
-                        self.camera.view.orbit(delta, false);
-                    } else if self.right_mouse_pressed {
-                        let translation = delta * TRANSLATION_SPEED * 20.;
-                        self.camera.view.move_right(translation.x);
-                        self.camera.view.move_down(translation.y);
-                    }
-                }
-                WindowEvent::MouseWheel {
-                    delta: MouseScrollDelta::PixelDelta(delta),
-                    ..
-                } => {
-                    self.camera.view.move_forward(
-                        (f64::min(delta.y.abs(), 1.) * delta.y.signum()) as f32 * TRANSLATION_SPEED,
-                    );
-                }
-                WindowEvent::MouseInput { state, button, .. } => match button {
-                    MouseButton::Left => {
-                        self.left_mouse_pressed = *state == ElementState::Pressed;
-                    }
-                    MouseButton::Right => {
-                        self.right_mouse_pressed = *state == ElementState::Pressed;
-                    }
-                    _ => {}
-                },
-                _ => {}
-            },
+            Self::UserEvent::Window(_) => self.scene.on_user_event(event),
             Self::UserEvent::Settings(settings_change) => match settings_change {
                 SettingsChange::RenderMode(mode) => {
                     self.settings.render_mode = *mode;
@@ -455,35 +287,7 @@ impl PrepareRender for App {
 
 impl Update for App {
     fn update(&mut self, input: &Input) {
-        // todo: find out why this happens before settings are updated - thanks for not commenting on this, past lukas :/
-        let channel_settings = self.map_channel_settings(&self.settings);
-
-        // todo: do this properly
-        // a new channel selection might not have been propagated at this point -> remove some channel settings
-        let mut settings = self.settings.clone();
-        let mut c_settings = Vec::new();
-        for &channel in self.channel_configuration.visible_channel_indices.iter() {
-            c_settings.push(settings.channel_settings[channel as usize].clone());
-        }
-        settings.channel_settings = c_settings;
-
-        let uniforms = ray_guided_dvr::Uniforms::new(
-            self.camera.create_uniform(),
-            self.volume_transform,
-            input.frame().number(),
-            &settings,
-        );
-
-        self.ctx.queue().write_buffer(
-            &self.volume_render_global_settings_buffer,
-            0,
-            bytemuck::bytes_of(&uniforms),
-        );
-        self.ctx.queue().write_buffer(
-            &self.volume_render_channel_settings_buffer,
-            0,
-            bytemuck::cast_slice(channel_settings.as_slice()),
-        );
+        self.scene.update(input);
     }
 }
 
@@ -493,7 +297,8 @@ impl OnCommandsSubmitted for App {
         if self.channel_selection_changed {
             self.channel_selection_changed = false;
             let channel_mapping = self
-                .volume_texture
+                .scene
+                .volume_manager_mut()
                 .add_channel_configuration(&self.last_channel_selection, input.frame().number())
                 .iter()
                 .map(|c| c.unwrap() as u32)
@@ -505,7 +310,7 @@ impl OnCommandsSubmitted for App {
             // todo: update visible channels of octree
         }
         // todo: pass result to an octree
-        let _ = self.volume_texture.update_cache(input);
+        let _ = self.scene.volume_manager_mut().update_cache(input);
     }
 }
 

@@ -27,7 +27,7 @@ pub struct MultiChannelVolumeRenderer {
 impl MultiChannelVolumeRenderer {
     pub fn new(
         window_size: UVec2,
-        volume_texture: &VolumeManager,
+        volume_manager: &VolumeManager,
         render_settings: &MultiChannelVolumeRendererSettings,
         wgsl_preprocessor: &WGSLPreprocessor,
         surface_configuration: &SurfaceConfiguration,
@@ -83,7 +83,7 @@ impl MultiChannelVolumeRenderer {
                     usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
                 });
 
-        let volume_render_pass = RayGuidedDVR::new(&volume_texture, &wgsl_preprocessor, gpu);
+        let volume_render_pass = RayGuidedDVR::new(&volume_manager, &wgsl_preprocessor, gpu);
         let volume_render_bind_group = volume_render_pass.create_bind_group(Resources {
             volume_sampler: &volume_sampler,
             output: &dvr_result.view,

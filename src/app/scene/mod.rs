@@ -1,6 +1,8 @@
 use glam::{Mat4, UVec2, Vec2, Vec3};
 use winit::event::{ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
+use wgpu_framework::event::lifecycle::Update;
 use wgpu_framework::event::window::OnUserEvent;
+use wgpu_framework::input::Input;
 use crate::Event;
 use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::geometry::Bounds3D;
@@ -86,6 +88,15 @@ impl MultiChannelVolumeScene {
     }
     pub fn volume_manager(&self) -> &VolumeManager {
         &self.volume_manager
+    }
+    pub fn volume_manager_mut(&mut self) -> &mut VolumeManager {
+        &mut self.volume_manager
+    }
+}
+
+impl Update for MultiChannelVolumeScene {
+    fn update(&mut self, _input: &Input) {
+        // todo: update camera
     }
 }
 
