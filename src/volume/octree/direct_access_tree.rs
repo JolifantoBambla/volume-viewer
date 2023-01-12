@@ -1,5 +1,7 @@
 use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
-use crate::volume::octree::{BrickCacheUpdateListener, MappedBrick, PageTableOctree, ResolutionMapping, UnmappedBrick};
+use crate::volume::octree::{
+    BrickCacheUpdateListener, MappedBrick, PageTableOctree, ResolutionMapping, UnmappedBrick,
+};
 use std::rc::Rc;
 
 /*
@@ -49,7 +51,10 @@ impl DirectAccessTree {}
 impl PageTableOctree for DirectAccessTree {
     type Node = Node;
 
-    fn new(subdivisions: &Rc<Vec<VolumeSubdivision>>, resolution_mapping: ResolutionMapping) -> Self {
+    fn new(
+        subdivisions: &Rc<Vec<VolumeSubdivision>>,
+        resolution_mapping: ResolutionMapping,
+    ) -> Self {
         Self {
             nodes: Self::create_nodes_from_subdivisions(subdivisions.as_slice()),
             subdivisions: subdivisions.clone(),
@@ -67,6 +72,11 @@ impl PageTableOctree for DirectAccessTree {
 
     fn resolution_mapping(&self) -> &ResolutionMapping {
         &self.resolution_mapping
+    }
+
+    fn set_resolution_mapping(&mut self, resolution_mapping: ResolutionMapping) {
+        // todo: update all nodes
+        self.resolution_mapping = resolution_mapping;
     }
 }
 

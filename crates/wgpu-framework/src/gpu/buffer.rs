@@ -6,6 +6,7 @@ use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{BufferAddress, BufferDescriptor, BufferUsages, Label};
 
+#[derive(Debug)]
 pub struct Buffer<T: bytemuck::Pod> {
     ctx: Arc<Gpu>,
     #[allow(unused)]
@@ -71,9 +72,13 @@ impl<T: bytemuck::Pod> Buffer<T> {
     }
 
     pub fn write_buffer(&self, data: &Vec<T>) {
+        self.write_buffer_with_offset(data.as_slice(), 0);
+    }
+
+    pub fn write_buffer_with_offset(&self, data: &[T], offset: BufferAddress) {
         self.ctx
             .queue()
-            .write_buffer(self.buffer(), 0, bytemuck::cast_slice(data.as_slice()));
+            .write_buffer(self.buffer(), offset, bytemuck::cast_slice(data));
     }
 
     pub fn buffer(&self) -> &wgpu::Buffer {

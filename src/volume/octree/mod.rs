@@ -1,10 +1,12 @@
 use crate::renderer::settings::ChannelSettings;
 use glam::UVec3;
+use std::cmp::min;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
-use wgpu::{BufferAddress, Queue};
+use wgpu::{BufferAddress, BufferUsages, Queue};
 use wgpu_framework::context::Gpu;
+use wgpu_framework::gpu::buffer::Buffer;
 
 use crate::resource::TypedBuffer;
 use crate::util::vec_hash_map::VecHashMap;
@@ -88,13 +90,7 @@ pub trait PageTableOctree: BrickCacheUpdateListener {
 
     fn resolution_mapping(&self) -> &ResolutionMapping;
 
-    fn write_to_buffer(&self, buffer: TypedBuffer<Self::Node>, offset: u32, queue: &Queue) {
-        queue.write_buffer(
-            buffer.buffer(),
-            offset as BufferAddress,
-            bytemuck::cast_slice(self.nodes().as_slice()),
-        );
-    }
+    fn set_resolution_mapping(&mut self, resolution_mapping: ResolutionMapping);
 
     fn map_to_subdivision_level(&self, level: usize) -> u32 {
         self.resolution_mapping().map_to_subdivision_level(level)
@@ -126,7 +122,11 @@ impl ResolutionMapping {
             // compare s and ds
             // if s <= ds: collect current_lod
             // else: collect next lod
-            while !reached_max_lod && s.shape().cmpgt(*data_subdivisions.get(current_lod as usize).unwrap()).any() {
+            while !reached_max_lod
+                && s.shape()
+                    .cmpgt(*data_subdivisions.get(current_lod as usize).unwrap())
+                    .any()
+            {
                 current_lod = max_lod.min(current_lod + 1);
                 reached_max_lod = current_lod == max_lod;
             }
@@ -155,7 +155,7 @@ pub struct MultiChannelPageTableOctreeDescriptor<'a> {
     pub volume: &'a BrickedMultiResolutionMultiVolumeMeta,
     pub channel_settings: &'a Vec<ChannelSettings>,
     pub brick_size: UVec3,
-    pub num_channels: u32,
+    pub max_num_channels: u32,
     pub visible_channels: Vec<u32>,
 }
 
@@ -171,6 +171,8 @@ pub struct MultiChannelPageTableOctree<Tree: PageTableOctree> {
     resolution_mappings: HashMap<u32, ResolutionMapping>,
     octrees: HashMap<u32, Tree>,
     visible_channels: Vec<u32>,
+    gpu_subdivisions: Rc<Buffer<VolumeSubdivision>>,
+    gpu_nodes: Rc<Buffer<Tree::Node>>,
 }
 
 impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
@@ -180,7 +182,6 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
             descriptor.brick_size,
         ));
 
-        // todo: each channel needs a mapping from real subdivisions to its own octree subdivisions
         // sorted from lowest to highest, just like subdivisions
         let data_set_subdivisions: Vec<UVec3> = descriptor
             .volume
@@ -207,9 +208,23 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
             // todo: pass channel lod mapping to tree constructor
             octrees.insert(
                 *c,
-                Tree::new(&subdivisions, resolution_mappings.remove(&c).unwrap().clone()),
+                Tree::new(
+                    &subdivisions,
+                    resolution_mappings.remove(&c).unwrap().clone(),
+                ),
             );
         }
+
+        let gpu_subdivisions =
+            Buffer::from_data("subdivisions", &subdivisions, BufferUsages::STORAGE, gpu);
+
+        // the buffer does not need to be initialized because all nodes are zero anyway
+        let gpu_buffer = Buffer::new_zeroed(
+            "octree",
+            descriptor.max_num_channels as usize,
+            BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            gpu,
+        );
 
         Self {
             gpu: gpu.clone(),
@@ -218,11 +233,23 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
             octrees,
             resolution_mappings,
             visible_channels: descriptor.visible_channels,
+            gpu_subdivisions: Rc::new(gpu_subdivisions),
+            gpu_nodes: Rc::new(gpu_buffer),
         }
     }
 
     pub fn on_resolution_mapping_updated(&mut self, channel: u32, min_lod: u32, max_lod: u32) {
-        todo!()
+        let resolution_mapping = ResolutionMapping::new(
+            self.subdivisions.as_slice(),
+            self.data_set_subdivisions.as_slice(),
+            min_lod,
+            max_lod,
+        );
+        self.assert_octree(channel);
+        self.octrees
+            .get_mut(&channel)
+            .unwrap()
+            .set_resolution_mapping(resolution_mapping);
     }
 
     pub fn assert_octree(&mut self, channel: u32) {
@@ -240,20 +267,22 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
     pub fn on_brick_cache_updated(&mut self, update_result: &BrickCacheUpdateResult) {
         for (channel, bricks) in update_result.mapped_bricks.iter() {
             self.assert_octree(*channel);
-            self.octrees.get_mut(channel).unwrap().on_mapped_bricks(bricks.as_slice());
+            self.octrees
+                .get_mut(channel)
+                .unwrap()
+                .on_mapped_bricks(bricks.as_slice());
         }
         for (channel, bricks) in update_result.unmapped_bricks.iter() {
             self.assert_octree(*channel);
-            self.octrees.get_mut(channel).unwrap().on_unmapped_bricks(bricks.as_slice());
+            self.octrees
+                .get_mut(channel)
+                .unwrap()
+                .on_unmapped_bricks(bricks.as_slice());
         }
 
         // todo: update GPU buffers (either only those portions that changed or all of them)
-        for _channel in self.visible_channels.iter() {
-            /*
-                self.octrees.get(c)
-                    .unwrap()
-                    .write_to_buffer();
-            */
+        for (offset, channel) in self.visible_channels.iter().enumerate() {
+            self.gpu_nodes.write_buffer_with_offset(self.octrees.get(channel).unwrap().nodes().as_slice(), offset as BufferAddress);
         }
     }
 
@@ -263,9 +292,17 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
             if let std::collections::hash_map::Entry::Vacant(e) = self.octrees.entry(c) {
                 e.insert(Tree::new(
                     &self.subdivisions,
-                    self.resolution_mappings.remove(&c).unwrap().clone()
+                    self.resolution_mappings.remove(&c).unwrap().clone(),
                 ));
             }
         }
+    }
+
+    pub fn gpu_subdivisions(&self) -> &Rc<Buffer<VolumeSubdivision>> {
+        &self.gpu_subdivisions
+    }
+
+    pub fn gpu_nodes(&self) -> &Rc<Buffer<Tree::Node>> {
+        &self.gpu_nodes
     }
 }
