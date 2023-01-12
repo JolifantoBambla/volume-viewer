@@ -14,7 +14,7 @@ use wgsl_preprocessor::WGSLPreprocessor;
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct ChannelSettings {
+pub struct GpuChannelSettings {
     pub color: Vec4,
     pub channel_index: u32,
     pub max_lod: u32,
@@ -26,7 +26,7 @@ pub struct ChannelSettings {
     pub lod_factor: f32,
 }
 
-impl From<&crate::renderer::settings::ChannelSettings> for ChannelSettings {
+impl From<&crate::renderer::settings::ChannelSettings> for GpuChannelSettings {
     fn from(settings: &crate::renderer::settings::ChannelSettings) -> Self {
         Self {
             color: Vec4::from(settings.color),

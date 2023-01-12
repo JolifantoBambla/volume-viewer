@@ -1,8 +1,11 @@
 pub mod renderer;
 pub mod scene;
 
+use crate::app::renderer::MultiChannelVolumeRenderer;
+use crate::app::scene::MultiChannelVolumeScene;
 use crate::event::handler::register_default_js_event_handlers;
 use crate::event::{ChannelSettingsChange, Event, SettingsChange};
+use crate::renderer::pass::ray_guided_dvr::GpuChannelSettings;
 use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
 use crate::resource::VolumeManager;
 use crate::util::vec::vec_equals;
@@ -18,13 +21,10 @@ use wgpu_framework::context::{ContextDescriptor, Gpu, SurfaceContext};
 use wgpu_framework::event::lifecycle::{OnCommandsSubmitted, PrepareRender, Update};
 use wgpu_framework::event::window::{OnResize, OnUserEvent, OnWindowEvent};
 use wgpu_framework::input::Input;
-use winit::event::{WindowEvent};
+use winit::event::WindowEvent;
 use winit::event_loop::EventLoop;
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
-use crate::app::renderer::MultiChannelVolumeRenderer;
-use crate::app::scene::MultiChannelVolumeScene;
-use crate::renderer::pass::ray_guided_dvr::ChannelSettings;
 
 /// The `GLOBAL_EVENT_LOOP_PROXY` is a means to send data to the running application.
 /// It is initialized by `start_event_loop`.
@@ -117,7 +117,7 @@ impl App {
             &render_settings,
             &wgsl_preprocessor,
             surface_configuration,
-            gpu
+            gpu,
         );
         let scene = MultiChannelVolumeScene::new(window_size, volume_manager);
 
@@ -137,7 +137,7 @@ impl App {
     fn map_channel_settings(
         &self,
         settings: &MultiChannelVolumeRendererSettings,
-    ) -> Vec<ChannelSettings> {
+    ) -> Vec<GpuChannelSettings> {
         let mut channel_settings = Vec::new();
         for (i, &channel) in self
             .channel_configuration
@@ -145,7 +145,7 @@ impl App {
             .iter()
             .enumerate()
         {
-            let mut cs = ChannelSettings::from(&settings.channel_settings[channel as usize]);
+            let mut cs = GpuChannelSettings::from(&settings.channel_settings[channel as usize]);
             cs.page_table_index = self.channel_configuration.channel_mapping[i];
             channel_settings.push(cs);
         }
@@ -193,7 +193,7 @@ impl GpuApp for App {
             &settings,
             &channel_settings,
             &input,
-            &mut encoder
+            &mut encoder,
         );
 
         // todo: process request & usage buffers

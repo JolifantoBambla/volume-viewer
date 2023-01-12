@@ -17,7 +17,7 @@ pub struct ResolutionMeta {
     #[serde(rename = "volumeSize")]
     pub volume_size: UVec3,
 
-    /// The size of the volume in voxels padded s.t. it is a multiple of `PageTableMeta::brick_size`.
+    /// The size of the volume in voxels padded s.t. it is a multiple of `BrickedMultiResolutionMultiVolumeMeta::brick_size`.
     #[serde(rename = "paddedVolumeSize")]
     pub padded_volume_size: UVec3,
 

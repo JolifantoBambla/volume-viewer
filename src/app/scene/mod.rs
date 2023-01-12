@@ -1,12 +1,14 @@
-use glam::{Mat4, UVec2, Vec2, Vec3};
-use winit::event::{ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
-use wgpu_framework::event::lifecycle::Update;
-use wgpu_framework::event::window::OnUserEvent;
-use wgpu_framework::input::Input;
-use crate::Event;
 use crate::renderer::camera::{Camera, CameraView, Projection};
 use crate::renderer::geometry::Bounds3D;
 use crate::resource::VolumeManager;
+use crate::Event;
+use glam::{Mat4, UVec2, Vec2, Vec3};
+use wgpu_framework::event::lifecycle::Update;
+use wgpu_framework::event::window::OnUserEvent;
+use wgpu_framework::input::Input;
+use winit::event::{
+    ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
+};
 
 // todo: refactor into camera's fields
 const TRANSLATION_SPEED: f32 = 5.0;
@@ -28,10 +30,7 @@ pub struct MultiChannelVolumeScene {
 }
 
 impl MultiChannelVolumeScene {
-    pub fn new(
-        window_size: UVec2,
-        volume_manager: VolumeManager,
-    ) -> Self {
+    pub fn new(window_size: UVec2, volume_manager: VolumeManager) -> Self {
         // TODO: use framework::camera instead
         // TODO: refactor these params
         let distance_from_center = 500.;
@@ -110,11 +109,11 @@ impl OnUserEvent for MultiChannelVolumeScene {
             Self::UserEvent::Window(event) => match event {
                 WindowEvent::KeyboardInput {
                     input:
-                    KeyboardInput {
-                        virtual_keycode: Some(virtual_keycode),
-                        state: ElementState::Pressed,
-                        ..
-                    },
+                        KeyboardInput {
+                            virtual_keycode: Some(virtual_keycode),
+                            state: ElementState::Pressed,
+                            ..
+                        },
                     ..
                 } => match virtual_keycode {
                     VirtualKeyCode::D => self.camera.view.move_right(TRANSLATION_SPEED),

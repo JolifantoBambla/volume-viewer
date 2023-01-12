@@ -1,7 +1,6 @@
 use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
-use crate::volume::octree::{
-    BrickCacheUpdateListener, MappedBrick, PageTableOctree, UnmappedBrick,
-};
+use crate::volume::octree::{BrickCacheUpdateListener, MappedBrick, PageTableOctree, ResolutionMapping, UnmappedBrick};
+use std::rc::Rc;
 
 /*
 #[modular_bitfield::bitfield]
@@ -41,6 +40,8 @@ pub struct Node {
 pub struct DirectAccessTree {
     #[allow(unused)]
     nodes: Vec<Node>,
+    subdivisions: Rc<Vec<VolumeSubdivision>>,
+    resolution_mapping: ResolutionMapping,
 }
 
 impl DirectAccessTree {}
@@ -48,24 +49,33 @@ impl DirectAccessTree {}
 impl PageTableOctree for DirectAccessTree {
     type Node = Node;
 
-    fn with_subdivisions(subdivisions: &[VolumeSubdivision]) -> Self {
-        let nodes = vec![Node::default(); total_number_of_nodes(subdivisions) as usize];
-        Self { nodes }
+    fn new(subdivisions: &Rc<Vec<VolumeSubdivision>>, resolution_mapping: ResolutionMapping) -> Self {
+        Self {
+            nodes: Self::create_nodes_from_subdivisions(subdivisions.as_slice()),
+            subdivisions: subdivisions.clone(),
+            resolution_mapping,
+        }
     }
 
     fn nodes(&self) -> &Vec<Self::Node> {
         &self.nodes
     }
+
+    fn subdivisions(&self) -> &Rc<Vec<VolumeSubdivision>> {
+        &self.subdivisions
+    }
+
+    fn resolution_mapping(&self) -> &ResolutionMapping {
+        &self.resolution_mapping
+    }
 }
 
 impl BrickCacheUpdateListener for DirectAccessTree {
-    fn on_mapped_bricks(&mut self, _bricks: &[MappedBrick]) {
-        // todo: map brick address to node address
-        // todo: handle empty bricks
+    fn on_mapped_bricks(&mut self, bricks: &[MappedBrick]) {
         todo!()
     }
 
-    fn on_unmapped_bricks(&mut self, _bricks: &[UnmappedBrick]) {
+    fn on_unmapped_bricks(&mut self, bricks: &[UnmappedBrick]) {
         todo!()
     }
 }

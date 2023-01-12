@@ -1,16 +1,19 @@
-use std::sync::Arc;
+use crate::app::scene::MultiChannelVolumeScene;
+use crate::renderer::pass::present_to_screen::PresentToScreen;
+use crate::renderer::pass::ray_guided_dvr::{GpuChannelSettings, RayGuidedDVR, Resources};
+use crate::renderer::pass::{present_to_screen, ray_guided_dvr, GPUPass};
+use crate::resource::VolumeManager;
+use crate::{resource, MultiChannelVolumeRendererSettings};
 use glam::UVec2;
-use wgpu::{BindGroup, Buffer, CommandEncoder, Extent3d, SamplerDescriptor, SurfaceConfiguration, TextureView};
+use std::sync::Arc;
 use wgpu::util::DeviceExt;
+use wgpu::{
+    BindGroup, Buffer, CommandEncoder, Extent3d, SamplerDescriptor, SurfaceConfiguration,
+    TextureView,
+};
 use wgpu_framework::context::Gpu;
 use wgpu_framework::input::Input;
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::renderer::pass::{GPUPass, present_to_screen, ray_guided_dvr};
-use crate::renderer::pass::present_to_screen::PresentToScreen;
-use crate::renderer::pass::ray_guided_dvr::{ChannelSettings, RayGuidedDVR, Resources};
-use crate::{MultiChannelVolumeRendererSettings, resource};
-use crate::app::scene::MultiChannelVolumeScene;
-use crate::resource::VolumeManager;
 
 #[derive(Debug)]
 pub struct MultiChannelVolumeRenderer {
@@ -31,7 +34,7 @@ impl MultiChannelVolumeRenderer {
         render_settings: &MultiChannelVolumeRendererSettings,
         wgsl_preprocessor: &WGSLPreprocessor,
         surface_configuration: &SurfaceConfiguration,
-        gpu: &Arc<Gpu>
+        gpu: &Arc<Gpu>,
     ) -> Self {
         let volume_render_result_extent = Extent3d {
             width: window_size.x,
@@ -70,10 +73,10 @@ impl MultiChannelVolumeRenderer {
         // channel settings are created for all channels s.t. the initial buffer size is large enough
         // (could also be achieved by just allocating for max visible channels -> maybe later during cleanup)
         // filtered channel settings are uploaded to gpu during update
-        let channel_settings: Vec<ChannelSettings> = render_settings
+        let channel_settings: Vec<GpuChannelSettings> = render_settings
             .channel_settings
             .iter()
-            .map(ChannelSettings::from)
+            .map(GpuChannelSettings::from)
             .collect();
         let volume_render_channel_settings_buffer =
             gpu.device()
@@ -115,7 +118,7 @@ impl MultiChannelVolumeRenderer {
         render_target: &TextureView,
         scene: &MultiChannelVolumeScene,
         settings: &MultiChannelVolumeRendererSettings,
-        channel_settings: &Vec<ChannelSettings>,
+        channel_settings: &Vec<GpuChannelSettings>,
         input: &Input,
         command_encoder: &mut CommandEncoder,
     ) {
@@ -142,7 +145,10 @@ impl MultiChannelVolumeRenderer {
             &self.volume_render_bind_group,
             &self.volume_render_result_extent,
         );
-        self.present_to_screen_pass
-            .encode(command_encoder, &self.present_to_screen_bind_group, render_target);
+        self.present_to_screen_pass.encode(
+            command_encoder,
+            &self.present_to_screen_bind_group,
+            render_target,
+        );
     }
 }
