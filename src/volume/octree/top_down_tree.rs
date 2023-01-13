@@ -96,6 +96,17 @@ pub struct TopDownTree {
     resolution_mapping: ResolutionMapping,
 }
 
+impl TopDownTree {
+    fn nodes_mut(&mut self) -> &mut Vec<Node> {
+        &mut self.nodes
+    }
+
+    // todo: move this into PageTableOctree and only access nodes through this (allows for implementation backed by one large array of nodes for all channels & also for implementation backed by one array of nodes for each channel)
+    fn node_mut(&mut self, node_index: usize) -> Option<&mut Node> {
+        self.nodes.get_mut(node_index)
+    }
+}
+
 impl PageTableOctree for TopDownTree {
     type Node = Node;
 
@@ -137,6 +148,20 @@ impl BrickCacheUpdateListener for TopDownTree {
         //  - starting from the highest level, pushing nodes to process into a queue
         //  - processing this queue
 
+        /*
+        Something like this:
+        Map nodes:
+        Iterate over sorted keys (min = highest to max=lowest)
+        From highest res to lowest res:
+        mark node as mapped and push parentnodes into hashmap<parentnodeindex, set<subtreeindex>
+
+        sort hashmap keys from highest to lowest
+        And iterate:
+        Set all subtrees in set as mapped
+        If no subtree was mapped before:
+        Push hashmap<parentnodeindex, subtreeindex>
+         */
+
         // todo: adapt to changes (i.e. bricks is a vechashmap now)
         // todo: this might need to map more nodes if multiple nodes map to the same level
         for b in bricks.get(&0).unwrap() {
@@ -149,8 +174,7 @@ impl BrickCacheUpdateListener for TopDownTree {
             let level = self.map_to_subdivision_level(b.global_address.channel as usize);
             let subdivision = self.subdivisions.get(level).unwrap();
             let node_index = subdivision.to_node_index(normalized_address);
-            self.nodes
-                .get_mut(node_index)
+            self.node_mut(node_index)
                 .unwrap()
                 .set_mapped(b.min, b.max);
 
@@ -160,9 +184,7 @@ impl BrickCacheUpdateListener for TopDownTree {
                     let level_subdivision = self.subdivisions.get(l).unwrap();
                     let level_node_index = level_subdivision.to_node_index(normalized_address);
                     let subtree_index = 1 << (child_node_index - level_node_index * 8) as u8;
-                    if !self
-                        .nodes
-                        .get_mut(level_node_index)
+                    if !self.node_mut(level_node_index)
                         .unwrap()
                         .set_subtree_mapped(subtree_index)
                     {
@@ -188,7 +210,7 @@ impl BrickCacheUpdateListener for TopDownTree {
             let level = self.map_to_subdivision_level(b.global_address.channel as usize);
             let subdivision = self.subdivisions.get(level).unwrap();
             let node_index = subdivision.to_node_index(normalized_address);
-            let unmapped = self.nodes.get_mut(node_index).unwrap().set_unmapped();
+            let unmapped = self.node_mut(node_index).unwrap().set_unmapped();
 
             if unmapped && level > 0 {
                 let mut child_node_index = node_index;
@@ -196,9 +218,7 @@ impl BrickCacheUpdateListener for TopDownTree {
                     let level_subdivision = self.subdivisions.get(l).unwrap();
                     let level_node_index = level_subdivision.to_node_index(normalized_address);
                     let subtree_index = 1 << (child_node_index - level_node_index * 8) as u8;
-                    if !self
-                        .nodes
-                        .get_mut(level_node_index)
+                    if !self.node_mut(level_node_index)
                         .unwrap()
                         .set_subtree_unmapped(subtree_index)
                     {
