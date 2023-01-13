@@ -1,6 +1,7 @@
 use std::fmt;
+use serde::Deserialize;
 use wasm_bindgen::{JsCast, JsValue};
-use web_sys::{CustomEvent, KeyboardEvent, MouseEvent, WheelEvent};
+use web_sys::CustomEvent;
 use winit::dpi::{LogicalPosition, PhysicalPosition};
 use winit::event::{
     DeviceId, ElementState, KeyboardInput, MouseButton, MouseScrollDelta, TouchPhase,
@@ -8,6 +9,88 @@ use winit::event::{
 };
 
 use crate::event::Event;
+
+#[derive(Clone, Debug, Deserialize)]
+struct MouseEvent {
+    #[serde(rename = "type")]
+    type_: String,
+    button: i16,
+}
+
+impl MouseEvent {
+    pub fn type_(&self) -> &str {
+        &self.type_
+    }
+    pub fn button(&self) -> i16 {
+        self.button
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct CursorEvent {
+    #[serde(rename = "type")]
+    type_: String,
+    #[serde(rename = "clientX")]
+    client_x: i32,
+    #[serde(rename = "clientY")]
+    client_y: i32,
+}
+
+impl CursorEvent {
+    pub fn type_(&self) -> &str {
+        &self.type_
+    }
+    pub fn client_x(&self) -> i32 {
+        self.client_x
+    }
+    pub fn client_y(&self) -> i32 {
+        self.client_y
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct WheelEvent {
+    #[serde(rename = "type")]
+    type_: String,
+    #[serde(rename = "deltaX")]
+    delta_x: f64,
+    #[serde(rename = "deltaY")]
+    delta_y: f64,
+    #[serde(rename = "deltaMode")]
+    delta_mode: u32,
+}
+
+impl WheelEvent {
+    pub fn type_(&self) -> &str {
+        &self.type_
+    }
+    pub fn delta_x(&self) -> f64 {
+        self.delta_x
+    }
+    pub fn delta_y(&self) -> f64 {
+        self.delta_y
+    }
+    pub fn delta_mode(&self) -> u32 {
+        self.delta_mode
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct KeyboardEvent {
+    #[serde(rename = "type")]
+    type_: String,
+    #[serde(rename = "key")]
+    key: String,
+}
+
+impl KeyboardEvent {
+    pub fn type_(&self) -> &str {
+        &self.type_
+    }
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ConversionError {
@@ -26,13 +109,22 @@ impl fmt::Display for ConversionError {
 }
 
 pub fn convert_js_event<T>(js_event: JsValue) -> Result<Event<T>, ConversionError> {
-    let event = js_event.unchecked_into::<web_sys::Event>();
+    let event = js_event.clone().unchecked_into::<web_sys::Event>();
     match event.type_().as_str() {
-        "mousedown" | "mouseup" => convert_mouse_input_event(event.unchecked_into::<MouseEvent>()),
-        "mousemove" => convert_cursor_moved_event(event.unchecked_into::<MouseEvent>()),
-        "wheel" => convert_mouse_wheel_event(event.unchecked_into::<WheelEvent>()),
+        "mousedown" | "mouseup" => {
+            if let Ok(mouse_event) = serde_wasm_bindgen::from_value(js_event) {
+                convert_mouse_input_event(mouse_event)
+            } else {
+                Err(ConversionError {
+                    event_type: event.type_(),
+                    message: "Could not convert event".to_string(),
+                })
+            }
+        }
+        "mousemove" => convert_cursor_moved_event(serde_wasm_bindgen::from_value(js_event).unwrap()),
+        "wheel" => convert_mouse_wheel_event(serde_wasm_bindgen::from_value(js_event).unwrap()),
         "keydown" | "keypress" | "keyup" => {
-            convert_keyboard_event(event.unchecked_into::<KeyboardEvent>())
+            convert_keyboard_event(serde_wasm_bindgen::from_value(js_event).unwrap())
         }
         "rendersettings" => convert_render_settings_event(event.unchecked_into::<CustomEvent>()),
         _ => Err(ConversionError {
@@ -42,24 +134,24 @@ pub fn convert_js_event<T>(js_event: JsValue) -> Result<Event<T>, ConversionErro
     }
 }
 
-pub fn convert_mouse_input_event<T>(event: MouseEvent) -> Result<Event<T>, ConversionError> {
+fn convert_mouse_input_event<T>(event: MouseEvent) -> Result<Event<T>, ConversionError> {
     let button = match event.button() {
         0 => MouseButton::Left,
         1 => MouseButton::Middle,
         2 => MouseButton::Right,
         _ => {
             return Err(ConversionError {
-                event_type: event.type_(),
+                event_type: event.type_().to_string(),
                 message: "Unsupported mouse button".to_string(),
             })
         }
     };
-    let state = match event.type_().as_str() {
+    let state = match event.type_() {
         "mousedown" => ElementState::Pressed,
         "mouseup" => ElementState::Released,
         _ => {
             return Err(ConversionError {
-                event_type: event.type_(),
+                event_type: event.type_().to_string(),
                 message: "Unsupported event type".to_string(),
             })
         }
@@ -73,7 +165,7 @@ pub fn convert_mouse_input_event<T>(event: MouseEvent) -> Result<Event<T>, Conve
     }))
 }
 
-pub fn convert_cursor_moved_event<T>(event: MouseEvent) -> Result<Event<T>, ConversionError> {
+fn convert_cursor_moved_event<T>(event: CursorEvent) -> Result<Event<T>, ConversionError> {
     #[allow(deprecated)]
     Ok(Event::Window(WindowEvent::CursorMoved {
         device_id: unsafe { DeviceId::dummy() },
@@ -85,19 +177,19 @@ pub fn convert_cursor_moved_event<T>(event: MouseEvent) -> Result<Event<T>, Conv
     }))
 }
 
-pub fn convert_mouse_wheel_event<T>(event: WheelEvent) -> Result<Event<T>, ConversionError> {
+fn convert_mouse_wheel_event<T>(event: WheelEvent) -> Result<Event<T>, ConversionError> {
     let x = -event.delta_x();
     let y = -event.delta_y();
 
     let delta = match event.delta_mode() {
-        WheelEvent::DOM_DELTA_LINE => MouseScrollDelta::LineDelta(x as f32, y as f32),
-        WheelEvent::DOM_DELTA_PIXEL => {
+        1 => MouseScrollDelta::LineDelta(x as f32, y as f32),
+        0 => {
             let delta = LogicalPosition::new(x, y).to_physical(1.);
             MouseScrollDelta::PixelDelta(delta)
         }
         _ => {
             return Err(ConversionError {
-                event_type: event.type_(),
+                event_type: event.type_().to_string(),
                 message: "Unsupported delta mode".to_string(),
             })
         }
@@ -111,22 +203,18 @@ pub fn convert_mouse_wheel_event<T>(event: WheelEvent) -> Result<Event<T>, Conve
     }))
 }
 
-pub fn convert_keyboard_event<T>(event: KeyboardEvent) -> Result<Event<T>, ConversionError> {
-    let scan_code = match event.key_code() {
-        0 => event.char_code(),
-        i => i,
-    };
-    let state = match event.type_().as_str() {
+fn convert_keyboard_event<T>(event: KeyboardEvent) -> Result<Event<T>, ConversionError> {
+    let state = match event.type_() {
         "keydown" | "keypress" => ElementState::Pressed,
         "keyup" => ElementState::Released,
         _ => {
             return Err(ConversionError {
-                event_type: event.type_(),
+                event_type: event.type_().to_string(),
                 message: "Unsupported event type".to_string(),
             })
         }
     };
-    let virtual_keycode = match &event.code()[..] {
+    let virtual_keycode = match event.key() {
         "Digit1" => VirtualKeyCode::Key1,
         "Digit2" => VirtualKeyCode::Key2,
         "Digit3" => VirtualKeyCode::Key3,
@@ -286,8 +374,8 @@ pub fn convert_keyboard_event<T>(event: KeyboardEvent) -> Result<Event<T>, Conve
         "Yen" => VirtualKeyCode::Yen,
         _ => {
             return Err(ConversionError {
-                event_type: event.type_(),
-                message: "Unsupported key code".to_string(),
+                event_type: event.type_().to_string(),
+                message: format!("Unsupported key code: {}", event.key()),
             })
         }
     };
@@ -295,7 +383,7 @@ pub fn convert_keyboard_event<T>(event: KeyboardEvent) -> Result<Event<T>, Conve
     Ok(Event::Window(WindowEvent::KeyboardInput {
         device_id: unsafe { DeviceId::dummy() },
         input: KeyboardInput {
-            scancode: scan_code,
+            scancode: 0, // charCode is deprecated...
             state,
             virtual_keycode: Some(virtual_keycode),
             modifiers: Default::default(),
@@ -304,7 +392,7 @@ pub fn convert_keyboard_event<T>(event: KeyboardEvent) -> Result<Event<T>, Conve
     }))
 }
 
-pub fn convert_render_settings_event<T>(event: CustomEvent) -> Result<Event<T>, ConversionError> {
+fn convert_render_settings_event<T>(event: CustomEvent) -> Result<Event<T>, ConversionError> {
     // event.detail.setting & event.detail.value
     let detail = serde_wasm_bindgen::from_value(event.detail());
     if let Ok(detail) = detail {

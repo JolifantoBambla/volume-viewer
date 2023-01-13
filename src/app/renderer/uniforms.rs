@@ -51,7 +51,7 @@ pub struct CameraUniform {
 impl CameraUniform {
     pub fn new(view: Mat4, projection: Mat4, camera_type: u32) -> Self {
         Self {
-            transform: TransformUniform::from_object_to_world(view),
+            transform: TransformUniform::from_world_to_object(view),
             projection,
             inverse_projection: projection.inverse(),
             camera_type,
@@ -69,8 +69,7 @@ impl Default for CameraUniform {
 impl From<&OrbitCamera> for CameraUniform {
     fn from(value: &OrbitCamera) -> Self {
         Self::new(
-            // todo: thats weird -> shader uses wrong matrix?
-            value.view().inverse(),
+            value.view(),
             value.projection(),
             value.is_orthographic() as u32,
         )
