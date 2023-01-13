@@ -105,3 +105,9 @@ impl<T: bytemuck::Pod> Buffer<T> {
         self.usage().contains(usage)
     }
 }
+
+impl<T> Drop for Buffer<T> {
+    fn drop(&mut self) {
+        self.buffer.destroy();
+    }
+}
