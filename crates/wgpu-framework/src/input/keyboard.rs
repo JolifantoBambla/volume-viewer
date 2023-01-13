@@ -51,10 +51,13 @@ impl Keyboard {
                 },
                 ..
             } => {
-                if *state == ElementState::Pressed {
-                    self.pressed_keys.insert(*virtual_keycode);
-                } else {
-                    self.pressed_keys.remove(virtual_keycode);
+                match state {
+                    ElementState::Pressed => {
+                        self.pressed_keys.insert(*virtual_keycode);
+                    },
+                    ElementState::Released => {
+                        self.pressed_keys.remove(virtual_keycode);
+                    }
                 }
                 let keyboard_event = KeyboardEvent {
                     key: *virtual_keycode,
