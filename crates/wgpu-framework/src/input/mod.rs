@@ -1,9 +1,9 @@
 use crate::event::window::{OnResize, OnWindowEvent};
 use crate::input::frame::Frame;
+use crate::input::keyboard::{Keyboard, KeyboardEvent};
 use crate::input::mouse::{Mouse, MouseEvent};
 use crate::input::time::Time;
 use winit::event::WindowEvent;
-use crate::input::keyboard::{Keyboard, KeyboardEvent};
 
 pub mod frame;
 pub mod keyboard;

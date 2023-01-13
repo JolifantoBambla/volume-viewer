@@ -1,11 +1,10 @@
-use crate::util::extent::{ToNormalizedAddress, ToSubscript};
-use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
+use crate::util::vec_hash_map::VecHashMap;
+use crate::volume::octree::subdivision::VolumeSubdivision;
 use crate::volume::octree::{
     BrickCacheUpdateListener, MappedBrick, PageTableOctree, ResolutionMapping, UnmappedBrick,
 };
 use glam::UVec3;
 use std::rc::Rc;
-use crate::util::vec_hash_map::VecHashMap;
 
 /*
 #[modular_bitfield::bitfield]

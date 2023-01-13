@@ -69,7 +69,7 @@ impl WGSLPreprocessor {
                     }
 
                     if let Some(source) = self.include_files.get(identifier) {
-                        include_stack.push(&*identifier);
+                        include_stack.push(identifier);
                         source_stack.push(lines);
                         source_stack.push(source.lines().enumerate());
                         resolved = false;

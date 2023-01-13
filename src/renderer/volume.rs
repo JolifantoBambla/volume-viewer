@@ -1,7 +1,7 @@
-use crate::renderer::geometry::Bounds3D;
 use wgpu::Extent3d;
+use wgpu_framework::geometry::bounds::Bounds3;
 
-pub type AABB = Bounds3D;
+pub type AABB = Bounds3;
 
 #[readonly::make]
 pub struct RawVolumeBlock {

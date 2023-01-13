@@ -39,7 +39,7 @@ pub fn url() -> String {
 pub fn get_element_by_id(id: &str) -> Element {
     document()
         .get_element_by_id(id)
-        .unwrap_or_else(|| panic!("document has no element with id {}", id))
+        .unwrap_or_else(|| panic!("document has no element with id {id}"))
 }
 
 #[inline]
@@ -47,7 +47,7 @@ pub fn get_input_element_by_id(id: &str) -> HtmlInputElement {
     get_element_by_id(id)
         .dyn_into::<HtmlInputElement>()
         .map_err(|_| ())
-        .unwrap_or_else(|_| panic!("element with id {} was no input element", id))
+        .unwrap_or_else(|_| panic!("element with id {id} was no input element"))
 }
 
 #[inline]
@@ -55,7 +55,7 @@ pub fn get_canvas_by_id(id: &str) -> HtmlCanvasElement {
     get_element_by_id(id)
         .dyn_into::<HtmlCanvasElement>()
         .map_err(|_| ())
-        .unwrap_or_else(|_| panic!("element with id {} was no canvas", id))
+        .unwrap_or_else(|_| panic!("element with id {id} was no canvas"))
 }
 
 /// Attaches a given HtmlCanvasElement to the document.

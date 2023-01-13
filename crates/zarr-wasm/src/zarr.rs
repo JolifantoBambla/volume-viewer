@@ -119,7 +119,7 @@ pub enum DimensionArraySelection {
     Separator,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize)]
 pub struct GetOptions {
     #[serde(rename = "concurrencyLimit")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -129,15 +129,6 @@ pub struct GetOptions {
     #[serde(rename = "progressCallback")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress_callback: Option<String>,
-}
-
-impl Default for GetOptions {
-    fn default() -> Self {
-        Self {
-            concurrency_limit: None,
-            progress_callback: None,
-        }
-    }
 }
 
 #[wasm_bindgen(module = "https://cdn.skypack.dev/zarr")]

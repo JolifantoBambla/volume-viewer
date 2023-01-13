@@ -44,17 +44,18 @@ impl Keyboard {
     pub fn handle_event(&mut self, event: &WindowEvent) -> Option<KeyboardEvent> {
         match event {
             WindowEvent::KeyboardInput {
-                input: KeyboardInput {
-                    virtual_keycode: Some(virtual_keycode),
-                    state,
-                    ..
-                },
+                input:
+                    KeyboardInput {
+                        virtual_keycode: Some(virtual_keycode),
+                        state,
+                        ..
+                    },
                 ..
             } => {
                 match state {
                     ElementState::Pressed => {
                         self.pressed_keys.insert(*virtual_keycode);
-                    },
+                    }
                     ElementState::Released => {
                         self.pressed_keys.remove(virtual_keycode);
                     }
@@ -65,8 +66,8 @@ impl Keyboard {
                     other_pressed_keys: self.pressed_keys.clone(),
                 };
                 Some(keyboard_event)
-            },
-            _ => None
+            }
+            _ => None,
         }
     }
 }

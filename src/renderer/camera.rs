@@ -1,5 +1,5 @@
-use crate::renderer::geometry::{Bounds2D, Bounds3D};
 use glam::{Mat3, Mat4, UVec3, Vec2, Vec3};
+use wgpu_framework::geometry::bounds::{Bounds, Bounds2, Bounds3};
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -219,14 +219,14 @@ pub struct Projection {
 }
 
 impl Projection {
-    pub fn new_orthographic(frustum: Bounds3D) -> Self {
+    pub fn new_orthographic(frustum: Bounds3) -> Self {
         let projection = Mat4::orthographic_rh(
-            frustum.min.x,
-            frustum.max.x,
-            frustum.min.y,
-            frustum.max.y,
-            frustum.min.z,
-            frustum.max.z,
+            frustum.min().x,
+            frustum.max().x,
+            frustum.min().y,
+            frustum.max().y,
+            frustum.min().z,
+            frustum.max().z,
         );
         Self {
             projection,
@@ -287,15 +287,15 @@ impl Camera {
     }
 }
 
-pub fn compute_screen_to_raster(raster_resolution: Vec2, screen_size: Option<Bounds2D>) -> Mat4 {
+pub fn compute_screen_to_raster(raster_resolution: Vec2, screen_size: Option<Bounds2>) -> Mat4 {
     let screen = if let Some(screen_size) = screen_size {
         screen_size
     } else {
         let aspect_ratio = raster_resolution.x / raster_resolution.y;
         if aspect_ratio > 1. {
-            Bounds2D::new(Vec2::new(-aspect_ratio, -1.0), Vec2::new(aspect_ratio, 1.0))
+            Bounds2::new(Vec2::new(-aspect_ratio, -1.0), Vec2::new(aspect_ratio, 1.0))
         } else {
-            Bounds2D::new(
+            Bounds2::new(
                 Vec2::new(-1.0, -1.0 / aspect_ratio),
                 Vec2::new(1.0, 1.0 / aspect_ratio),
             )
@@ -303,18 +303,18 @@ pub fn compute_screen_to_raster(raster_resolution: Vec2, screen_size: Option<Bou
     };
     glam::Mat4::from_scale(raster_resolution.extend(1.0))
         .mul_mat4(&glam::Mat4::from_scale(glam::Vec3::new(
-            1.0 / (screen.max.x - screen.min.x),
-            1.0 / (screen.min.y - screen.max.y),
+            1.0 / (screen.max().x - screen.min().x),
+            1.0 / (screen.min().y - screen.max().y),
             1.0,
         )))
         .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(
-            -screen.min.x,
-            -screen.max.y,
+            -screen.min().x,
+            -screen.max().y,
             0.,
         )))
 }
 
-pub fn compute_raster_to_screen(raster_resolution: Vec2, screen_size: Option<Bounds2D>) -> Mat4 {
+pub fn compute_raster_to_screen(raster_resolution: Vec2, screen_size: Option<Bounds2>) -> Mat4 {
     compute_screen_to_raster(raster_resolution, screen_size).inverse()
 }
 

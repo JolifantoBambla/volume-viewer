@@ -6,5 +6,3 @@ pub mod to_bytes;
 pub mod transmute;
 pub mod vec;
 pub mod vec_hash_map;
-pub mod web;
-pub mod window;

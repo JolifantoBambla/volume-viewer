@@ -31,12 +31,12 @@ impl GpuMesh {
     ) -> Self {
         let indices: Vec<u32> = faces.iter().flatten().cloned().collect();
         let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Label::from(format!("Index buffer [{}]", name).as_str()),
+            label: Label::from(format!("Index buffer [{name}]").as_str()),
             contents: bytemuck::cast_slice(indices.as_slice()),
             usage: BufferUsages::INDEX,
         });
         let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Label::from(format!("Vertex buffer [{}]", name).as_str()),
+            label: Label::from(format!("Vertex buffer [{name}]").as_str()),
             contents: bytemuck::cast_slice(vertices.as_slice()),
             usage: BufferUsages::VERTEX,
         });

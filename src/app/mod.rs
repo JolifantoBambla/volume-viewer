@@ -192,7 +192,7 @@ impl GpuApp for App {
             &self.scene,
             &settings,
             &channel_settings,
-            &input,
+            input,
             &mut encoder,
         );
 

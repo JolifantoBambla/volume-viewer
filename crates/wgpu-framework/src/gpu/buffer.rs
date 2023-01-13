@@ -106,7 +106,7 @@ impl<T: bytemuck::Pod> Buffer<T> {
     }
 }
 
-impl<T> Drop for Buffer<T> {
+impl<T: bytemuck::Pod> Drop for Buffer<T> {
     fn drop(&mut self) {
         self.buffer.destroy();
     }

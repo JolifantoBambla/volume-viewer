@@ -44,13 +44,13 @@ impl<T: bytemuck::Pod> GpuList<T> {
             written_at: 0,
         };
         let list_buffer = TypedBuffer::new_zeroed(
-            format!("{} [list]", label).as_str(),
+            format!("{label} [list]").as_str(),
             capacity as usize,
             BufferUsages::STORAGE | BufferUsages::COPY_SRC,
             ctx.device(),
         );
         let meta_buffer = TypedBuffer::new_single_element(
-            format!("{} [meta]", label).as_str(),
+            format!("{label} [meta]").as_str(),
             meta,
             BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
             ctx.device(),

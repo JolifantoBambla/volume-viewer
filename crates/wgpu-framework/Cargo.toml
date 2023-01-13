@@ -14,7 +14,7 @@ default = ["console_error_panic_hook"]
 
 [dependencies]
 bytemuck = { version = "1.4", features = ["derive"] }
-glam = { version = "0.20.2", features = ["bytemuck", "serde"] }
+glam = { version = "0.22.0", features = ["bytemuck", "serde"] }
 instant = "0.1.12"
 log = "0.4.6"
 obj-rs = "0.7.0"

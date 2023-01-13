@@ -1,10 +1,10 @@
 use crate::renderer::camera::{Camera, CameraView, Projection};
-use crate::renderer::geometry::Bounds3D;
 use crate::resource::VolumeManager;
 use crate::Event;
 use glam::{Mat4, UVec2, Vec2, Vec3};
 use wgpu_framework::event::lifecycle::Update;
 use wgpu_framework::event::window::OnUserEvent;
+use wgpu_framework::geometry::bounds::Bounds3;
 use wgpu_framework::input::Input;
 use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
@@ -41,7 +41,7 @@ impl MultiChannelVolumeScene {
             NEAR,
             FAR,
         );
-        let orthographic = Projection::new_orthographic(Bounds3D::new(
+        let orthographic = Projection::new_orthographic(Bounds3::new(
             (resolution * -0.5).extend(NEAR),
             (resolution * 0.5).extend(FAR),
         ));
@@ -104,9 +104,8 @@ impl OnUserEvent for MultiChannelVolumeScene {
     type UserEvent = Event<()>;
 
     fn on_user_event(&mut self, event: &Self::UserEvent) {
-        match event {
-            // todo: use input & update instead
-            Self::UserEvent::Window(event) => match event {
+        if let Self::UserEvent::Window(event) = event {
+            match event {
                 WindowEvent::KeyboardInput {
                     input:
                         KeyboardInput {
@@ -164,8 +163,7 @@ impl OnUserEvent for MultiChannelVolumeScene {
                     _ => {}
                 },
                 _ => {}
-            },
-            _ => {}
+            }
         }
     }
 }

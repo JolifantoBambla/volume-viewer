@@ -1,14 +1,12 @@
 use crate::renderer::settings::ChannelSettings;
 use glam::UVec3;
-use std::cmp::min;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
-use wgpu::{BufferAddress, BufferUsages, Queue};
+use wgpu::{BufferAddress, BufferUsages};
 use wgpu_framework::context::Gpu;
 use wgpu_framework::gpu::buffer::Buffer;
 
-use crate::resource::TypedBuffer;
 use crate::util::vec_hash_map::VecHashMap;
 use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
 use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
@@ -56,8 +54,14 @@ pub struct BrickCacheUpdateResult {
 }
 
 impl BrickCacheUpdateResult {
-    pub fn new(mapped_bricks: HashMap<u32, VecHashMap<u32, MappedBrick>>, unmapped_bricks: HashMap<u32, VecHashMap<u32, UnmappedBrick>>) -> Self {
-        Self { mapped_bricks, unmapped_bricks }
+    pub fn new(
+        mapped_bricks: HashMap<u32, VecHashMap<u32, MappedBrick>>,
+        unmapped_bricks: HashMap<u32, VecHashMap<u32, UnmappedBrick>>,
+    ) -> Self {
+        Self {
+            mapped_bricks,
+            unmapped_bricks,
+        }
     }
 }
 
@@ -94,9 +98,16 @@ pub trait PageTableOctree: BrickCacheUpdateListener {
 
 #[derive(Clone, Debug)]
 pub struct ResolutionMapping {
+    /// The minimum (i.e., lowest) resolution level in the data set.
     min_resolution: u32,
+
+    /// The maximum (i.e., highest) resolution level in the data set.
     max_resolution: u32,
+
+    /// Maps resolution levels in the octree to their corresponding resolution levels in the data set.
     octree_to_dataset: Vec<usize>,
+
+    /// Maps resolution levels in the data set to one ore more resolution levels in the octree.
     dataset_to_octree: VecHashMap<usize, usize>,
 }
 
@@ -142,11 +153,14 @@ impl ResolutionMapping {
     }
 
     fn map_to_dataset_level(&self, octree_level: usize) -> usize {
-        *self.octree_to_dataset.get(octree_level).unwrap() as usize
+        *self.octree_to_dataset.get(octree_level).unwrap()
     }
 
     fn map_to_octree_subdivision_level(&self, dataset_level: usize) -> &[usize] {
-        self.dataset_to_octree.get(&dataset_level).unwrap().as_slice()
+        self.dataset_to_octree
+            .get(&dataset_level)
+            .unwrap()
+            .as_slice()
     }
 }
 
@@ -160,23 +174,34 @@ impl PartialEq for ResolutionMapping {
 pub struct MultiChannelPageTableOctreeDescriptor<'a> {
     pub volume: &'a BrickedMultiResolutionMultiVolumeMeta,
     pub channel_settings: &'a Vec<ChannelSettings>,
+
+    /// The brick size of
     pub brick_size: UVec3,
+
+    /// The maximum number of channels that can be represented on the GPU.
+    /// Whether this number of channels is used or not, this determines the GPU memory that is
+    /// allocated for this octree.
     pub max_num_channels: u32,
+
+    /// A sorted list of visible channels.
     pub visible_channels: Vec<u32>,
 }
 
-#[derive(Debug)]
-struct GpuData {}
-
 #[derive(Clone, Debug)]
 pub struct MultiChannelPageTableOctree<Tree: PageTableOctree> {
-    #[allow(unused)]
     gpu: Arc<Gpu>,
+
     subdivisions: Rc<Vec<VolumeSubdivision>>,
+
     data_subdivisions: Rc<Vec<UVec3>>,
+
     resolution_mappings: HashMap<u32, ResolutionMapping>,
+
     octrees: HashMap<u32, Tree>,
+
+    /// A sorted list of visible channels.
     visible_channels: Vec<u32>,
+
     gpu_subdivisions: Rc<Buffer<VolumeSubdivision>>,
     gpu_nodes: Rc<Buffer<Tree::Node>>,
 }
@@ -219,7 +244,7 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
                 Tree::new(
                     &subdivisions,
                     &data_subdivisions,
-                    resolution_mappings.remove(&c).unwrap().clone(),
+                    resolution_mappings.remove(c).unwrap().clone(),
                 ),
             );
         }
@@ -262,15 +287,12 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
     }
 
     pub fn assert_octree(&mut self, channel: u32) {
-        if !self.octrees.contains_key(&channel) {
-            self.octrees.insert(
-                channel,
-                Tree::new(
-                    &self.subdivisions,
-                    &self.data_subdivisions,
-                    self.resolution_mappings.remove(&channel).unwrap().clone(),
-                ),
-            );
+        if let std::collections::hash_map::Entry::Vacant(e) = self.octrees.entry(channel) {
+            e.insert(Tree::new(
+                &self.subdivisions,
+                &self.data_subdivisions,
+                self.resolution_mappings.remove(&channel).unwrap(),
+            ));
         }
     }
 
@@ -306,7 +328,7 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
                 e.insert(Tree::new(
                     &self.subdivisions,
                     &self.data_subdivisions,
-                    self.resolution_mappings.remove(&c).unwrap().clone(),
+                    self.resolution_mappings.remove(&c).unwrap(),
                 ));
             }
         }

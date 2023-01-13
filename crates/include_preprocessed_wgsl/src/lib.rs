@@ -69,7 +69,7 @@ pub fn include_preprocessed(input: TokenStream) -> TokenStream {
 
     println!("env: {}!!!", env!("WGSL_RELATIVE_INCLUDE_DIRS"));
 
-    format!("{{ include_str!(\"{}\"); {:?} }}", file_path, preprocessed)
+    format!("{{ include_str!(\"{file_path}\"); {preprocessed:?} }}")
         .parse()
         .expect("Cannot format return preprocessed WGSL source")
 }

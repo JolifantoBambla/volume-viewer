@@ -1,11 +1,11 @@
-use crate::util::extent::{ToNormalizedAddress, ToSubscript};
-use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
+use crate::util::extent::ToNormalizedAddress;
+use crate::util::vec_hash_map::VecHashMap;
+use crate::volume::octree::subdivision::VolumeSubdivision;
 use crate::volume::octree::{
     BrickCacheUpdateListener, MappedBrick, PageTableOctree, ResolutionMapping, UnmappedBrick,
 };
 use glam::UVec3;
 use std::rc::Rc;
-use crate::util::vec_hash_map::VecHashMap;
 
 /*
 #[modular_bitfield::bitfield]
@@ -188,10 +188,7 @@ impl BrickCacheUpdateListener for TopDownTree {
             let level = self.map_to_subdivision_level(b.global_address.channel as usize);
             let subdivision = self.subdivisions.get(level).unwrap();
             let node_index = subdivision.to_node_index(normalized_address);
-            let unmapped = self.nodes
-                .get_mut(node_index)
-                .unwrap()
-                .set_unmapped();
+            let unmapped = self.nodes.get_mut(node_index).unwrap().set_unmapped();
 
             if unmapped && level > 0 {
                 let mut child_node_index = node_index;

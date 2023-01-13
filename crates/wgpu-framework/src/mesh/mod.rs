@@ -289,10 +289,7 @@ impl<V: FromPositionNormalTextureCoordinates + Position> Mesh<V> {
         }
 
         Self::new(
-            format!(
-                "Cylinder (r={}, h={}, centered={})",
-                radius, height, centered
-            ),
+            format!("Cylinder (r={radius}, h={height}, centered={centered})"),
             faces,
             vertices,
         )

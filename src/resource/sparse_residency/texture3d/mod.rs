@@ -298,17 +298,15 @@ impl VolumeManager {
                                     .map_brick(&local_address, &brick_location);
                                 self.cached_bricks.insert(brick_id);
 
-                                if !mapped_bricks.contains_key(&global_address.channel) {
-                                    mapped_bricks.insert(
-                                        global_address.channel,
-                                        VecHashMap::new(),
-                                    );
-                                }
-                                mapped_bricks.get_mut(&global_address.channel)
+                                mapped_bricks
+                                    .entry(global_address.channel)
+                                    .or_insert_with(VecHashMap::new);
+                                mapped_bricks
+                                    .get_mut(&global_address.channel)
                                     .unwrap()
                                     .insert(
                                         global_address.level,
-                                    MappedBrick::new(global_address, brick.min, brick.max),
+                                        MappedBrick::new(global_address, brick.min, brick.max),
                                     );
 
                                 if let Some(unmapped_brick_local_address) = unmapped_brick_address {
@@ -319,13 +317,11 @@ impl VolumeManager {
                                     let unmapped_brick_id = unmapped_brick_global_address.into();
                                     self.cached_bricks.remove(&unmapped_brick_id);
 
-                                    if !unmapped_bricks.contains_key(&unmapped_brick_global_address.channel) {
-                                        unmapped_bricks.insert(
-                                            unmapped_brick_global_address.channel,
-                                            VecHashMap::new(),
-                                        );
-                                    }
-                                    unmapped_bricks.get_mut(&unmapped_brick_global_address.channel)
+                                    unmapped_bricks
+                                        .entry(unmapped_brick_global_address.channel)
+                                        .or_insert_with(VecHashMap::new);
+                                    unmapped_bricks
+                                        .get_mut(&unmapped_brick_global_address.channel)
                                         .unwrap()
                                         .insert(
                                             unmapped_brick_global_address.level,

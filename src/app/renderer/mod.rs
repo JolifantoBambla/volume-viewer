@@ -86,7 +86,7 @@ impl MultiChannelVolumeRenderer {
                     usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
                 });
 
-        let volume_render_pass = RayGuidedDVR::new(&volume_manager, &wgsl_preprocessor, gpu);
+        let volume_render_pass = RayGuidedDVR::new(volume_manager, wgsl_preprocessor, gpu);
         let volume_render_bind_group = volume_render_pass.create_bind_group(Resources {
             volume_sampler: &volume_sampler,
             output: &dvr_result.view,
@@ -126,7 +126,7 @@ impl MultiChannelVolumeRenderer {
             scene.camera().create_uniform(),
             scene.volume_transform(),
             input.frame().number(),
-            &settings,
+            settings,
         );
 
         self.gpu.queue().write_buffer(
