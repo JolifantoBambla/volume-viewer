@@ -103,7 +103,7 @@ impl ToNormalizedAddress for UVec3 {
     type NormalizedAddress = Vec3;
 
     fn to_normalized_address(&self, size: &Self) -> Self::NormalizedAddress {
-        let self_f32 = Vec3::new(self.x as f32, self.y as f32, self.z as f32);
+        let self_f32 = Vec3::new(self.x as f32, self.y as f32, self.z as f32) + 0.5;
         let size_f32 = Vec3::new(size.x as f32, size.y as f32, size.z as f32);
         self_f32 / size_f32
     }

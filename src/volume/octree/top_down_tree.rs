@@ -300,37 +300,39 @@ impl BrickCacheUpdateListener for TopDownTree {
     }
 
     fn on_unmapped_bricks(&mut self, bricks: &VecHashMap<u32, UnmappedBrick>) {
-        // todo: adapt to changes (i.e. bricks is a vechashmap now)
-        // todo: this might need to unmap more nodes if multiple nodes map to the same level
-        for b in bricks.get(&0).unwrap() {
-            let normalized_address = b.global_address.index.to_normalized_address(
-                self.data_subdivisions
-                    .get(b.global_address.level as usize)
-                    .unwrap(),
-            );
+        // iterate over resolution levels from min to max (i.e., highest res to lowest res)
+        for (&resolution_level, bricks) in bricks.iter() {
+            let octree_level = self.map_to_highest_subdivision_level(resolution_level as usize);
 
-            let level = self.map_to_highest_subdivision_level(b.global_address.channel as usize);
-            let subdivision = self.subdivisions.get(level).unwrap();
-            let node_index = subdivision.to_node_index(normalized_address);
-            let unmapped = self.node_mut(node_index).unwrap().set_unmapped();
+            for b in bricks.iter() {
+                let normalized_address = self.to_normalized_address(b.global_address);
 
-            if unmapped && level > 0 {
-                let mut child_node_index = node_index;
-                for l in (0..level - 1).rev() {
-                    let level_subdivision = self.subdivisions.get(l).unwrap();
-                    let level_node_index = level_subdivision.to_node_index(normalized_address);
-                    let subtree_index = 1 << (child_node_index - level_node_index * 8) as u8;
-                    if !self
-                        .node_mut(level_node_index)
-                        .unwrap()
-                        .set_subtree_unmapped(subtree_index)
-                    {
-                        break;
+                let subdivision = self.subdivisions.get(octree_level).unwrap();
+                let node_index = subdivision.to_node_index(normalized_address);
+
+                // maybe set the node as unmapped (homogeneous nodes are ignored)
+                // if the node has been unmapped, propagate this change to the upper levels
+                if self.node_mut(node_index).unwrap().set_unmapped() {
+                    let mut child_node_index = node_index;
+                    for l in (0..octree_level - 1).rev() {
+                        let level_subdivision = self.subdivisions.get(l).unwrap();
+                        let level_node_index = level_subdivision.to_node_index(normalized_address);
+                        let subtree_index =
+                            self.subtree_index(level_node_index, child_node_index) as u8;
+
+                        // set the node's subtree as unmapped.
+                        // if the node still has mapped nodes, we can terminate the process
+                        if !self
+                            .node_mut(level_node_index)
+                            .unwrap()
+                            .set_subtree_unmapped(subtree_index)
+                        {
+                            break;
+                        }
+                        child_node_index = level_node_index;
                     }
-                    child_node_index = level_node_index;
                 }
             }
         }
-        todo!()
     }
 }
