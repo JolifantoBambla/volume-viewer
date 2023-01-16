@@ -1,3 +1,5 @@
+pub mod dvr;
+
 use crate::app::scene::MultiChannelVolumeScene;
 use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::ray_guided_dvr::{GpuChannelSettings, RayGuidedDVR, Resources};
