@@ -74,6 +74,7 @@ pub trait PageTableOctreeNode {
     fn from_resolution_mapping(resolution_mapping: usize) -> Self;
 }
 
+// todo: this should probably be split into an octree node storage enum type and a trait that maps resolutions and traverses the octree on updates
 pub trait PageTableOctree: BrickCacheUpdateListener {
     type Node: bytemuck::Pod + Default + PageTableOctreeNode;
 
@@ -97,6 +98,18 @@ pub trait PageTableOctree: BrickCacheUpdateListener {
     ) -> Self;
 
     fn nodes(&self) -> &Vec<Self::Node>;
+
+    fn nodes_mut(&mut self) -> &mut Vec<Self::Node>;
+
+    /// Gets a reference to a `Self::Node` by its index in this tree.
+    /// If the tree is stored with other trees in an interleaved format, the given node index is
+    /// translated to the node's actual index in the underlying data storage.
+    fn node(&self, node_index: usize) -> Option<&Self::Node>;
+
+    /// Gets a mutable reference to a `Self::Node` by its index in this tree.
+    /// If the tree is stored with other trees in an interleaved format, the given node index is
+    /// translated to the node's actual index in the underlying data storage.
+    fn node_mut(&mut self, node_index: usize) -> Option<&mut Self::Node>;
 
     fn subdivisions(&self) -> &Rc<Vec<VolumeSubdivision>>;
 
@@ -185,6 +198,17 @@ impl PartialEq for ResolutionMapping {
     fn eq(&self, other: &Self) -> bool {
         self.min_resolution == other.min_resolution && self.max_resolution == other.max_resolution
     }
+}
+
+pub struct InterleavedOctreeNodeStorage<'a, T> {
+    num_channels: usize,
+    own_channel: usize,
+    nodes: &'a mut Vec<T>,
+}
+
+pub enum PageTableOctreeMemory<'a, T> {
+    Active(InterleavedOctreeNodeStorage<'a, T>),
+    Inactive(Vec<T>)
 }
 
 #[derive(Clone, Debug)]
@@ -350,6 +374,8 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
             }
         }
     }
+
+    // todo: handle changes to resolution mapping
 
     pub fn gpu_subdivisions(&self) -> &Rc<Buffer<VolumeSubdivision>> {
         &self.gpu_subdivisions

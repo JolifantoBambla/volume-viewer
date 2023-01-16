@@ -115,27 +115,6 @@ pub struct TopDownTree {
 }
 
 impl TopDownTree {
-    // todo: move this into PageTableOctree and only access nodes through this (allows for implementation backed by one large array of nodes for all channels & also for implementation backed by one array of nodes for each channel)
-    fn nodes_mut(&mut self) -> &mut Vec<Node> {
-        &mut self.nodes
-    }
-
-    // todo: move this into PageTableOctree and only access nodes through this (allows for implementation backed by one large array of nodes for all channels & also for implementation backed by one array of nodes for each channel)
-    /// Gets a reference to a `Self::Node` by its index in this tree.
-    /// If the tree is stored with other trees in an interleaved format, the given node index is
-    /// translated to the node's actual index in the underlying data storage.
-    fn node(&self, node_index: usize) -> Option<&Node> {
-        self.nodes.get(node_index)
-    }
-
-    // todo: move this into PageTableOctree and only access nodes through this (allows for implementation backed by one large array of nodes for all channels & also for implementation backed by one array of nodes for each channel)
-    /// Gets a mutable reference to a `Self::Node` by its index in this tree.
-    /// If the tree is stored with other trees in an interleaved format, the given node index is
-    /// translated to the node's actual index in the underlying data storage.
-    fn node_mut(&mut self, node_index: usize) -> Option<&mut Node> {
-        self.nodes.get_mut(node_index)
-    }
-
     fn subtree_index(&self, node_index: usize, child_node_index: usize) -> usize {
         1 << (child_node_index - node_index * 8)
     }
@@ -184,6 +163,18 @@ impl PageTableOctree for TopDownTree {
         &self.nodes
     }
 
+    fn nodes_mut(&mut self) -> &mut Vec<Node> {
+        &mut self.nodes
+    }
+
+    fn node(&self, node_index: usize) -> Option<&Node> {
+        self.nodes.get(node_index)
+    }
+
+    fn node_mut(&mut self, node_index: usize) -> Option<&mut Node> {
+        self.nodes.get_mut(node_index)
+    }
+
     fn subdivisions(&self) -> &Rc<Vec<VolumeSubdivision>> {
         &self.subdivisions
     }
@@ -200,25 +191,6 @@ impl PageTableOctree for TopDownTree {
 
 impl BrickCacheUpdateListener for TopDownTree {
     fn on_mapped_bricks(&mut self, bricks: &VecHashMap<u32, MappedBrick>) {
-        // todo: this could be optimized by doing something like (trying to touch every node only once)
-        //  - sorting the bricks by their level,
-        //  - starting from the highest level, pushing nodes to process into a queue
-        //  - processing this queue
-
-        /*
-        Something like this:
-        Map nodes:
-        Iterate over sorted keys (min = highest to max=lowest)
-        From highest res to lowest res:
-        mark node as mapped and push parentnodes into hashmap<parentnodeindex, set<subtreeindex>
-
-        sort hashmap keys from highest to lowest
-        And iterate:
-        Set all subtrees in set as mapped
-        If no subtree was mapped before:
-        Push hashmap<parentnodeindex, subtreeindex>
-         */
-
         // iterate over resolution levels from min to max (i.e., highest res to lowest res)
         for (&resolution_level, bricks) in bricks.iter() {
             let octree_level = self.map_to_highest_subdivision_level(resolution_level as usize);

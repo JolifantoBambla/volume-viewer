@@ -11,7 +11,9 @@
 
 // includes that require the shader to define certain functions
 @include(volume_util)
-@include(page_table_volume_accessor)
+
+// Note: volume_accelerator needs to map to some file!
+@include(volume_accelerator)
 
 fn debug(pixel: int2, color: float4) {
     textureStore(result, pixel, color);
@@ -205,7 +207,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var last_lod = 0u;
     var steps_taken = 0u;
 
-    let offset = hash_u32_to_f32(pcg_hash(u32(pixel.x + 640 * pixel.y)));
+    let offset = hash_u32_to_f32(pcg_hash(u32(pixel.x + pixel.x * pixel.y)));
     let dt_scale = uniforms.settings.step_scale;
 
     var dt_vec = 1. / (float3(page_table_meta.metas[last_lod].volume_size) * abs(ray_os.direction));

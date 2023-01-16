@@ -135,9 +135,12 @@ pub struct RayGuidedDVR {
 impl RayGuidedDVR {
     pub fn new(
         volume_texture: &VolumeManager,
-        wgsl_preprocessor: &WGSLPreprocessor,
+        wgsl_preprocessor_base: &WGSLPreprocessor,
         ctx: &Arc<Gpu>,
     ) -> Self {
+        let mut wgsl_preprocessor = wgsl_preprocessor_base.clone();
+        wgsl_preprocessor.include("volume_accelerator", include_str!("../../../wgsl/page_table_volume_accessor.wgsl"));
+
         let shader_module = ctx
             .device()
             .create_shader_module(wgpu::ShaderModuleDescriptor {
