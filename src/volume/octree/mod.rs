@@ -70,11 +70,24 @@ pub trait BrickCacheUpdateListener {
     fn on_unmapped_bricks(&mut self, bricks: &VecHashMap<u32, UnmappedBrick>);
 }
 
-pub trait PageTableOctree: BrickCacheUpdateListener {
-    type Node: bytemuck::Pod + Default;
+pub trait PageTableOctreeNode {
+    fn from_resolution_mapping(resolution_mapping: usize) -> Self;
+}
 
-    fn create_nodes_from_subdivisions(subdivisions: &[VolumeSubdivision]) -> Vec<Self::Node> {
-        vec![Self::Node::default(); total_number_of_nodes(subdivisions) as usize]
+pub trait PageTableOctree: BrickCacheUpdateListener {
+    type Node: bytemuck::Pod + Default + PageTableOctreeNode;
+
+    fn create_nodes_from_subdivisions(
+        subdivisions: &[VolumeSubdivision],
+        resolution_mapping: &ResolutionMapping,
+    ) -> Vec<Self::Node> {
+        let mut nodes = Vec::with_capacity(total_number_of_nodes(subdivisions));
+        for (octree_level, _) in subdivisions.iter().enumerate() {
+            nodes.append(&mut vec![Self::Node::from_resolution_mapping(
+                resolution_mapping.map_to_dataset_level(octree_level),
+            )]);
+        }
+        nodes
     }
 
     fn new(
@@ -91,8 +104,12 @@ pub trait PageTableOctree: BrickCacheUpdateListener {
 
     fn set_resolution_mapping(&mut self, resolution_mapping: ResolutionMapping);
 
-    fn map_to_subdivision_level(&self, level: usize) -> usize {
-        self.resolution_mapping().map_to_dataset_level(level)
+    fn map_to_highest_subdivision_level(&self, level: usize) -> usize {
+        *self
+            .resolution_mapping()
+            .map_to_octree_subdivision_level(level)
+            .last()
+            .unwrap_or(&0)
     }
 }
 

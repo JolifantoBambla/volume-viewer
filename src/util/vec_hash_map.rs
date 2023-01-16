@@ -1,13 +1,13 @@
-use std::collections::hash_map::{Entry, Iter};
-use std::collections::HashMap;
+use std::collections::btree_map::{Entry, Iter};
+use std::collections::BTreeMap;
 use std::hash::Hash;
 
 #[derive(Clone, Debug)]
 pub struct VecHashMap<K, V> {
-    data: HashMap<K, Vec<V>>,
+    data: BTreeMap<K, Vec<V>>,
 }
 
-impl<K: Copy + Eq + Hash, V> VecHashMap<K, V> {
+impl<K: Copy + Eq + Hash + Ord, V> VecHashMap<K, V> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -32,7 +32,7 @@ impl<K: Copy + Eq + Hash, V> VecHashMap<K, V> {
 impl<K, V> Default for VecHashMap<K, V> {
     fn default() -> Self {
         Self {
-            data: HashMap::new(),
+            data: BTreeMap::new(),
         }
     }
 }

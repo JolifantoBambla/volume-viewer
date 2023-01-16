@@ -1,8 +1,7 @@
+/*
 use crate::util::vec_hash_map::VecHashMap;
 use crate::volume::octree::subdivision::VolumeSubdivision;
-use crate::volume::octree::{
-    BrickCacheUpdateListener, MappedBrick, PageTableOctree, ResolutionMapping, UnmappedBrick,
-};
+use crate::volume::octree::{BrickCacheUpdateListener, MappedBrick, PageTableOctree, PageTableOctreeNode, ResolutionMapping, UnmappedBrick};
 use glam::UVec3;
 use std::rc::Rc;
 
@@ -40,6 +39,12 @@ pub struct Node {
     average: u8,
 }
 
+impl PageTableOctreeNode for Node {
+    fn from_resolution_mapping(_resolution_mapping: usize) -> Self {
+        todo!()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct DirectAccessTree {
     #[allow(unused)]
@@ -60,7 +65,7 @@ impl PageTableOctree for DirectAccessTree {
         resolution_mapping: ResolutionMapping,
     ) -> Self {
         Self {
-            nodes: Self::create_nodes_from_subdivisions(subdivisions.as_slice()),
+            nodes: Self::create_nodes_from_subdivisions(subdivisions.as_slice(), &resolution_mapping),
             subdivisions: subdivisions.clone(),
             data_subdivisions: data_subdivisions.clone(),
             resolution_mapping,
@@ -94,3 +99,5 @@ impl BrickCacheUpdateListener for DirectAccessTree {
         todo!()
     }
 }
+
+ */

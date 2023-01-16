@@ -97,6 +97,6 @@ impl Default for VolumeSubdivision {
     }
 }
 
-pub fn total_number_of_nodes(subdivisions: &[VolumeSubdivision]) -> u32 {
-    subdivisions.iter().fold(0, |acc, s| acc + s.num_nodes())
+pub fn total_number_of_nodes(subdivisions: &[VolumeSubdivision]) -> usize {
+    subdivisions.iter().fold(0, |acc, s| acc + s.num_nodes()) as usize
 }
