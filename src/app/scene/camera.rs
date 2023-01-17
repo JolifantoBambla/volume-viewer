@@ -1,6 +1,6 @@
-use glam::{Mat3, Mat4, UVec3, Vec2, Vec3};
+use glam::{Mat3, Mat4, Vec2, Vec3};
 use wgpu_framework::geometry::bounds::{Bounds, Bounds2, Bounds3};
-use crate::app::renderer::common::{CameraUniform, ToTransformUniform, TransformUniform};
+use crate::app::renderer::common::{ToTransformUniform, TransformUniform};
 
 
 #[derive(Copy, Clone)]

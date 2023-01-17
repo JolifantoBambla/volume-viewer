@@ -32,6 +32,7 @@ pub trait GPUPass<T: AsBindGroupEntries> {
     }
 }
 
+#[derive(Debug)]
 pub struct ComputeEncodeDescriptor {
     pipeline: Rc<ComputePipeline>,
     bind_groups: Vec<BindGroup>,
@@ -80,6 +81,7 @@ impl ComputeEncodeDescriptor {
     }
 }
 
+#[derive(Debug)]
 pub struct ComputePipelineData<const N: usize> {
     pipeline: Rc<ComputePipeline>,
     bind_group_layouts: Vec<BindGroupLayout>,
