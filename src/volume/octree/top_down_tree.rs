@@ -59,7 +59,9 @@ impl Node {
         // todo: maybe some average threshold?
         let unmapped = self.min != self.max;
         if unmapped {
-            self.self_mapped_and_resolution_mapping = false as u8;
+            let mapped_state =
+                MappedState::from(self.self_mapped_and_resolution_mapping).with_mapped(false);
+            self.self_mapped_and_resolution_mapping = u8::from(mapped_state);
         }
         unmapped && !self.has_partially_mapped_subtrees()
     }
