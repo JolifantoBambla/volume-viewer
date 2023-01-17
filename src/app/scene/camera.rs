@@ -1,7 +1,5 @@
 use glam::{Mat3, Mat4, Vec2, Vec3};
 use wgpu_framework::geometry::bounds::{Bounds, Bounds2, Bounds3};
-use crate::app::renderer::common::{ToTransformUniform, TransformUniform};
-
 
 #[derive(Copy, Clone)]
 pub struct CameraView {
@@ -138,13 +136,6 @@ impl Default for CameraView {
             Vec3::new(0.0, 0.0, 0.0),
             Vec3::new(0.0, 1.0, 0.0),
         )
-    }
-}
-
-impl ToTransformUniform for CameraView {
-    fn to_transform_uniform(&self) -> TransformUniform {
-        // todo: might need to switch that around
-        TransformUniform::from_world_to_object(self.look_at())
     }
 }
 

@@ -1,6 +1,4 @@
-use crate::renderer::{
-    pass::{AsBindGroupEntries, GPUPass},
-};
+use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use crate::resource::VolumeManager;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
@@ -52,7 +50,10 @@ impl PageTableDVR {
         ctx: &Arc<Gpu>,
     ) -> Self {
         let mut wgsl_preprocessor = wgsl_preprocessor_base.clone();
-        wgsl_preprocessor.include("volume_accelerator", include_str!("page_table_volume_accessor.wgsl"));
+        wgsl_preprocessor.include(
+            "volume_accelerator",
+            include_str!("page_table_volume_accessor.wgsl"),
+        );
 
         let shader_module = ctx
             .device()

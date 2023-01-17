@@ -1,7 +1,7 @@
+use crate::app::renderer::common::{CameraUniform, TransformUniform};
+use crate::MultiChannelVolumeRendererSettings;
 use bytemuck::Contiguous;
 use glam::{UVec4, Vec4};
-use crate::MultiChannelVolumeRendererSettings;
-use crate::app::renderer::common::{CameraUniform, TransformUniform};
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]

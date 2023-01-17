@@ -1,11 +1,9 @@
-use crate::renderer::{
-    pass::{AsBindGroupEntries, GPUPass},
-};
+use crate::app::renderer::common::CameraUniform;
+use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::app::renderer::common::CameraUniform;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]

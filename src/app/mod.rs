@@ -1,6 +1,7 @@
 pub mod renderer;
 pub mod scene;
 
+use crate::app::renderer::dvr::common::GpuChannelSettings;
 use crate::app::renderer::MultiChannelVolumeRenderer;
 use crate::app::scene::MultiChannelVolumeScene;
 use crate::event::handler::register_default_js_event_handlers;
@@ -24,7 +25,6 @@ use winit::event::WindowEvent;
 use winit::event_loop::EventLoop;
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
-use crate::app::renderer::dvr::common::GpuChannelSettings;
 
 /// The `GLOBAL_EVENT_LOOP_PROXY` is a means to send data to the running application.
 /// It is initialized by `start_event_loop`.

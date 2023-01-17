@@ -1,21 +1,24 @@
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use std::{borrow::Cow, sync::Arc};
-use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, SurfaceConfiguration, TextureView};
+use wgpu::{
+    BindGroup, BindGroupEntry, BindGroupLayout, CommandEncoder, RenderPipeline,
+    SurfaceConfiguration, TextureView,
+};
 use wgpu_framework::context::Gpu;
 
 pub struct Resources<'a> {
     pub sampler: &'a wgpu::Sampler,
-    pub source_texture: &'a wgpu::TextureView,
+    pub source_texture: &'a TextureView,
 }
 
 impl<'a> AsBindGroupEntries for Resources<'a> {
     fn as_bind_group_entries(&self) -> Vec<BindGroupEntry> {
         vec![
-            wgpu::BindGroupEntry {
+            BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::Sampler(self.sampler),
             },
-            wgpu::BindGroupEntry {
+            BindGroupEntry {
                 binding: 1,
                 resource: wgpu::BindingResource::TextureView(self.source_texture),
             },
@@ -26,8 +29,8 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
 #[derive(Debug)]
 pub struct PresentToScreen {
     ctx: Arc<Gpu>,
-    pipeline: wgpu::RenderPipeline,
-    bind_group_layout: wgpu::BindGroupLayout,
+    pipeline: RenderPipeline,
+    bind_group_layout: BindGroupLayout,
 }
 
 impl PresentToScreen {
@@ -73,7 +76,7 @@ impl PresentToScreen {
 
     pub fn encode(
         &self,
-        command_encoder: &mut wgpu::CommandEncoder,
+        command_encoder: &mut CommandEncoder,
         bind_group: &BindGroup,
         view: &TextureView,
     ) {

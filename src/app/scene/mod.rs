@@ -1,3 +1,4 @@
+use crate::app::scene::camera::{Camera, CameraView, Projection};
 use crate::resource::VolumeManager;
 use crate::Event;
 use glam::{Mat4, UVec2, Vec2, Vec3};
@@ -8,7 +9,6 @@ use wgpu_framework::input::Input;
 use winit::event::{
     ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
 };
-use crate::app::scene::camera::{Camera, CameraView, Projection};
 
 pub mod camera;
 

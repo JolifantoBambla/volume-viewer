@@ -208,7 +208,7 @@ pub struct InterleavedOctreeNodeStorage<'a, T> {
 
 pub enum PageTableOctreeMemory<'a, T> {
     Active(InterleavedOctreeNodeStorage<'a, T>),
-    Inactive(Vec<T>)
+    Inactive(Vec<T>),
 }
 
 #[derive(Clone, Debug)]

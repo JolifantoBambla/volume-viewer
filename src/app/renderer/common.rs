@@ -1,5 +1,5 @@
+use crate::app::scene::camera::{Camera, CameraView};
 use glam::{Mat4, UVec3};
-use crate::app::scene::camera::Camera;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -34,8 +34,10 @@ impl Default for TransformUniform {
     }
 }
 
-pub trait ToTransformUniform {
-    fn to_transform_uniform(&self) -> TransformUniform;
+impl From<&CameraView> for TransformUniform {
+    fn from(camera_view: &CameraView) -> Self {
+        Self::from_world_to_object(camera_view.look_at())
+    }
 }
 
 #[repr(C)]
@@ -51,7 +53,7 @@ pub struct CameraUniform {
 impl CameraUniform {
     pub fn new(view: Mat4, projection: Mat4, camera_type: u32) -> Self {
         Self {
-            transform: TransformUniform::from_object_to_world(view),
+            transform: TransformUniform::from_world_to_object(view),
             projection,
             inverse_projection: projection.inverse(),
             camera_type,
@@ -69,7 +71,7 @@ impl Default for CameraUniform {
 impl From<&Camera> for CameraUniform {
     fn from(camera: &Camera) -> Self {
         Self::new(
-            camera.view.look_at().inverse(),
+            camera.view.look_at(),
             camera.projection().projection(),
             camera.projection().is_orthographic() as u32,
         )

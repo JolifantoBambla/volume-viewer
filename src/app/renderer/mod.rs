@@ -1,8 +1,11 @@
-pub mod dvr;
 pub mod common;
+pub mod dvr;
 
-use crate::app::scene::MultiChannelVolumeScene;
+use crate::app::renderer::common::CameraUniform;
 use crate::app::renderer::dvr::common::{GpuChannelSettings, Uniforms};
+use crate::app::renderer::dvr::page_table::{PageTableDVR, Resources};
+use crate::app::renderer::dvr::RayGuidedDVR;
+use crate::app::scene::MultiChannelVolumeScene;
 use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::{present_to_screen, GPUPass};
 use crate::resource::VolumeManager;
@@ -17,9 +20,6 @@ use wgpu::{
 use wgpu_framework::context::Gpu;
 use wgpu_framework::input::Input;
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::app::renderer::common::CameraUniform;
-use crate::app::renderer::dvr::page_table::{PageTableDVR, Resources};
-use crate::app::renderer::dvr::RayGuidedDVR;
 
 #[derive(Debug)]
 pub struct MultiChannelVolumeRenderer {
