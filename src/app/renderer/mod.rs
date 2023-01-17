@@ -1,9 +1,10 @@
 pub mod dvr;
+pub mod common;
 
 use crate::app::scene::MultiChannelVolumeScene;
+use crate::app::renderer::dvr::common::{GpuChannelSettings, Uniforms};
 use crate::renderer::pass::present_to_screen::PresentToScreen;
-use crate::renderer::pass::ray_guided_dvr::{GpuChannelSettings, RayGuidedDVR, Resources};
-use crate::renderer::pass::{present_to_screen, ray_guided_dvr, GPUPass};
+use crate::renderer::pass::{present_to_screen, GPUPass};
 use crate::resource::VolumeManager;
 use crate::{resource, MultiChannelVolumeRendererSettings};
 use glam::UVec2;
@@ -16,6 +17,9 @@ use wgpu::{
 use wgpu_framework::context::Gpu;
 use wgpu_framework::input::Input;
 use wgsl_preprocessor::WGSLPreprocessor;
+use crate::app::renderer::common::CameraUniform;
+use crate::app::renderer::dvr::page_table::{PageTableDVR, Resources};
+use crate::app::renderer::dvr::RayGuidedDVR;
 
 #[derive(Debug)]
 pub struct MultiChannelVolumeRenderer {
@@ -63,7 +67,7 @@ impl MultiChannelVolumeRenderer {
             ..Default::default()
         });
 
-        let uniforms = ray_guided_dvr::Uniforms::default();
+        let uniforms = Uniforms::default();
         let volume_render_global_settings_buffer =
             gpu.device()
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -88,7 +92,7 @@ impl MultiChannelVolumeRenderer {
                     usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
                 });
 
-        let volume_render_pass = RayGuidedDVR::new(volume_manager, wgsl_preprocessor, gpu);
+        let volume_render_pass = PageTableDVR::new(volume_manager, wgsl_preprocessor, gpu);
         let volume_render_bind_group = volume_render_pass.create_bind_group(Resources {
             volume_sampler: &volume_sampler,
             output: &dvr_result.view,
@@ -105,7 +109,7 @@ impl MultiChannelVolumeRenderer {
 
         Self {
             gpu: gpu.clone(),
-            volume_render_pass,
+            volume_render_pass: RayGuidedDVR::PageTable(volume_render_pass),
             volume_render_bind_group,
             volume_render_global_settings_buffer,
             volume_render_channel_settings_buffer,
@@ -124,8 +128,8 @@ impl MultiChannelVolumeRenderer {
         input: &Input,
         command_encoder: &mut CommandEncoder,
     ) {
-        let uniforms = ray_guided_dvr::Uniforms::new(
-            scene.camera().create_uniform(),
+        let uniforms = Uniforms::new(
+            CameraUniform::from(scene.camera()),
             scene.volume_transform(),
             input.frame().number(),
             settings,

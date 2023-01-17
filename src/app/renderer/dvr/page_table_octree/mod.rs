@@ -1,48 +1,17 @@
 use crate::renderer::{
     pass::{AsBindGroupEntries, GPUPass},
 };
+use crate::resource::VolumeManager;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::app::renderer::common::CameraUniform;
-
-#[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Uniforms {
-    pub camera: CameraUniform,
-    pub world_to_object: glam::Mat4,
-    pub object_to_world: glam::Mat4,
-    pub volume_color: glam::Vec4,
-}
-
-impl Uniforms {
-    pub fn new(camera: CameraUniform, object_to_world: glam::Mat4) -> Self {
-        Self {
-            camera,
-            world_to_object: object_to_world.inverse(),
-            object_to_world,
-            volume_color: glam::Vec4::new(0., 0., 1., 1.),
-        }
-    }
-}
-
-impl Default for Uniforms {
-    fn default() -> Self {
-        Self {
-            camera: CameraUniform::default(),
-            world_to_object: glam::Mat4::IDENTITY,
-            object_to_world: glam::Mat4::IDENTITY,
-            volume_color: glam::Vec4::new(0., 0., 1., 1.),
-        }
-    }
-}
 
 pub struct Resources<'a> {
-    pub volume: &'a wgpu::TextureView,
     pub volume_sampler: &'a wgpu::Sampler,
     pub output: &'a wgpu::TextureView,
     pub uniforms: &'a wgpu::Buffer,
+    pub channel_settings: &'a wgpu::Buffer,
 }
 
 impl<'a> AsBindGroupEntries for Resources<'a> {
@@ -50,7 +19,7 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
         vec![
             BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::TextureView(self.volume),
+                resource: self.uniforms.as_entire_binding(),
             },
             BindGroupEntry {
                 binding: 1,
@@ -62,32 +31,41 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
             },
             BindGroupEntry {
                 binding: 3,
-                resource: self.uniforms.as_entire_binding(),
+                resource: self.channel_settings.as_entire_binding(),
             },
         ]
     }
 }
 
-pub struct DVR {
+#[derive(Debug)]
+pub struct PageTableOctreeDVR {
     ctx: Arc<Gpu>,
     pipeline: wgpu::ComputePipeline,
     bind_group_layout: BindGroupLayout,
+    internal_bind_group: BindGroup,
 }
 
-impl DVR {
-    pub fn new(wgsl_preprocessor: &WGSLPreprocessor, ctx: &Arc<Gpu>) -> Self {
-        let shader_module = ctx
+impl PageTableOctreeDVR {
+    pub fn new(
+        volume_texture: &VolumeManager,
+        wgsl_preprocessor_base: &WGSLPreprocessor,
+        gpu: &Arc<Gpu>,
+    ) -> Self {
+        let mut wgsl_preprocessor = wgsl_preprocessor_base.clone();
+        wgsl_preprocessor.include("volume_accelerator", include_str!("page_table_octree_volume_accessor.wgsl"));
+
+        let shader_module = gpu
             .device()
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
                     &*wgsl_preprocessor
-                        .preprocess(include_str!("dvr.wgsl"))
+                        .preprocess(include_str!("../ray_cast.wgsl"))
                         .ok()
                         .unwrap(),
                 )),
             });
-        let pipeline = ctx
+        let pipeline = gpu
             .device()
             .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: None,
@@ -97,10 +75,18 @@ impl DVR {
             });
         let bind_group_layout = pipeline.get_bind_group_layout(0);
 
+        let internal_bind_group_layout = pipeline.get_bind_group_layout(1);
+        let internal_bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &internal_bind_group_layout,
+            entries: &volume_texture.as_bind_group_entries(),
+        });
+
         Self {
-            ctx: ctx.clone(),
+            ctx: gpu.clone(),
             pipeline,
             bind_group_layout,
+            internal_bind_group,
         }
     }
 
@@ -110,10 +96,12 @@ impl DVR {
         bind_group: &BindGroup,
         output_extent: &wgpu::Extent3d,
     ) {
-        let mut cpass =
-            command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+        let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Ray Guided DVR"),
+        });
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, bind_group, &[]);
+        cpass.set_bind_group(1, &self.internal_bind_group, &[]);
         cpass.insert_debug_marker(self.label());
         cpass.dispatch_workgroups(
             (output_extent.width as f32 / 16.).ceil() as u32,
@@ -123,13 +111,13 @@ impl DVR {
     }
 }
 
-impl<'a> GPUPass<Resources<'a>> for DVR {
+impl<'a> GPUPass<Resources<'a>> for PageTableOctreeDVR {
     fn ctx(&self) -> &Arc<Gpu> {
         &self.ctx
     }
 
     fn label(&self) -> &str {
-        "DVR"
+        "Ray Guided DVR"
     }
 
     fn bind_group_layout(&self) -> &BindGroupLayout {
