@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::cmp::min;
 use std::collections::{HashMap, VecDeque};
+use std::fmt::Debug;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -9,7 +10,7 @@ use web_sys::{CustomEvent, EventTarget};
 
 use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 
-pub trait VolumeDataSource {
+pub trait VolumeDataSource: Debug {
     fn get_meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta;
 
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>);
@@ -18,7 +19,7 @@ pub trait VolumeDataSource {
 }
 
 #[cfg(target_arch = "wasm32")]
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct BrickEvent {
     address: BrickAddress,
     brick: Brick,
@@ -35,6 +36,7 @@ pub const BRICK_RESPONSE_EVENT: &str = "data-loader:brick-response";
 /// it.
 /// It is agnostic of the way the `web_sys::EventTarget` actually acquires bricks.
 #[cfg(target_arch = "wasm32")]
+#[derive(Debug)]
 pub struct HtmlEventTargetVolumeDataSource {
     volume_meta: BrickedMultiResolutionMultiVolumeMeta,
     brick_queue: Rc<RefCell<VecDeque<(BrickAddress, Brick)>>>,

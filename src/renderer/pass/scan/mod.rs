@@ -14,6 +14,7 @@ use wgsl_preprocessor::WGSLPreprocessor;
 const WORKGROUP_SIZE: u32 = 256;
 const WORKGROUP_SIZE_DOUBLED: u32 = WORKGROUP_SIZE * 2;
 
+#[derive(Debug)]
 pub struct Scan {
     passes: Vec<ComputeEncodeDescriptor>,
 }

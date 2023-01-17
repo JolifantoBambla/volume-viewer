@@ -9,13 +9,14 @@ use wgpu::{
 use wgpu_framework::context::Gpu;
 
 #[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct GpuListMeta {
     capacity: u32,
     fill_pointer: u32,
     written_at: u32,
 }
 
+#[derive(Debug)]
 pub struct GpuListReadResult<T: bytemuck::Pod + bytemuck::Zeroable> {
     list: Vec<T>,
     written_at: u32,
@@ -27,6 +28,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> From<GpuListReadResult<T>> for (Vec<
     }
 }
 
+#[derive(Debug)]
 pub struct GpuList<T: bytemuck::Pod + bytemuck::Zeroable> {
     ctx: Arc<Gpu>,
     capacity: u32,

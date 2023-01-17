@@ -30,6 +30,7 @@ pub struct LRUCacheSettings {
     pub time_to_live: u32,
 }
 
+#[derive(Debug)]
 struct LRUCacheGpuOps {
     lru: ReadableStorageBuffer<u32>,
     num_used_entries: ReadableStorageBuffer<NumUsedEntries>,
@@ -94,6 +95,7 @@ impl LRUCacheGpuOps {
     }
 }
 
+#[derive(Debug)]
 pub struct LRUCache {
     ctx: Arc<Gpu>,
 

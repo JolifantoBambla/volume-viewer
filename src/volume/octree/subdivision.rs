@@ -1,7 +1,6 @@
 use crate::util::extent::{SubscriptToIndex, ToSubscript};
 use glam::{BVec3, UVec3, Vec3};
 
-// todo: this should also store which resolution this maps to
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct VolumeSubdivision {

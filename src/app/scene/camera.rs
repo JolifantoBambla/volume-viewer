@@ -1,5 +1,9 @@
-use glam::{Mat3, Mat4, Vec2, Vec3};
+use glam::{Mat3, Mat4, UVec2, Vec2, Vec3};
+use winit::event::{ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
+use wgpu_framework::event::lifecycle::Update;
+use wgpu_framework::event::window::OnWindowEvent;
 use wgpu_framework::geometry::bounds::{Bounds, Bounds2, Bounds3};
+use wgpu_framework::input::Input;
 
 #[derive(Copy, Clone)]
 pub struct CameraView {
@@ -183,11 +187,58 @@ impl Projection {
 pub struct Camera {
     pub view: CameraView,
     projection: Projection,
+
+    orthographic: Projection,
+    perspective: Projection,
+    resolution: Vec2,
+    last_mouse_position: Vec2,
+    left_mouse_pressed: bool,
+    right_mouse_pressed: bool,
+
+    speed: f32,
 }
 
 impl Camera {
-    pub fn new(view: CameraView, projection: Projection) -> Self {
-        Self { view, projection }
+    pub fn new(window_size: UVec2, distance_from_center: f32, speed: f32) -> Self {
+        let near = 0.0001;
+        let far = 1000.0;
+
+        let resolution = Vec2::new(window_size.x as f32, window_size.y as f32);
+        let perspective = Projection::new_perspective(
+            f32::to_radians(45.),
+            window_size.x as f32 / window_size.y as f32,
+            near,
+            far,
+        );
+        let orthographic = Projection::new_orthographic(Bounds3::new(
+            (resolution * -0.5).extend(near),
+            (resolution * 0.5).extend(far),
+        ));
+
+        let view = CameraView::new(
+            Vec3::new(1., 1., 1.) * distance_from_center,
+            Vec3::new(0., 0., 0.),
+            Vec3::new(0., 1., 0.),
+        );
+
+        // todo: use input instead
+        let last_mouse_position = Vec2::new(0., 0.);
+        let left_mouse_pressed = false;
+        let right_mouse_pressed = false;
+
+        Self {
+            view,
+            projection: perspective.clone(),
+
+            orthographic,
+            perspective,
+            resolution,
+            last_mouse_position,
+            left_mouse_pressed,
+            right_mouse_pressed,
+
+            speed,
+        }
     }
 
     pub fn view(&self) -> &CameraView {
@@ -204,6 +255,76 @@ impl Camera {
 
     pub fn set_projection(&mut self, projection: Projection) {
         self.projection = projection;
+    }
+}
+
+impl Update for Camera {
+    fn update(&mut self, input: &Input) {
+        // todo: update camera here instead of OnWindowEvent
+    }
+}
+
+impl OnWindowEvent for Camera {
+    fn on_window_event(&mut self, event: &WindowEvent) {
+        match event {
+            WindowEvent::KeyboardInput {
+                input:
+                KeyboardInput {
+                    virtual_keycode: Some(virtual_keycode),
+                    state: ElementState::Pressed,
+                    ..
+                },
+                ..
+            } => match virtual_keycode {
+                VirtualKeyCode::D => self.view.move_right(self.speed),
+                VirtualKeyCode::A => self.view.move_left(self.speed),
+                VirtualKeyCode::W | VirtualKeyCode::Up => {
+                    self.view.move_forward(self.speed)
+                }
+                VirtualKeyCode::S | VirtualKeyCode::Down => {
+                    self.view.move_backward(self.speed)
+                }
+                VirtualKeyCode::C => {
+                    if self.projection().is_orthographic() {
+                        self.set_projection(self.perspective);
+                    } else {
+                        self.set_projection(self.orthographic);
+                    }
+                }
+                _ => {}
+            },
+            WindowEvent::CursorMoved { position, .. } => {
+                let mouse_position = Vec2::new(position.x as f32, position.y as f32);
+                let delta = (mouse_position - self.last_mouse_position) / self.resolution;
+                self.last_mouse_position = mouse_position;
+
+                if self.left_mouse_pressed {
+                    self.view.orbit(delta, false);
+                } else if self.right_mouse_pressed {
+                    let translation = delta * self.speed * 20.;
+                    self.view.move_right(translation.x);
+                    self.view.move_down(translation.y);
+                }
+            }
+            WindowEvent::MouseWheel {
+                delta: MouseScrollDelta::PixelDelta(delta),
+                ..
+            } => {
+                self.view.move_forward(
+                    (f64::min(delta.y.abs(), 1.) * delta.y.signum()) as f32 * self.speed,
+                );
+            }
+            WindowEvent::MouseInput { state, button, .. } => match button {
+                MouseButton::Left => {
+                    self.left_mouse_pressed = *state == ElementState::Pressed;
+                }
+                MouseButton::Right => {
+                    self.right_mouse_pressed = *state == ElementState::Pressed;
+                }
+                _ => {}
+            },
+            _ => {}
+        }
     }
 }
 

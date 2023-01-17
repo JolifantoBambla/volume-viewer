@@ -11,6 +11,7 @@ use wgpu::{
 use wgpu_framework::context::Gpu;
 
 #[readonly::make]
+#[derive(Debug)]
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: TextureView,

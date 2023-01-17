@@ -68,6 +68,7 @@ impl Default for SparseResidencyTexture3DOptions {
 /// Need to map:
 ///  - c_v  -> c_pt on GPU
 ///  - c_pt -> c_d  on CPU
+#[derive(Debug)]
 pub struct ChannelConfigurationState {
     /// Maps from a channel in the
     /// Number of visible channels: channel_mapping.len()
@@ -119,6 +120,7 @@ impl Default for ChannelConfigurationState {
 
 /// Manages a 3D sparse residency texture.
 /// A sparse residency texture is not necessarily present in GPU memory as a whole.
+#[derive(Debug)]
 pub struct VolumeManager {
     ctx: Arc<Gpu>,
 

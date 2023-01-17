@@ -1,6 +1,7 @@
 use crate::renderer::settings::ChannelSettings;
 use glam::UVec3;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;
 use wgpu::{BufferAddress, BufferUsages};
@@ -76,7 +77,7 @@ pub trait PageTableOctreeNode {
 
 // todo: this should probably be split into an octree node storage enum type and a trait that maps resolutions and traverses the octree on updates
 pub trait PageTableOctree: BrickCacheUpdateListener {
-    type Node: bytemuck::Pod + Default + PageTableOctreeNode;
+    type Node: bytemuck::Pod + Default + PageTableOctreeNode + Debug;
 
     fn create_nodes_from_subdivisions(
         subdivisions: &[VolumeSubdivision],

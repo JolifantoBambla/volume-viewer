@@ -45,6 +45,7 @@ struct PageDirectoryMetaGPUData {
     padding2: u32,
 }
 
+#[derive(Debug)]
 pub struct PageTableDirectory {
     ctx: Arc<Gpu>,
     local_page_directory: Vec<UVec4>,

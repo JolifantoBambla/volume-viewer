@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct MultiBuffered<T> {
     resources: Vec<T>,
 }

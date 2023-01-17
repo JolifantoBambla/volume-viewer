@@ -31,6 +31,7 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct ProcessRequests {
     ctx: Arc<Gpu>,
     pipeline: wgpu::ComputePipeline,

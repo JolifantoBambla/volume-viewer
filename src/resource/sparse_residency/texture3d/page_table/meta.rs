@@ -4,7 +4,7 @@ use glam::{UVec2, UVec3, Vec3};
 use std::cmp::min;
 
 #[repr(C)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PageTableMeta {
     /// The offset of this page table in the page directory.
     offset: UVec3,
@@ -44,7 +44,7 @@ impl PageTableMeta {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PageDirectoryMeta {
     /// The size of a brick in the brick cache. This is constant across all channels and resolutions
     /// of the bricked multi-resolution volume.

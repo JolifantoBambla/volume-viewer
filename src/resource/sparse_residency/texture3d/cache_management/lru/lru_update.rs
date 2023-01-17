@@ -39,6 +39,7 @@ impl<'a> LRUUpdateResources<'a> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct LRUUpdate {
     ctx: Arc<Gpu>,
 

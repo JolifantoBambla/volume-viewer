@@ -71,7 +71,7 @@ impl Default for CameraUniform {
 impl From<&Camera> for CameraUniform {
     fn from(camera: &Camera) -> Self {
         Self::new(
-            camera.view.look_at(),
+            camera.view().look_at(),
             camera.projection().projection(),
             camera.projection().is_orthographic() as u32,
         )

@@ -13,9 +13,17 @@
 @include(util)
 @include(volume_accessor)
 
+struct OctreeSubdivision {
+    size: vec3<u32>,
+    node_offset: u32,
+}
+
+@group(2) @binding(0) var<storage> octree_subdivision: array<OctreeSubdivision>;
+@group(2) @binding(1) var<storage> octree_nodes: array<u32>;
+
 fn _volume_acessor__compute_lod(distance: f32, channel: u32, lod_factor: f32) -> u32 {
     let highest_res = 0;
-    let lowest_res = arrayLength(subdivisions);
+    let lowest_res = arrayLength(octree_subdivision);
     let lod = select_level_of_detail(distance, highest_res, lowest_res, lod_factor);
     // note: lods are sorted in other direction here
     return highest_res - lod;
