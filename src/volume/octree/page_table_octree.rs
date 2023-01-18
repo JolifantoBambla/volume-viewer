@@ -36,15 +36,7 @@ pub trait PageTableOctree {
 
     fn resolution_mapping(&self) -> &ResolutionMapping;
 
-    fn set_resolution_mapping(&mut self, resolution_mapping: ResolutionMapping);
-
-    fn map_to_highest_subdivision_level(&self, level: usize) -> usize {
-        *self
-            .resolution_mapping()
-            .map_to_octree_subdivision_level(level)
-            .last()
-            .unwrap_or(&0)
-    }
+    fn set_resolution_mapping(&mut self, resolution_mapping: ResolutionMapping, node_storage: &mut OctreeStorage<Self::Node>);
 
     fn on_brick_cache_update(
         &mut self,

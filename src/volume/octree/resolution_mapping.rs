@@ -62,11 +62,34 @@ impl ResolutionMapping {
         *self.octree_to_dataset.get(octree_level).unwrap()
     }
 
-    pub fn map_to_octree_subdivision_level(&self, dataset_level: usize) -> &[usize] {
-        self.dataset_to_octree
-            .get(&dataset_level)
-            .unwrap()
-            .as_slice()
+    pub fn map_to_octree_subdivision_level(&self, dataset_level: usize) -> Option<&Vec<usize>> {
+        self.dataset_to_octree.get(&dataset_level)
+    }
+
+    pub fn map_to_highest_subdivision_level(&self, dataset_level: usize) -> usize {
+        // there are no gaps in subdivision mappings, so the data set either has an explicit mapping
+        // or it maps to the minimum or the maximum resolution
+        *if let Some(mapping) = self.map_to_octree_subdivision_level(dataset_level) {
+            mapping.last().unwrap()
+        } else if dataset_level < self.min_dataset_level() {
+            self.map_to_octree_subdivision_level(self.min_dataset_level())
+                .unwrap()
+                .last()
+                .unwrap()
+        } else {
+            self.map_to_octree_subdivision_level(self.max_dataset_level())
+                .unwrap()
+                .last()
+                .unwrap()
+        }
+    }
+
+    pub fn min_dataset_level(&self) -> usize {
+        *self.octree_to_dataset.first().unwrap()
+    }
+
+    pub fn max_dataset_level(&self) -> usize {
+        *self.octree_to_dataset.last().unwrap()
     }
 }
 

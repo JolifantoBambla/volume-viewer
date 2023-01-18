@@ -11,6 +11,7 @@ use crate::volume::BrickAddress;
 use glam::{UVec3, Vec3};
 use modular_bitfield::prelude::*;
 use std::rc::Rc;
+use crate::volume::octree::subdivision;
 
 #[bitfield]
 #[repr(u8)]
@@ -99,6 +100,13 @@ impl Node {
     pub fn all_subtrees_partially_mapped(&self, subdivision: &VolumeSubdivision) -> bool {
         self.partially_mapped_subtrees == subdivision.full_subtree_mask() as u8
     }
+
+    pub fn set_from(&mut self, other: Self) {
+        self.partially_mapped_subtrees = other.partially_mapped_subtrees;
+        self.self_mapped_and_resolution_mapping = other.self_mapped_and_resolution_mapping;
+        self.min = other.min;
+        self.max = other.max;
+    }
 }
 
 impl OctreeNode for Node {
@@ -155,8 +163,72 @@ impl PageTableOctree for TopDownTree {
         &self.resolution_mapping
     }
 
-    fn set_resolution_mapping(&mut self, resolution_mapping: ResolutionMapping) {
-        // todo: update all nodes
+    fn set_resolution_mapping(&mut self, resolution_mapping: ResolutionMapping, node_storage: &mut OctreeStorage<Self::Node>) {
+        // todo: update all nodes where the resolution mapping changed
+
+        // between the same two levels in the data set, the cut between octree levels mapping to
+        // one or the other will always be between the same two octree levels
+        // since resolution ranges are continuous, i.e., if two data set resolution levels a & b
+        // where a < b are used, every level c, a < c < b is also used,
+        // there are only two cases that we need to handle:
+        //  - a lower resolution is no longer available (map to next higher resolution)
+        //  - a higher resolution is no longer available (map to next lower resolution)
+        // this means, we only need to look at the boundaries and check if they changed,
+        // if they changed
+
+        let old_min = self.resolution_mapping.min_dataset_level();
+        let old_max = self.resolution_mapping.max_dataset_level();
+
+        // we iterate from the highest resolution to the lowest
+        for dataset_level in (resolution_mapping.min_dataset_level()..resolution_mapping.max_dataset_level() + 1).rev() {
+            let new_mapping = resolution_mapping.map_to_octree_subdivision_level(dataset_level).unwrap();
+            let next_higher_level = new_mapping.last().unwrap() + 1;
+
+            let new_lower_resolution = dataset_level < old_min;
+            let new_higher_resolution = dataset_level > old_max;
+            let is_highest_resolution = self.subdivisions.len() <= next_higher_level;
+            let needs_unmapping = new_higher_resolution || (new_lower_resolution && is_highest_resolution);
+
+            if needs_unmapping {
+                for octree_level in new_mapping.iter().rev() {
+                    for node_index in self.subdivisions().get(*octree_level).unwrap().node_indices() {
+                        node_storage.node_mut(node_index)
+                            .unwrap()
+                            .set_from(Node::from_resolution_mapping(dataset_level))
+                    }
+                }
+            } else if new_lower_resolution {
+                // every node on this level is unmapped now but the subtrees might be mapped
+                // since we went from the highest resolution down to this one, we can use the information
+                // in the next higher level outside of the range we're iterating over
+                // or maybe we can even use the data stored in the nodes themselves? no we can't -> it might be that we're dealing with a complete new set of resolutions
+
+                for octree_level in new_mapping.iter().rev() {
+                    // todo: set node data from level above
+                }
+            } else {
+                // todo: check if anything needs to be done
+                let old_mapping = self.resolution_mapping.map_to_octree_subdivision_level(dataset_level).unwrap();
+                let old_lower_boundary = old_mapping.first().unwrap();
+                let new_lower_boundary = new_mapping.first().unwrap();
+                let old_higher_boundary = old_mapping.last().unwrap();
+                let new_higher_boundary = new_mapping.last().unwrap();
+
+                if old_higher_boundary != new_higher_boundary {
+                    // the range will be zero if new_higher_boundary is lower than old_higher_boundary
+                    // which is what I want, I think
+                    for octree_level in (*old_higher_boundary..*new_higher_boundary + 1).rev() {
+                        // todo: set node data from level above
+                    }
+                }
+                if old_lower_boundary != new_lower_boundary {
+                    for octree_level in (0..0).rev() {
+                        // todo:
+                    }
+                }
+            }
+        }
+
         self.resolution_mapping = resolution_mapping;
     }
 
@@ -167,7 +239,8 @@ impl PageTableOctree for TopDownTree {
     ) {
         // iterate over resolution levels from min to max (i.e., highest res to lowest res)
         for (&resolution_level, bricks) in bricks.iter() {
-            let octree_level = self.map_to_highest_subdivision_level(resolution_level as usize);
+            let octree_level = self.resolution_mapping()
+                .map_to_highest_subdivision_level(resolution_level as usize);
 
             for b in bricks.iter() {
                 let normalized_address = self.to_normalized_address(b.global_address);
@@ -253,7 +326,8 @@ impl PageTableOctree for TopDownTree {
     ) {
         // iterate over resolution levels from min to max (i.e., highest res to lowest res)
         for (&resolution_level, bricks) in bricks.iter() {
-            let octree_level = self.map_to_highest_subdivision_level(resolution_level as usize);
+            let octree_level = self.resolution_mapping()
+                .map_to_highest_subdivision_level(resolution_level as usize);
 
             for b in bricks.iter() {
                 let normalized_address = self.to_normalized_address(b.global_address);

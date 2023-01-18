@@ -110,8 +110,8 @@ impl VolumeSubdivision {
 
     /// The index of the first node in this subdivision in a list of all octree nodes sorted by
     /// their subdivision.
-    pub fn first_node_index(&self) -> u32 {
-        self.node_offset
+    pub fn first_node_index(&self) -> usize {
+        self.node_offset as usize
     }
 
     /// The index of the last node in this subdivision in a list of all octree nodes sorted by
@@ -123,7 +123,7 @@ impl VolumeSubdivision {
     /// The offset of the first node in the next higher subdivision, i.e., the next higher
     /// resolution, in a list of all octree nodes sorted by their subdivision.
     pub fn next_subdivision_offset(&self) -> usize {
-        self.node_offset as usize + self.num_nodes()
+        self.first_node_index() + self.num_nodes()
     }
 
     /// Computes the index of a node in this subdivision from a normalized address, i.e., a point in
@@ -172,6 +172,11 @@ impl VolumeSubdivision {
     pub fn child_node_indices(&self, node_index: usize) -> Range<usize> {
         let first_child_node_index = self.first_child_node_index(node_index);
         first_child_node_index..first_child_node_index + self.children_per_node as usize
+    }
+
+    /// Computes a range over all node indices in this `VolumeSubdivision`.
+    pub fn node_indices(&self) -> Range<usize> {
+        self.first_node_index()..self.next_subdivision_offset()
     }
 
     pub fn shape(&self) -> UVec3 {

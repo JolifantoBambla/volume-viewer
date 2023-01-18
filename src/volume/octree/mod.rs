@@ -156,18 +156,33 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
         }
     }
 
+    // todo: handle changes to resolution mapping
+    // for the page table only it was easy: the channel settings in the shader prevents resolutions
+    // from being used and/or requested
+    // with the resolution mapping now encoded into the octree nodes changes to the resolution mapping
+    // need to be handled explicitly
     pub fn on_resolution_mapping_updated(&mut self, channel: u32, min_lod: u32, max_lod: u32) {
         let resolution_mapping = ResolutionMapping::new(
             self.subdivisions.as_slice(),
             self.data_subdivisions.as_slice(),
             min_lod,
-            max_lod,
+            max_lod
         );
-        self.assert_octree(channel);
-        self.octrees
-            .get_mut(&channel)
-            .unwrap()
-            .set_resolution_mapping(resolution_mapping);
+        if let Some(octree) = self.octrees.get_mut(&channel) {
+            let is_channel_visible = self.visible_channels.contains(&channel);
+            let mut node_storage = if is_channel_visible {
+                OctreeStorage::new_active(
+                    self.max_num_channels as usize,
+                    channel as usize,
+                    &mut self.active_node_storage,
+                )
+            } else {
+                OctreeStorage::new_inactive(self.inactive_node_storage.get_mut(&channel).unwrap())
+            };
+            octree.set_resolution_mapping(resolution_mapping, &mut node_storage);
+        } else {
+            self.resolution_mappings.insert(channel, resolution_mapping);
+        }
     }
 
     pub fn assert_octree(&mut self, channel: u32) {
@@ -206,6 +221,7 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
         }
     }
 
+    // todo: this needs access to the channel mapping used by the page table s.t. they are the same
     pub fn set_visible_channels(&mut self, visible_channels: &[u32]) {
         // todo: I kinda decided that the multichannel octree would use the same channel ordering as the page table to keep access consistent and don't introduce an extra indirection
         self.visible_channels = visible_channels.to_owned();
@@ -219,8 +235,6 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
             }
         }
     }
-
-    // todo: handle changes to resolution mapping
 
     pub fn gpu_subdivisions(&self) -> &Rc<Buffer<VolumeSubdivision>> {
         &self.gpu_subdivisions
