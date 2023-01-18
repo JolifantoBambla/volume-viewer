@@ -1,14 +1,14 @@
 use crate::util::extent::ToNormalizedAddress;
 use crate::util::vec_hash_map::VecHashMap;
 use crate::volume::octree::subdivision::VolumeSubdivision;
-use crate::volume::octree::{
-    BrickCacheUpdateListener, MappedBrick, PageTableOctree, PageTableOctreeNode, ResolutionMapping,
-    UnmappedBrick,
-};
+use crate::volume::octree::{ChannelBrickCacheUpdateResult, MappedBrick, UnmappedBrick};
 use crate::volume::BrickAddress;
 use glam::{UVec3, Vec3};
 use modular_bitfield::prelude::*;
 use std::rc::Rc;
+use crate::volume::octree::page_table_octree::{PageTableOctree, OctreeNode};
+use crate::volume::octree::resolution_mapping::ResolutionMapping;
+use crate::volume::octree::storage::OctreeStorage;
 
 #[bitfield]
 #[repr(u8)]
@@ -95,7 +95,7 @@ impl Node {
     }
 }
 
-impl PageTableOctreeNode for Node {
+impl OctreeNode for Node {
     fn from_resolution_mapping(resolution_mapping: usize) -> Self {
         let mapped_state = MappedState::new()
             .with_mapped(false)
@@ -109,7 +109,6 @@ impl PageTableOctreeNode for Node {
 
 #[derive(Clone, Debug)]
 pub struct TopDownTree {
-    nodes: Vec<Node>,
     subdivisions: Rc<Vec<VolumeSubdivision>>,
     data_subdivisions: Rc<Vec<UVec3>>,
     resolution_mapping: ResolutionMapping,
@@ -136,30 +135,10 @@ impl PageTableOctree for TopDownTree {
         resolution_mapping: ResolutionMapping,
     ) -> Self {
         Self {
-            nodes: Self::create_nodes_from_subdivisions(
-                subdivisions.as_slice(),
-                &resolution_mapping,
-            ),
             subdivisions: subdivisions.clone(),
             data_subdivisions: data_subdivisions.clone(),
             resolution_mapping,
         }
-    }
-
-    fn nodes(&self) -> &Vec<Self::Node> {
-        &self.nodes
-    }
-
-    fn nodes_mut(&mut self) -> &mut Vec<Node> {
-        &mut self.nodes
-    }
-
-    fn node(&self, node_index: usize) -> Option<&Node> {
-        self.nodes.get(node_index)
-    }
-
-    fn node_mut(&mut self, node_index: usize) -> Option<&mut Node> {
-        self.nodes.get_mut(node_index)
     }
 
     fn subdivisions(&self) -> &Rc<Vec<VolumeSubdivision>> {
@@ -174,10 +153,8 @@ impl PageTableOctree for TopDownTree {
         // todo: update all nodes
         self.resolution_mapping = resolution_mapping;
     }
-}
 
-impl BrickCacheUpdateListener for TopDownTree {
-    fn on_mapped_bricks(&mut self, bricks: &VecHashMap<u32, MappedBrick>) {
+    fn on_mapped_bricks(&mut self, bricks: &VecHashMap<u32, MappedBrick>, node_storage: &mut OctreeStorage<Self::Node>) {
         // iterate over resolution levels from min to max (i.e., highest res to lowest res)
         for (&resolution_level, bricks) in bricks.iter() {
             let octree_level = self.map_to_highest_subdivision_level(resolution_level as usize);
@@ -188,7 +165,7 @@ impl BrickCacheUpdateListener for TopDownTree {
                 // set the node as mapped
                 let subdivision = self.subdivisions.get(octree_level).unwrap();
                 let node_index = subdivision.to_node_index(normalized_address);
-                self.node_mut(node_index).unwrap().set_mapped(b.min, b.max);
+                node_storage.node_mut(node_index).unwrap().set_mapped(b.min, b.max);
 
                 let mut all_children_maybe_mapped = true;
                 let mut child_node_index = node_index;
@@ -207,7 +184,7 @@ impl BrickCacheUpdateListener for TopDownTree {
                     let is_virtual_child_of_brick_level = dataset_level == resolution_level;
                     if is_virtual_child_of_brick_level
                         && all_children_maybe_mapped
-                        && !self.node(level_node_index).unwrap().is_mapped()
+                        && !node_storage.node(level_node_index).unwrap().is_mapped()
                     {
                         let mut all_children_mapped = true;
                         let mut min = b.min;
@@ -215,7 +192,7 @@ impl BrickCacheUpdateListener for TopDownTree {
                         for child_index in level_subdivision.child_node_indices(
                             level_node_index,
                         ) {
-                            let child_node = self.node(child_index).unwrap();
+                            let child_node = node_storage.node(child_index).unwrap();
                             all_children_mapped = all_children_mapped && child_node.is_mapped();
                             if !all_children_mapped {
                                 break;
@@ -225,13 +202,13 @@ impl BrickCacheUpdateListener for TopDownTree {
                         }
                         all_children_maybe_mapped = all_children_mapped;
                         if all_children_mapped {
-                            self.node_mut(level_node_index)
+                            node_storage.node_mut(level_node_index)
                                 .unwrap()
                                 .set_mapped(min, max);
                         }
                         // if one of the node's subtrees was already partially mapped and not all of
                         // the node's children are now mapped, we can terminate the loop
-                        if !self
+                        if !node_storage
                             .node_mut(level_node_index)
                             .unwrap()
                             .set_subtree_mapped(subtree_mask)
@@ -243,7 +220,7 @@ impl BrickCacheUpdateListener for TopDownTree {
                         // We set the node's subtree as partially mapped.
                         // We can stop this iteration as soon as a node already had partially mapped
                         // subtree before this operation since all levels above will already have been mapped
-                        if !self
+                        if !node_storage
                             .node_mut(level_node_index)
                             .unwrap()
                             .set_subtree_mapped(subtree_mask)
@@ -257,7 +234,7 @@ impl BrickCacheUpdateListener for TopDownTree {
         }
     }
 
-    fn on_unmapped_bricks(&mut self, bricks: &VecHashMap<u32, UnmappedBrick>) {
+    fn on_unmapped_bricks(&mut self, bricks: &VecHashMap<u32, UnmappedBrick>, node_storage: &mut OctreeStorage<Self::Node>) {
         // iterate over resolution levels from min to max (i.e., highest res to lowest res)
         for (&resolution_level, bricks) in bricks.iter() {
             let octree_level = self.map_to_highest_subdivision_level(resolution_level as usize);
@@ -270,7 +247,7 @@ impl BrickCacheUpdateListener for TopDownTree {
 
                 // maybe set the node as unmapped (homogeneous nodes are ignored)
                 // if the node has been unmapped, propagate this change to the upper levels
-                if self.node_mut(node_index).unwrap().set_unmapped() {
+                if node_storage.node_mut(node_index).unwrap().set_unmapped() {
                     let mut child_node_index = node_index;
                     for l in (0..octree_level - 1).rev() {
                         let level_subdivision = self.subdivisions.get(l).unwrap();
@@ -280,7 +257,7 @@ impl BrickCacheUpdateListener for TopDownTree {
 
                         // set the node's subtree as unmapped.
                         // if the node still has mapped nodes, we can terminate the process
-                        if !self
+                        if !node_storage
                             .node_mut(level_node_index)
                             .unwrap()
                             .set_subtree_unmapped(subtree_mask)

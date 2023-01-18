@@ -20,7 +20,7 @@ use wgpu_framework::input::Input;
 use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
 use crate::resource::sparse_residency::texture3d::page_table::PageTableDirectory;
 use crate::util::vec_hash_map::VecHashMap;
-use crate::volume::octree::{BrickCacheUpdateResult, MappedBrick, UnmappedBrick};
+use crate::volume::octree::{BrickCacheUpdateResult, ChannelBrickCacheUpdateResult, MappedBrick, UnmappedBrick};
 use cache_management::{
     lru::LRUCache,
     process_requests::{ProcessRequests, Resources},
@@ -279,8 +279,7 @@ impl VolumeManager {
             self.lru_cache.num_writable_bricks(),
         ));
 
-        let mut mapped_bricks = HashMap::new();
-        let mut unmapped_bricks = HashMap::new();
+        let mut update_result = HashMap::new();
 
         // write bricks to cache
         if !bricks.is_empty() {
@@ -300,16 +299,10 @@ impl VolumeManager {
                                     .map_brick(&local_address, &brick_location);
                                 self.cached_bricks.insert(brick_id);
 
-                                mapped_bricks
+                                update_result
                                     .entry(global_address.channel)
-                                    .or_insert_with(VecHashMap::new);
-                                mapped_bricks
-                                    .get_mut(&global_address.channel)
-                                    .unwrap()
-                                    .insert(
-                                        global_address.level,
-                                        MappedBrick::new(global_address, brick.min, brick.max),
-                                    );
+                                    .or_insert_with(ChannelBrickCacheUpdateResult::new)
+                                    .add_mapped(MappedBrick::new(global_address, brick.min, brick.max));
 
                                 if let Some(unmapped_brick_local_address) = unmapped_brick_address {
                                     let unmapped_brick_global_address = self.map_from_page_table(
@@ -319,16 +312,10 @@ impl VolumeManager {
                                     let unmapped_brick_id = unmapped_brick_global_address.into();
                                     self.cached_bricks.remove(&unmapped_brick_id);
 
-                                    unmapped_bricks
+                                    update_result
                                         .entry(unmapped_brick_global_address.channel)
-                                        .or_insert_with(VecHashMap::new);
-                                    unmapped_bricks
-                                        .get_mut(&unmapped_brick_global_address.channel)
-                                        .unwrap()
-                                        .insert(
-                                            unmapped_brick_global_address.level,
-                                            UnmappedBrick::new(unmapped_brick_global_address),
-                                        );
+                                        .or_insert_with(ChannelBrickCacheUpdateResult::new)
+                                        .add_unmapped(UnmappedBrick::new(unmapped_brick_global_address));
                                 }
                             }
                             Err(_) => {
@@ -347,7 +334,7 @@ impl VolumeManager {
             // update the page directory
             self.page_table_directory.commit_changes();
         }
-        BrickCacheUpdateResult::new(mapped_bricks, unmapped_bricks)
+        BrickCacheUpdateResult::new(update_result)
     }
 
     /// Call this after rendering has completed to read back requests & usages

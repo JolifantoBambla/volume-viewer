@@ -1,7 +1,8 @@
 use std::fmt::Debug;
 use glam::Mat4;
 use crate::resource::VolumeManager;
-use crate::volume::octree::{MultiChannelPageTableOctree, PageTableOctree};
+use crate::volume::octree::MultiChannelPageTableOctree;
+use crate::volume::octree::page_table_octree::PageTableOctree;
 use crate::volume::octree::top_down_tree::TopDownTree;
 
 #[derive(Debug)]

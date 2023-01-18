@@ -10,10 +10,11 @@ use glam::{BVec3, UVec3, Vec3};
 /// That means that in case of a multi-channel octree, an index returned by a `VolumeSubdivision`'s
 /// method must be translated to access the right node, e.g.:
 /// For `n >= 1` channels, the actual index `i` in a list of interleaved nodes, i.e., a list that is
-/// sorted by subdivision first and channel second, is: `i * n`.
+/// sorted by subdivision first and channel second, is: `i * n + c`, where `0 < c < n` is the
+/// channel's index.
 /// For `n >= 1` channels, the actual index `i` in a list of nodes that is sorted by channel first
-/// and subdivision second is `n * m + i`, where `m` is the total number of nodes in a channel's
-/// octree.
+/// and subdivision second is `c * m + i`, where `m` is the total number of nodes in a channel's
+/// octree, and `0 < c < n` is the channel's index.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct VolumeSubdivision {
