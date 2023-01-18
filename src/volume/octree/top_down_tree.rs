@@ -8,7 +8,6 @@ use crate::volume::octree::{
 use crate::volume::BrickAddress;
 use glam::{UVec3, Vec3};
 use modular_bitfield::prelude::*;
-use std::ops::Range;
 use std::rc::Rc;
 
 #[bitfield]
@@ -76,23 +75,23 @@ impl Node {
 
     /// Marks the subtree referenced by `subtree_index` as unmapped.
     /// Returns true if none of the node's subtrees are mapped at the end of this operation.
-    pub fn set_subtree_unmapped(&mut self, subtree_index: u8) -> bool {
-        if self.is_subtree_partially_mapped(subtree_index) {
-            self.partially_mapped_subtrees -= subtree_index;
+    pub fn set_subtree_unmapped(&mut self, subtree_bitmask: u8) -> bool {
+        if self.is_subtree_partially_mapped(subtree_bitmask) {
+            self.partially_mapped_subtrees -= subtree_bitmask;
         }
         !self.has_partially_mapped_subtrees()
     }
 
-    pub fn is_subtree_partially_mapped(&self, subtree_index: u8) -> bool {
-        self.partially_mapped_subtrees & subtree_index > 0
+    pub fn is_subtree_partially_mapped(&self, subtree_bitmask: u8) -> bool {
+        self.partially_mapped_subtrees & subtree_bitmask > 0
     }
 
     pub fn has_partially_mapped_subtrees(&self) -> bool {
         self.partially_mapped_subtrees > 0
     }
 
-    pub fn all_subtrees_partially_mapped(&self) -> bool {
-        self.partially_mapped_subtrees == u8::MAX
+    pub fn all_subtrees_partially_mapped(&self, subdivision: &VolumeSubdivision) -> bool {
+        self.partially_mapped_subtrees == subdivision.full_subtree_mask() as u8
     }
 }
 
@@ -117,20 +116,6 @@ pub struct TopDownTree {
 }
 
 impl TopDownTree {
-    fn subtree_index(&self, node_index: usize, child_node_index: usize) -> usize {
-        1 << (child_node_index - node_index * 8)
-    }
-
-    // todo: move this into PageTableOctree and only access nodes through this (allows for implementation backed by one large array of nodes for all channels & also for implementation backed by one array of nodes for each channel)
-    fn first_child_node_index(&self, child_level_offset: usize, node_index: usize) -> usize {
-        child_level_offset + node_index * 8
-    }
-
-    fn child_node_indices(&self, child_level_offset: usize, node_index: usize) -> Range<usize> {
-        let first_child_node_index = self.first_child_node_index(child_level_offset, node_index);
-        first_child_node_index..first_child_node_index + 8
-    }
-
     // todo: move this into PageTableOctree and only access nodes through this (allows for implementation backed by one large array of nodes for all channels & also for implementation backed by one array of nodes for each channel)
     /// Maps a brick address to a normalized address (i.e., in the unit cube).
     fn to_normalized_address(&self, brick_address: BrickAddress) -> Vec3 {
@@ -210,8 +195,8 @@ impl BrickCacheUpdateListener for TopDownTree {
                 for l in (0..octree_level - 1).rev() {
                     let level_subdivision = self.subdivisions.get(l).unwrap();
                     let level_node_index = level_subdivision.to_node_index(normalized_address);
-                    let subtree_index =
-                        self.subtree_index(level_node_index, child_node_index) as u8;
+                    let subtree_mask = level_subdivision
+                        .subtree_mask(level_node_index, child_node_index) as u8;
 
                     // For each virtual subdivision level that maps to the same subdivision as the
                     // brick, we may need to set the corresponding node to a mapped state if all of
@@ -227,8 +212,7 @@ impl BrickCacheUpdateListener for TopDownTree {
                         let mut all_children_mapped = true;
                         let mut min = b.min;
                         let mut max = b.max;
-                        for child_index in self.child_node_indices(
-                            level_subdivision.next_subdivision_offset() as usize,
+                        for child_index in level_subdivision.child_node_indices(
                             level_node_index,
                         ) {
                             let child_node = self.node(child_index).unwrap();
@@ -250,7 +234,7 @@ impl BrickCacheUpdateListener for TopDownTree {
                         if !self
                             .node_mut(level_node_index)
                             .unwrap()
-                            .set_subtree_mapped(subtree_index)
+                            .set_subtree_mapped(subtree_mask)
                             && !all_children_mapped
                         {
                             break;
@@ -262,7 +246,7 @@ impl BrickCacheUpdateListener for TopDownTree {
                         if !self
                             .node_mut(level_node_index)
                             .unwrap()
-                            .set_subtree_mapped(subtree_index)
+                            .set_subtree_mapped(subtree_mask)
                         {
                             break;
                         }
@@ -291,15 +275,15 @@ impl BrickCacheUpdateListener for TopDownTree {
                     for l in (0..octree_level - 1).rev() {
                         let level_subdivision = self.subdivisions.get(l).unwrap();
                         let level_node_index = level_subdivision.to_node_index(normalized_address);
-                        let subtree_index =
-                            self.subtree_index(level_node_index, child_node_index) as u8;
+                        let subtree_mask = level_subdivision
+                            .subtree_mask(level_node_index, child_node_index) as u8;
 
                         // set the node's subtree as unmapped.
                         // if the node still has mapped nodes, we can terminate the process
                         if !self
                             .node_mut(level_node_index)
                             .unwrap()
-                            .set_subtree_unmapped(subtree_index)
+                            .set_subtree_unmapped(subtree_mask)
                         {
                             break;
                         }

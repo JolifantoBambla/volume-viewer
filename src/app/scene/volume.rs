@@ -38,7 +38,5 @@ impl VolumeSceneObject {
         })
     }
 
-    pub fn new_octree_volume(volume_manager: VolumeManager) -> Self {
-
-    }
+    //pub fn new_octree_volume(volume_manager: VolumeManager) -> Self {}
 }
