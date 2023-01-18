@@ -255,9 +255,12 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
     }
 
     pub fn on_brick_cache_updated(&mut self, update_result: &BrickCacheUpdateResult) {
+        let mut visible_channels_updated = false;
         for (channel, update) in update_result.0.iter() {
             self.assert_octree(*channel);
-            let mut node_storage = if self.visible_channels.contains(channel) {
+            let is_channel_visible = self.visible_channels.contains(channel);
+            visible_channels_updated |= is_channel_visible;
+            let mut node_storage = if is_channel_visible {
                 OctreeStorage::new_active(
                     self.max_num_channels as usize,
                     *channel as usize,
@@ -272,16 +275,9 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
                 .on_brick_cache_update(update, &mut node_storage);
         }
 
-        /*
-        // todo: update GPU buffers (either only those portions that changed or all of them)
-        for (offset, channel) in self.visible_channels.iter().enumerate() {
-            self.gpu_nodes.write_buffer_with_offset(
-                self.octrees.get(channel).unwrap().nodes().as_slice(),
-                offset as BufferAddress,
-            );
+        if visible_channels_updated {
+            self.gpu_nodes.write_buffer(&self.active_node_storage);
         }
-
-         */
     }
 
     pub fn set_visible_channels(&mut self, visible_channels: &[u32]) {
