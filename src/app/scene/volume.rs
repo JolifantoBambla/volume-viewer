@@ -1,9 +1,9 @@
-use std::fmt::Debug;
-use glam::Mat4;
 use crate::resource::VolumeManager;
-use crate::volume::octree::MultiChannelPageTableOctree;
 use crate::volume::octree::page_table_octree::PageTableOctree;
 use crate::volume::octree::top_down_tree::TopDownTree;
+use crate::volume::octree::MultiChannelPageTableOctree;
+use glam::Mat4;
+use std::fmt::Debug;
 
 #[derive(Debug)]
 pub struct OctreeVolume<T: PageTableOctree> {
@@ -26,10 +26,9 @@ pub enum VolumeSceneObject {
 
 impl VolumeSceneObject {
     fn make_volume_transform(volume_manager: &VolumeManager) -> Mat4 {
-        Mat4::from_scale(volume_manager.normalized_volume_size())
-            .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(
-                -0.5, -0.5, -0.5,
-            )))
+        Mat4::from_scale(volume_manager.normalized_volume_size()).mul_mat4(
+            &glam::Mat4::from_translation(glam::Vec3::new(-0.5, -0.5, -0.5)),
+        )
     }
 
     pub fn new_page_table_volume(volume_manager: VolumeManager) -> Self {

@@ -1,14 +1,16 @@
+use crate::resource::sparse_residency::texture3d::brick_cache_update::{
+    MappedBrick, UnmappedBrick,
+};
 use crate::util::extent::ToNormalizedAddress;
 use crate::util::vec_hash_map::VecHashMap;
+use crate::volume::octree::page_table_octree::{OctreeNode, PageTableOctree};
+use crate::volume::octree::resolution_mapping::ResolutionMapping;
+use crate::volume::octree::storage::OctreeStorage;
 use crate::volume::octree::subdivision::VolumeSubdivision;
-use crate::volume::octree::{ChannelBrickCacheUpdateResult, MappedBrick, UnmappedBrick};
 use crate::volume::BrickAddress;
 use glam::{UVec3, Vec3};
 use modular_bitfield::prelude::*;
 use std::rc::Rc;
-use crate::volume::octree::page_table_octree::{PageTableOctree, OctreeNode};
-use crate::volume::octree::resolution_mapping::ResolutionMapping;
-use crate::volume::octree::storage::OctreeStorage;
 
 #[bitfield]
 #[repr(u8)]
@@ -154,7 +156,11 @@ impl PageTableOctree for TopDownTree {
         self.resolution_mapping = resolution_mapping;
     }
 
-    fn on_mapped_bricks(&mut self, bricks: &VecHashMap<u32, MappedBrick>, node_storage: &mut OctreeStorage<Self::Node>) {
+    fn on_mapped_bricks(
+        &mut self,
+        bricks: &VecHashMap<u32, MappedBrick>,
+        node_storage: &mut OctreeStorage<Self::Node>,
+    ) {
         // iterate over resolution levels from min to max (i.e., highest res to lowest res)
         for (&resolution_level, bricks) in bricks.iter() {
             let octree_level = self.map_to_highest_subdivision_level(resolution_level as usize);
@@ -165,15 +171,18 @@ impl PageTableOctree for TopDownTree {
                 // set the node as mapped
                 let subdivision = self.subdivisions.get(octree_level).unwrap();
                 let node_index = subdivision.to_node_index(normalized_address);
-                node_storage.node_mut(node_index).unwrap().set_mapped(b.min, b.max);
+                node_storage
+                    .node_mut(node_index)
+                    .unwrap()
+                    .set_mapped(b.min, b.max);
 
                 let mut all_children_maybe_mapped = true;
                 let mut child_node_index = node_index;
                 for l in (0..octree_level - 1).rev() {
                     let level_subdivision = self.subdivisions.get(l).unwrap();
                     let level_node_index = level_subdivision.to_node_index(normalized_address);
-                    let subtree_mask = level_subdivision
-                        .subtree_mask(level_node_index, child_node_index) as u8;
+                    let subtree_mask =
+                        level_subdivision.subtree_mask(level_node_index, child_node_index) as u8;
 
                     // For each virtual subdivision level that maps to the same subdivision as the
                     // brick, we may need to set the corresponding node to a mapped state if all of
@@ -189,9 +198,7 @@ impl PageTableOctree for TopDownTree {
                         let mut all_children_mapped = true;
                         let mut min = b.min;
                         let mut max = b.max;
-                        for child_index in level_subdivision.child_node_indices(
-                            level_node_index,
-                        ) {
+                        for child_index in level_subdivision.child_node_indices(level_node_index) {
                             let child_node = node_storage.node(child_index).unwrap();
                             all_children_mapped = all_children_mapped && child_node.is_mapped();
                             if !all_children_mapped {
@@ -202,7 +209,8 @@ impl PageTableOctree for TopDownTree {
                         }
                         all_children_maybe_mapped = all_children_mapped;
                         if all_children_mapped {
-                            node_storage.node_mut(level_node_index)
+                            node_storage
+                                .node_mut(level_node_index)
                                 .unwrap()
                                 .set_mapped(min, max);
                         }
@@ -234,7 +242,11 @@ impl PageTableOctree for TopDownTree {
         }
     }
 
-    fn on_unmapped_bricks(&mut self, bricks: &VecHashMap<u32, UnmappedBrick>, node_storage: &mut OctreeStorage<Self::Node>) {
+    fn on_unmapped_bricks(
+        &mut self,
+        bricks: &VecHashMap<u32, UnmappedBrick>,
+        node_storage: &mut OctreeStorage<Self::Node>,
+    ) {
         // iterate over resolution levels from min to max (i.e., highest res to lowest res)
         for (&resolution_level, bricks) in bricks.iter() {
             let octree_level = self.map_to_highest_subdivision_level(resolution_level as usize);
@@ -253,7 +265,8 @@ impl PageTableOctree for TopDownTree {
                         let level_subdivision = self.subdivisions.get(l).unwrap();
                         let level_node_index = level_subdivision.to_node_index(normalized_address);
                         let subtree_mask = level_subdivision
-                            .subtree_mask(level_node_index, child_node_index) as u8;
+                            .subtree_mask(level_node_index, child_node_index)
+                            as u8;
 
                         // set the node's subtree as unmapped.
                         // if the node still has mapped nodes, we can terminate the process

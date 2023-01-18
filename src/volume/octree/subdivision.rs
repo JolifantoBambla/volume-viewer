@@ -1,6 +1,6 @@
-use std::ops::Range;
 use crate::util::extent::{SubscriptToIndex, ToSubscript};
 use glam::{BVec3, UVec3, Vec3};
+use std::ops::Range;
 
 /// A helper struct describing a subdivision level in a full, and potentially pointerless octree.
 /// It provides methods to compute indices into a list of octree nodes sorted by their subdivision
@@ -77,18 +77,22 @@ impl VolumeSubdivision {
         let mut volume_subdivisions = vec![Self::default()];
 
         for (i, s) in subdivisions.iter().enumerate() {
-            let children_shape =  UVec3::new(
+            let children_shape = UVec3::new(
                 if s.x { 2 } else { 1 },
                 if s.y { 2 } else { 1 },
                 if s.z { 2 } else { 1 },
             );
-            volume_subdivisions.get_mut(i)
+            volume_subdivisions
+                .get_mut(i)
                 .unwrap()
                 .set_children_shape(children_shape);
 
             volume_subdivisions.push(Self::new(
                 children_shape * volume_subdivisions.get(i).unwrap().shape,
-                volume_subdivisions.get(i).unwrap().next_subdivision_offset() as u32,
+                volume_subdivisions
+                    .get(i)
+                    .unwrap()
+                    .next_subdivision_offset() as u32,
             ));
         }
         volume_subdivisions
@@ -160,7 +164,8 @@ impl VolumeSubdivision {
 
     /// Computes the index of a node's first child node from its own index (`node_index`).
     pub fn first_child_node_index(&self, node_index: usize) -> usize {
-        self.next_subdivision_offset() + self.local_node_index(node_index) * self.children_per_node as usize
+        self.next_subdivision_offset()
+            + self.local_node_index(node_index) * self.children_per_node as usize
     }
 
     /// Computes the range of indices of a node's child nodes from its own index (`node_index`).
@@ -186,5 +191,5 @@ impl Default for VolumeSubdivision {
 }
 
 pub fn total_number_of_nodes(subdivisions: &[VolumeSubdivision]) -> usize {
-    subdivisions.iter().fold(0, |acc, s| acc + s.num_nodes()) as usize
+    subdivisions.iter().fold(0, |acc, s| acc + s.num_nodes())
 }

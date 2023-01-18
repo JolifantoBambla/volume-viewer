@@ -1,3 +1,4 @@
+pub mod brick_cache_update;
 mod cache_management;
 mod page_table;
 
@@ -17,10 +18,11 @@ use crate::resource::Texture;
 use crate::volume::{BrickAddress, VolumeDataSource};
 use wgpu_framework::input::Input;
 
+use crate::resource::sparse_residency::texture3d::brick_cache_update::{
+    BrickCacheUpdateResult, ChannelBrickCacheUpdateResult, MappedBrick, UnmappedBrick,
+};
 use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
 use crate::resource::sparse_residency::texture3d::page_table::PageTableDirectory;
-use crate::util::vec_hash_map::VecHashMap;
-use crate::volume::octree::{BrickCacheUpdateResult, ChannelBrickCacheUpdateResult, MappedBrick, UnmappedBrick};
 use cache_management::{
     lru::LRUCache,
     process_requests::{ProcessRequests, Resources},
@@ -302,7 +304,11 @@ impl VolumeManager {
                                 update_result
                                     .entry(global_address.channel)
                                     .or_insert_with(ChannelBrickCacheUpdateResult::new)
-                                    .add_mapped(MappedBrick::new(global_address, brick.min, brick.max));
+                                    .add_mapped(MappedBrick::new(
+                                        global_address,
+                                        brick.min,
+                                        brick.max,
+                                    ));
 
                                 if let Some(unmapped_brick_local_address) = unmapped_brick_address {
                                     let unmapped_brick_global_address = self.map_from_page_table(
@@ -315,7 +321,9 @@ impl VolumeManager {
                                     update_result
                                         .entry(unmapped_brick_global_address.channel)
                                         .or_insert_with(ChannelBrickCacheUpdateResult::new)
-                                        .add_unmapped(UnmappedBrick::new(unmapped_brick_global_address));
+                                        .add_unmapped(UnmappedBrick::new(
+                                            unmapped_brick_global_address,
+                                        ));
                                 }
                             }
                             Err(_) => {

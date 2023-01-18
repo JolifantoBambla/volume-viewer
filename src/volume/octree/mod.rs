@@ -1,106 +1,26 @@
 use crate::renderer::settings::ChannelSettings;
+use crate::resource::sparse_residency::texture3d::brick_cache_update::BrickCacheUpdateResult;
 use glam::UVec3;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;
-use wgpu::{BufferAddress, BufferUsages};
+use wgpu::BufferUsages;
 use wgpu_framework::context::Gpu;
 use wgpu_framework::gpu::buffer::Buffer;
 
-use crate::util::vec_hash_map::VecHashMap;
-use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
-use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 use crate::volume::octree::page_table_octree::PageTableOctree;
 use crate::volume::octree::resolution_mapping::ResolutionMapping;
 use crate::volume::octree::storage::OctreeStorage;
+use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
+use crate::volume::BrickedMultiResolutionMultiVolumeMeta;
 
 pub mod direct_access_tree;
-pub mod subdivision;
-pub mod top_down_tree;
 pub mod page_table_octree;
 pub mod resolution_mapping;
 pub mod storage;
-
-#[derive(Clone, Debug)]
-pub struct MappedBrick {
-    #[allow(unused)]
-    global_address: BrickAddress,
-    #[allow(unused)]
-    min: u8,
-    #[allow(unused)]
-    max: u8,
-}
-
-impl MappedBrick {
-    pub fn new(global_address: BrickAddress, min: u8, max: u8) -> Self {
-        Self {
-            global_address,
-            min,
-            max,
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct UnmappedBrick {
-    #[allow(unused)]
-    global_address: BrickAddress,
-}
-
-impl UnmappedBrick {
-    pub fn new(global_address: BrickAddress) -> Self {
-        Self { global_address }
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct ChannelBrickCacheUpdateResult {
-    mapped_bricks: VecHashMap<u32, MappedBrick>,
-    unmapped_bricks: VecHashMap<u32, UnmappedBrick>,
-}
-
-impl ChannelBrickCacheUpdateResult {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn add_mapped(&mut self, brick: MappedBrick) {
-        self.mapped_bricks.insert(
-            brick.global_address.level,
-            brick
-        );
-    }
-
-    pub fn add_unmapped(&mut self, brick: UnmappedBrick) {
-        self.unmapped_bricks.insert(
-            brick.global_address.level,
-            brick
-        );
-    }
-
-    pub fn mapped_bricks(&self) -> &VecHashMap<u32, MappedBrick> {
-        &self.mapped_bricks
-    }
-
-    pub fn unmapped_bricks(&self) -> &VecHashMap<u32, UnmappedBrick> {
-        &self.unmapped_bricks
-    }
-}
-
-#[readonly::make]
-#[derive(Clone, Debug)]
-pub struct BrickCacheUpdateResult(HashMap<u32, ChannelBrickCacheUpdateResult>);
-
-impl BrickCacheUpdateResult {
-    pub fn new(
-        update_result: HashMap<u32, ChannelBrickCacheUpdateResult>,
-    ) -> Self {
-        Self {
-            0: update_result,
-        }
-    }
-}
+pub mod subdivision;
+pub mod top_down_tree;
 
 #[derive(Clone, Debug)]
 pub struct MultiChannelPageTableOctreeDescriptor<'a> {
@@ -175,7 +95,11 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
         let data_subdivisions = Rc::new(data_set_subdivisions);
 
         let num_nodes_per_channel = total_number_of_nodes(subdivisions.as_slice());
-        let mut active_node_storage = vec![Tree::Node::default(); num_nodes_per_channel * descriptor.max_num_channels as usize];
+        let mut active_node_storage = vec![
+            Tree::Node::default();
+            num_nodes_per_channel
+                * descriptor.max_num_channels as usize
+        ];
 
         let mut octrees = HashMap::new();
         for (channel_index, c) in descriptor.visible_channels.iter().enumerate() {
@@ -189,7 +113,8 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
                 ),
             );
 
-            octrees.get(c)
+            octrees
+                .get(c)
                 .unwrap()
                 .create_nodes()
                 .drain(..)
@@ -198,7 +123,8 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
                     let global_node_index = if descriptor.interleaved_storage {
                         local_node_index * descriptor.max_num_channels as usize + channel_index
                     } else {
-                        local_node_index + num_nodes_per_channel * descriptor.max_num_channels as usize
+                        local_node_index
+                            + num_nodes_per_channel * descriptor.max_num_channels as usize
                     };
                     active_node_storage[global_node_index] = node;
                 });
@@ -256,7 +182,7 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
 
     pub fn on_brick_cache_updated(&mut self, update_result: &BrickCacheUpdateResult) {
         let mut visible_channels_updated = false;
-        for (channel, update) in update_result.0.iter() {
+        for (channel, update) in update_result.updates.iter() {
             self.assert_octree(*channel);
             let is_channel_visible = self.visible_channels.contains(channel);
             visible_channels_updated |= is_channel_visible;
@@ -264,7 +190,7 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
                 OctreeStorage::new_active(
                     self.max_num_channels as usize,
                     *channel as usize,
-                    &mut self.active_node_storage
+                    &mut self.active_node_storage,
                 )
             } else {
                 OctreeStorage::new_inactive(self.inactive_node_storage.get_mut(channel).unwrap())

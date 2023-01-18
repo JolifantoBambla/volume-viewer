@@ -1,6 +1,6 @@
-use glam::UVec3;
 use crate::util::vec_hash_map::VecHashMap;
 use crate::volume::octree::subdivision::VolumeSubdivision;
+use glam::UVec3;
 
 #[derive(Clone, Debug)]
 pub struct ResolutionMapping {
@@ -37,8 +37,8 @@ impl ResolutionMapping {
             // else: collect next lod
             while !reached_max_lod
                 && s.shape()
-                .cmpgt(*data_subdivisions.get(current_lod as usize).unwrap())
-                .any()
+                    .cmpgt(*data_subdivisions.get(current_lod as usize).unwrap())
+                    .any()
             {
                 current_lod = max_lod.min(current_lod + 1);
                 reached_max_lod = current_lod == max_lod;
