@@ -67,6 +67,10 @@ impl Node {
         unmapped && !self.has_partially_mapped_subtrees()
     }
 
+    pub fn maps_to_resolution(&self) -> usize {
+        MappedState::from(self.self_mapped_and_resolution_mapping).resolution_mapping() as usize
+    }
+
     /// Marks the subtree referenced by `subtree_index` as partially mapped.
     /// Returns `true` if it is the first of this node's partially mapped subtrees.
     pub fn set_subtree_mapped(&mut self, subtree_index: u8) -> bool {
