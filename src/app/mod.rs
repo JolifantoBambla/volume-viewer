@@ -18,7 +18,7 @@ use wasm_bindgen::JsCast;
 use wgpu::{SubmissionIndex, SurfaceConfiguration, TextureView};
 use wgpu_framework::app::{GpuApp, MapToWindowEvent};
 use wgpu_framework::context::{ContextDescriptor, Gpu, SurfaceContext};
-use wgpu_framework::event::lifecycle::{OnCommandsSubmitted, PrepareRender, Update};
+use wgpu_framework::event::lifecycle::{OnCommandsSubmitted, OnFrameBegin, OnFrameEnd, PrepareRender, Update};
 use wgpu_framework::event::window::{OnResize, OnUserEvent, OnWindowEvent};
 use wgpu_framework::input::Input;
 use winit::event::WindowEvent;
@@ -274,6 +274,12 @@ impl MapToWindowEvent for App {
     }
 }
 
+impl OnFrameBegin for App {
+    fn on_frame_begin(&mut self) {
+        // todo: dispatch canvas event
+    }
+}
+
 impl PrepareRender for App {
     fn prepare_render(&mut self, _input: &Input) {
         let channel_selection = self.settings.get_sorted_visible_channel_indices();
@@ -311,6 +317,12 @@ impl OnCommandsSubmitted for App {
         }
         // todo: pass result to an octree
         let _ = self.scene.volume_manager_mut().update_cache(input);
+    }
+}
+
+impl OnFrameEnd for App {
+    fn on_frame_end(&mut self, _input: &Input) {
+        // todo: dispatch frame end canvas event
     }
 }
 

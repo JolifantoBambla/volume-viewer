@@ -2,18 +2,19 @@ use crate::app::scene::camera::Camera;
 use crate::resource::VolumeManager;
 use crate::Event;
 use glam::{Mat4, UVec2};
-use wgpu_framework::event::lifecycle::Update;
+use wgpu::SubmissionIndex;
+use wgpu_framework::event::lifecycle::{OnCommandsSubmitted, Update};
 use wgpu_framework::event::window::{OnUserEvent, OnWindowEvent};
 use wgpu_framework::geometry::bounds::Bounds3;
 use wgpu_framework::input::Input;
+use crate::app::scene::volume::VolumeSceneObject;
 
 pub mod camera;
 pub mod volume;
 
 pub struct MultiChannelVolumeScene {
     camera: Camera,
-    volume_transform: Mat4,
-    volume_manager: VolumeManager,
+    volume: VolumeSceneObject,
 }
 
 impl MultiChannelVolumeScene {
@@ -23,18 +24,12 @@ impl MultiChannelVolumeScene {
         let distance_from_center = 500.;
         let camera_speed = 5.0;
         let camera = Camera::new(window_size, distance_from_center, camera_speed);
-        // todo: refactor multi-volume into scene object or whatever
-        // the volume is a unit cube ([0,1]^3)
-        // we translate it s.t. its center is the origin and scale it to its original dimensions
-        let volume_transform = glam::Mat4::from_scale(volume_manager.normalized_volume_size())
-            .mul_mat4(&glam::Mat4::from_translation(glam::Vec3::new(
-                -0.5, -0.5, -0.5,
-            )));
+
+        let volume = VolumeSceneObject::new_page_table_volume(volume_manager);
 
         Self {
             camera,
-            volume_transform,
-            volume_manager,
+            volume,
         }
     }
 
@@ -42,13 +37,13 @@ impl MultiChannelVolumeScene {
         &self.camera
     }
     pub fn volume_transform(&self) -> Mat4 {
-        self.volume_transform
+        self.volume.volume_transform()
     }
     pub fn volume_manager(&self) -> &VolumeManager {
-        &self.volume_manager
+        &self.volume.volume_manager()
     }
     pub fn volume_manager_mut(&mut self) -> &mut VolumeManager {
-        &mut self.volume_manager
+        self.volume.volume_manager_mut()
     }
 }
 
