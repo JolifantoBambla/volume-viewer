@@ -1,9 +1,11 @@
 use glam::{Mat3, Mat4, UVec2, Vec2, Vec3};
-use winit::event::{ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
 use wgpu_framework::event::lifecycle::Update;
 use wgpu_framework::event::window::OnWindowEvent;
 use wgpu_framework::geometry::bounds::{Bounds, Bounds2, Bounds3};
 use wgpu_framework::input::Input;
+use winit::event::{
+    ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
+};
 
 #[derive(Copy, Clone)]
 pub struct CameraView {
@@ -228,7 +230,7 @@ impl Camera {
 
         Self {
             view,
-            projection: perspective.clone(),
+            projection: perspective,
 
             orthographic,
             perspective,
@@ -259,7 +261,7 @@ impl Camera {
 }
 
 impl Update for Camera {
-    fn update(&mut self, input: &Input) {
+    fn update(&mut self, _input: &Input) {
         // todo: update camera here instead of OnWindowEvent
     }
 }
@@ -269,21 +271,17 @@ impl OnWindowEvent for Camera {
         match event {
             WindowEvent::KeyboardInput {
                 input:
-                KeyboardInput {
-                    virtual_keycode: Some(virtual_keycode),
-                    state: ElementState::Pressed,
-                    ..
-                },
+                    KeyboardInput {
+                        virtual_keycode: Some(virtual_keycode),
+                        state: ElementState::Pressed,
+                        ..
+                    },
                 ..
             } => match virtual_keycode {
                 VirtualKeyCode::D => self.view.move_right(self.speed),
                 VirtualKeyCode::A => self.view.move_left(self.speed),
-                VirtualKeyCode::W | VirtualKeyCode::Up => {
-                    self.view.move_forward(self.speed)
-                }
-                VirtualKeyCode::S | VirtualKeyCode::Down => {
-                    self.view.move_backward(self.speed)
-                }
+                VirtualKeyCode::W | VirtualKeyCode::Up => self.view.move_forward(self.speed),
+                VirtualKeyCode::S | VirtualKeyCode::Down => self.view.move_backward(self.speed),
                 VirtualKeyCode::C => {
                     if self.projection().is_orthographic() {
                         self.set_projection(self.perspective);

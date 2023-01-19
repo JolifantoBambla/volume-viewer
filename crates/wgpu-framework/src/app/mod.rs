@@ -10,7 +10,7 @@ use winit::{
 };
 
 use crate::context::{ContextDescriptor, SurfaceContext, SurfaceTarget, WgpuContext};
-use crate::event::lifecycle::{OnCommandsSubmitted, PrepareRender, Update};
+use crate::event::lifecycle::{OnCommandsSubmitted, OnFrameBegin, OnFrameEnd, PrepareRender, Update};
 use crate::event::window::{OnResize, OnUserEvent, OnWindowEvent};
 use crate::input::Input;
 #[cfg(target_arch = "wasm32")]
@@ -28,7 +28,7 @@ pub trait MapToWindowEvent: OnUserEvent {
     fn map_to_window_event(&self, user_event: &Self::UserEvent) -> Option<WindowEvent>;
 }
 
-pub trait GpuApp: OnUserEvent + PrepareRender + Update + OnCommandsSubmitted {
+pub trait GpuApp: OnUserEvent + OnFrameBegin + PrepareRender + Update + OnCommandsSubmitted + OnFrameEnd {
     fn init(
         &mut self,
         window: &Window,
@@ -133,6 +133,8 @@ impl<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> AppRunne
                     }
                 }
                 event::Event::RedrawRequested(_) => {
+                    app.on_frame_begin();
+
                     let frame_input = input.prepare_next();
                     app.update(&frame_input);
 
@@ -156,6 +158,8 @@ impl<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> AppRunne
                     app.on_commands_submitted(&frame_input, &submission_index);
 
                     frame.present();
+
+                    app.on_frame_end(&frame_input);
                 }
                 _ => {}
             }
