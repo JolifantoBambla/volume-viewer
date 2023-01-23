@@ -132,7 +132,7 @@ impl VolumeSubdivision {
         (self.node_offset
             + normalized_address
                 .to_subscript(self.shape())
-                .to_index(&self.shape)) as usize
+                .to_index(&self.shape())) as usize
     }
 
     /// Computes a local node index into the slice corresponding to this `VolumeSubdivision` from a

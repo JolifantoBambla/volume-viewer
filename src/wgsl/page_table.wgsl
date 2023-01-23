@@ -5,6 +5,14 @@ const UNMAPPED = 0u;
 const MAPPED = 1u;
 const EMPTY = 2u;
 
+// todo: this should be
+// bit 0: UNMAPPED / MAPPED
+// bit 1: NON_EMPTY / EMPTY
+// bit 3: UNKNOWN / KNOWN
+// 5 bits for something else or unused
+// EMPTY implies KNOWN
+// UNKNOWN implies UNMAPPED
+
 struct PageTableEntry {
     // The 3D texture coordinate of the brick referenced by this `PageTableEntry` in the brick
     // cache.

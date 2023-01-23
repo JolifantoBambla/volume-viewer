@@ -94,13 +94,10 @@ export class VolumeRenderer {
     }
 
     async initialize(offscreenCanvas, config) {
-        // This is a hack so that wgpu can create an instance from a dedicated worker
-        // See: https://github.com/gfx-rs/wgpu/issues/1986
-        self.Window = WorkerGlobalScope;
-
         // to accept an OffscreenCanvas as a raw window handle, winit needs some properties to exist on both the window and
         // the canvas. This is a hack to make sure that the window has the properties that winit needs.
         // see: https://github.com/rust-windowing/winit/issues/1518
+        self.Window = WorkerGlobalScope;
         self.Window.prototype.devicePixelRatio = 1;
         offscreenCanvas.setAttribute = (name, value) => {};
         offscreenCanvas.style = {
