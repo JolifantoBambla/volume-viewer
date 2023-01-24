@@ -1,8 +1,10 @@
 @include(dispatch_indirect)
 @include(octree_node)
 @include(octree_node_util)
+@include(page_table)
 @include(volume_subdivision)
 @include(volume_subdivision_util)
+@include(util)
 
 @group(0) @binding(0) var<storage> volume_subdivisions: array<VolumeSubdivision>;
 @group(0) @binding(1) var<storage, read_write> octree_nodes: array<u32>;
@@ -16,17 +18,105 @@ fn to_multichannel_node_index(local_node_index: u32, num_channels: u32, channel_
     return local_node_index * num_channels + channel_index;
 }
 
+fn to_channel_local_node_index(multichannel_node_index: u32, num_channels: u32) -> u32 {
+}
+
 struct OctreeLevelUpdateMeta {
     num_update_nodes: atomic<u32>,
     subidivision_index: u32,
 }
 
-
-
 @group(0) @binding(0) var<storage, read_write> num_update_nodes: atomic<u32>;
 @group(0) @binding(0) var<storage, read_write> update_node_indices: array<u32>;
 @group(0) @binding(0) var<storage, read_write> next_level_update_node_indices: array<u32>;
 @group(0) @binding(0) var<storage, read_write> next_level_update_indirect: DispatchWorkgroupsIndirect;
+
+/// The whole process looks like this:
+/// - map mapped & unmapped bricks to affected leaf nodes
+/// - update node min & max values
+/// -
+/// It starts with brick indices being mapped to node indices
+
+
+@group(0) @binding(0) var<storage> num_unmapped_brick_ids: u32;
+@group(0) @binding(0) var<storage> num_mapped_brick_ids: u32;
+@group(0) @binding(0) var<storage> unmapped_brick_ids: array<u32>;
+@group(0) @binding(0) var<storage> mapped_brick_ids: array<u32>;
+
+@group(0) @binding(0) var<uniform> page_directory_meta: PageDirectoryMeta;
+
+@compute
+@workgroup_size(64, 1, 1)
+fn map_bricks_to_leaf_nodes(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
+    // todo: check for out of bounds
+
+    // todo: check if order is correct
+    let page_directory_shape = vec3<u32>(
+        page_directory_meta.max_resolutions,
+        page_directory_meta.max_channels,
+        1
+    );
+
+
+    let brick_id = 0;
+    // todo: find nodes that overlap with this brick
+    let brick_address = unpach4x8uint(brick_id);
+    let channel_and_resolution = index_to_subscript(brick_address.w, page_directory_shape);
+
+    // todo: I need the spatial offset & extent of the brick to determine which nodes are affected by this brick
+    // todo: I think I need to check for padding here
+    let brick_scale = brick_size / resolution.volume_size;
+
+    // something like this?
+    let bounds_min = brick_address.xyz * brick_scale;
+    let bounds_max = (brick_address.xyz + brick_size) * brick_scale;
+
+    // add all nodes the brick contributes to
+    let min_node = subdivision_idx_compute_node_index(max_subdivision_index, bounds_min);
+    let max_node = subdivision_idx_compute_node_index(max_subdivision_index, bounds_max);
+    for (var i = min_node; i <= max_node; i += 1) {
+        let node_index = to_multichannel_index(
+            subdivision_idx_local_node_index(max_subdivision_index, i),
+            num_channels,
+            channel_index
+        );
+        // todo: next_level_update_node_indices needs to be reset at some point (or work with timestamps)
+        next_level_update_node_indices[node_index] = u32(true);
+    }
+}
+
+@compute
+@workgroup_size(64, 1, 1)
+fn set_up_next_level_update(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
+    // todo: this will be in a struct
+    let subidivision_index = 0;
+
+    // todo: where does this come from? is a constant across all passes -> can use global uniform buffer
+    let num_channels = 0; // the maximum number of representable channels in the octree
+
+    let num_nodes_in_level = subdivision_idx_num_nodes_in_subdivision(subdivision_index) * num_channels;
+
+    if (global_invocation_id.x >= num_nodes_in_level) {
+        return;
+    }
+
+    let subdivision_local_multi_channel_node_index = global_invocation_id.x;
+    let update_node = next_level_update_node_indices[subdivision_local_multi_channel_node_index] != 0;
+    if (update_node) {
+        // todo: where is num_update_nodes?
+        // todo: when is num_update_nodes set to 0?
+        let index = atomicAdd(num_update_nodes, 1);
+
+        let channel_index = subdivision_local_multi_channel_node_index % num_channels;
+        let channel_local_node_index = (subdivision_local_multi_channel_node_index - channel_index) / num_channels;
+        update_node_indices[index] = to_multichannel_node_index(
+            subdivision_idx_global_node_index(subdivision_index, channel_local_node_index),
+            num_channels,
+            channel_index
+        );
+        atomicMax(next_level_update_indirect.workgroup_count_x, max(index / 64, 1));
+    }
+}
 
 @compute
 @workgroup_size(64, 1, 1)
@@ -87,36 +177,6 @@ fn update_octree_node(@builtin(global_invocation_id) global_invocation_id: vec3<
             // so the things stored here are local to subdivision but multichannel
             next_level_update_node_indices[parent_node_index] = u32(true);
         }
-    }
-}
-
-@compute
-@workgroup_size(64, 1, 1)
-fn set_up_next_level_update(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
-    // todo: this will be in a struct
-    let subidivision_index = 0;
-    let num_channels = 0; // the maximum number of representable channels in the octree
-
-    let num_nodes_in_level = subdivision_idx_num_nodes_in_subdivision(subdivision_index) * num_channels;
-
-    if (global_invocation_id.x >= num_nodes_in_level) {
-        return;
-    }
-
-    let subdivision_local_multi_channel_node_index = global_invocation_id.x;
-    let update_node = next_level_update_node_indices[subdivision_local_multi_channel_node_index] != 0;
-    if (update_node) {
-        // todo: where is num_update_nodes?
-        // todo: when is num_update_nodes set to 0?
-        let index = atomicAdd(num_update_nodes, 1);
-        let channel_index = subdivision_local_multi_channel_node_index % num_channels;
-        let channel_local_node_index = (subdivision_local_multi_channel_node_index - channel_index) / num_channels;
-        update_node_indices[index] = to_multichannel_node_index(
-            subdivision_idx_global_node_index(subdivision_index, channel_local_node_index),
-            num_channels,
-            channel_index
-        );
-        atomicMax(next_level_update_indirect.workgroup_count_x, max(index / 64, 1));
     }
 }
 

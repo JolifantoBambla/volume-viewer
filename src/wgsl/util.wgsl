@@ -17,8 +17,19 @@ fn sum_components_uint4(v: uint4) -> u32 {
     return v.x + v.y + v.z + v.w;
 }
 
+// todo: use insertBits instead
 fn pack4x8uint(e: uint4) -> u32 {
     return sum_components_uint4(e << uint4(24u, 16u, 8u, 0u));
+}
+
+// todo: check if order is correct
+fn unpack4x8uint(e: u32) -> u32 {
+    return vec4<u32>(
+        extractBits(e, 24, 8),
+        extractBits(e, 16, 8),
+        extractBits(e, 8, 8),
+        extractBits(e, 0, 8)
+    );
 }
 
 fn min_dimension(v: float3) -> u32 {
