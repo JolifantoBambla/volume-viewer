@@ -1,3 +1,4 @@
+@include(dispatch_indirect)
 @include(octree_node)
 @include(octree_node_util)
 @include(volume_subdivision)
@@ -20,11 +21,7 @@ struct OctreeLevelUpdateMeta {
     subidivision_index: u32,
 }
 
-struct DispatchWorkgroupsIndirect {
-    workgroup_count_x: atomic<u32>,
-    workgroup_count_y: atomic<u32>,
-    workgroup_count_z: atomic<u32>,
-}
+
 
 @group(0) @binding(0) var<storage, read_write> num_update_nodes: atomic<u32>;
 @group(0) @binding(0) var<storage, read_write> update_node_indices: array<u32>;
