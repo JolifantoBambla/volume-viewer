@@ -45,6 +45,28 @@ struct OctreeLevelUpdateMeta {
 
 @group(0) @binding(0) var<uniform> page_directory_meta: PageDirectoryMeta;
 
+// these two buffers have size num_nodes_in_highest_subdivision * num_channels
+// they are used for multiple things:
+// 1st pass: compute minima & maxima:
+//  - a) minima of nodes
+//  - b) maxima of nodes
+// 2nd pass: update minima & maxima:
+//  - write minima of a) and maxima of b) to nodes
+// 3rd pass: process brick updates
+//  - a) mark node indices that have been updated with a non-zero bitmask of resolutions that have been changed (atomicOr)
+// 4th pass: update mapped states
+//  - use masks in a) to update nodes if mask is non-zero (just use 'or' because one thread per node)
+//  - b) if changed, mark parent indices
+// 5th pass: pack parent node indices
+//  - a) store marked indices in b)
+// 6th pass: update nodes on next level
+//  - b) mark parent indices
+// repeat 5 & 6 until root node is reached
+
+@group(0) @binding(0) var<storage, read_write> node_minima: array<atomic<u32>>;
+@group(0) @binding(0) var<storage, read_write> node_maxima: array<atomic<u32>>;
+
+
 @compute
 @workgroup_size(64, 1, 1)
 fn map_bricks_to_leaf_nodes(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
@@ -80,9 +102,12 @@ fn map_bricks_to_leaf_nodes(@builtin(global_invocation_id) global_invocation_id:
             num_channels,
             channel_index
         );
+        // todo: update partially mapped
         // todo: next_level_update_node_indices needs to be reset at some point (or work with timestamps)
         next_level_update_node_indices[node_index] = u32(true);
     }
+
+    // todo: compute min & max only if the brick has not been uploaded before
 }
 
 @compute
