@@ -47,9 +47,29 @@ struct OctreeLevelUpdateMeta {
 
 @group(0) @binding(0) var<uniform> page_directory_meta: PageDirectoryMeta;
 
+// these two buffers have size num_nodes_in_highest_subdivision * num_channels
+// they are used for multiple things:
+// 1st pass: compute minima & maxima:
+//  - a) minima of nodes
+//  - b) maxima of nodes
+// 2nd pass: update minima & maxima:
+//  - write minima of a) and maxima of b) to nodes
+// 3rd pass: process brick updates
+//  - a) mark node indices that have been updated with a non-zero bitmask of resolutions that have been changed (atomicOr)
+// 4th pass: update mapped states
+//  - use masks in a) to update nodes if mask is non-zero (just use 'or' because one thread per node)
+//  - b) if changed, mark parent indices
+// 5th pass: pack parent node indices
+//  - a) store marked indices in b)
+// 6th pass: update nodes on next level
+//  - b) mark parent indices
+// repeat 5 & 6 until root node is reached
+
+@group(0) @binding(0) var<storage, read_write> node_helper_buffer_a: array<atomic<u32>>;
+@group(0) @binding(0) var<storage, read_write> node_helper_buffer_b: array<atomic<u32>>;
 
 @group(0) @binding(0) var<uniform> page_directory_meta: PageDirectoryMeta;
-@group(1) @binding(1) var<storage> page_table_meta: PageTableMetas;
+@group(0) @binding(0) var<storage> page_table_meta: PageTableMetas;
 @group(0) @binding(0) var<storage> new_brick_ids: array<u32>;
 @group(0) @binding(0) var page_directory: texture_3d<f32>;
 @group(0) @binding(0) var brick_cache: texture_3d<f32>;
@@ -58,7 +78,7 @@ const THREAD_BLOCK_SIZE: vec3<u32> = vec3<u32>(2, 2, 2);
 
 @compute
 @workgroup_size(64, 1, 1)
-fn process_brick_values(@builtin(global_invocation_id) global_invocation_id: uint3) {
+fn update_node_min_max_values(@builtin(global_invocation_id) global_invocation_id: uint3) {
     let brick_size = page_directory_meta.brick_size;
     let processing_size = brick_size / THREAD_BLOCK_SIZE;
     let threads_per_brick = processing_size.x * processing_size.y * processing_size.z;
@@ -84,7 +104,6 @@ fn process_brick_values(@builtin(global_invocation_id) global_invocation_id: uin
 
     let offset = brick_offset + thread_block_offset;
 
-
     // todo: out of bounds check
 
     // todo: find node index
@@ -95,12 +114,17 @@ fn process_brick_values(@builtin(global_invocation_id) global_invocation_id: uin
     for (var z = 0; z < THREAD_BLOCK_SIZE.z; z += 1) {
         for (var x = 0; x < THREAD_BLOCK_SIZE.x; x += 1) {
             for (var y = 0; y < THREAD_BLOCK_SIZE.y; y += 1) {
+
                 // todo: find node index
                 let node_index = 0;
-                if (node_index != current_node_index) {
-                    atomicMin(current_min)
-                }
 
+                if (node_index != current_node_index) {
+                    atomicMin(node_helper_buffer_a[current_node_index], current_min);
+                    atomicMax(node_helper_buffer_b[current_node_index], current_max);
+                    current_node_index = node_index;
+                    current_min = 255;
+                    current_max = 0;
+                }
                 let sample_address = offset + vec3<u32>(x, y, z);
                 let value = u32(textureLoad(brick_cache, int3(x), 0).x * 255.0);
                 current_min = min(current_min, value);
@@ -108,71 +132,8 @@ fn process_brick_values(@builtin(global_invocation_id) global_invocation_id: uin
             }
         }
     }
-
-    var current_node_index = 0;
-    // todo: compute shape of the 4x4x4 volume that falls into the first node
-    var current_node = vec3<u32>();
-
-    // each thread checks 4*4*4=64 values and distributes them to
-    for (var processed = 0; processed < (THREAD_BLOCK_SIZE.x * THREAD_BLOCK_SIZE.y * THREAD_BLOCK_SIZE.z);) {
-        // todo: compute offset of the next node if multiple nodes are in the 4x4x4 region handled by this thread
-        let next_node = vec3<u32>(2,2,2);
-
-        var current_min = 255;
-        var current_max = 0;
-        for (; current_node.z < next_node.z; current_node.z += 1) {
-        for (; current_node.y < next_node.y; current_node.x += 1) {
-        for (; current_node.x < next_node.x; current_node.y += 1) {
-            // todo: get value from brick cache
-            let value = u32(0.0 * 255.0);
-            current_min = min(current_min, value);
-            current_max = max(current_max, value);
-        }}}
-
-        // todo: implement (atomicMin & atomicMax, or actually CAS because these are just parts of a u32...or use an extra buffer of vec4<u32> that needs to be processed afterwards)
-        maybe_set_node_min_max(current_node_index, current_min, current_max);
-        processed += current_node.x * current_node.y * current_node.z;
-        current_node = next_node;
-    }
-
-    // todo: for n values in brick, compute min and max and update octree leaf nodes
-
-    // todo: check which brick this thread processes
-    // todo: check the number of values in this brick (i.e., padded bricks may contain some random data)
-    // todo: check the number of values in this brick that are processed by this thread
-    // todo: start processing in a 4x4x4 block -> map each coordinate to a node and find minima and maxima in the block
-    // todo: whenever a value maps to a node different from the previous one, commit the collected minimum & maximum to the node's list via atomicMin and atomicMax
-    // -> best case: 1 atomicMin & 1 atomicMax per thread (downside: likely other threads access the same location)
-    // -> worst case: 4x4x4 atomicMin & atomicMax call (upside: unlikely that other threads access the same location)
-
-
-    // todo: compute first node index
-    var current_node_index = 0;
-
-    // todo: compute shape of the 4x4x4 volume that falls into the first node
-    var current_node = vec3<u32>();
-
-    // each thread checks 4*4*4=64 values and distributes them to
-    for (var processed = 0; processed < 64;) {
-        // todo: compute offset of the next node if multiple nodes are in the 4x4x4 region handled by this thread
-        let next_node = vec3<u32>(2,2,2);
-
-        var current_min = 255;
-        var current_max = 0;
-        for (; current_node.z < next_node.z; current_node.z += 1) {
-        for (; current_node.y < next_node.y; current_node.x += 1) {
-        for (; current_node.x < next_node.x; current_node.y += 1) {
-            // todo: get value from brick cache
-            let value = u32(0.0 * 255.0);
-            current_min = min(current_min, value);
-            current_max = max(current_max, value);
-        }}}
-
-        // todo: implement (atomicMin & atomicMax, or actually CAS because these are just parts of a u32...or use an extra buffer of vec4<u32> that needs to be processed afterwards)
-        maybe_set_node_min_max(current_node_index, current_min, current_max);
-        processed += current_node.x * current_node.y * current_node.z;
-        current_node = next_node;
-    }
+    atomicMin(node_helper_buffer_a[current_node_index], current_min);
+    atomicMax(node_helper_buffer_b[current_node_index], current_max);
 }
 
 
@@ -211,9 +172,12 @@ fn map_bricks_to_leaf_nodes(@builtin(global_invocation_id) global_invocation_id:
             num_channels,
             channel_index
         );
+        // todo: update partially mapped
         // todo: next_level_update_node_indices needs to be reset at some point (or work with timestamps)
         next_level_update_node_indices[node_index] = u32(true);
     }
+
+    // todo: compute min & max only if the brick has not been uploaded before
 }
 
 @compute
