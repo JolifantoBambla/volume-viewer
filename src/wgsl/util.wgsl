@@ -52,6 +52,10 @@ fn max_component(v: float3) -> f32 {
     return v[max_dimension(v)];
 }
 
+fn subscript_to_normalized_address(subscript: uint3, extent: uint3) -> float3 {
+    return float3(subscript) / float3(extent);
+}
+
 fn normalized_address_to_subscript(normalized_address: float3, extent: uint3) -> uint3 {
     return min(uint3(floor(float3(extent) * normalized_address)), extent - uint3(1u));
 }
