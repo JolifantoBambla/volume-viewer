@@ -39,13 +39,17 @@ fn subdivision_idx_global_node_index(subdivision_index: u32, local_node_index: u
     return local_node_index + subdivision_idx_get_node_offset(subdivision_index);
 }
 
-fn subdivision_idx_compute_node_index(subdivision_index: u32, normalized_address: vec3<f32>) -> u32 {
+fn subdivision_idx_compute_local_node_index(subdivision_index: u32, normalized_address: vec3<f32>) -> u32 {
     let shape = subdivision_idx_get_shape(subdivision_index);
+    return subscript_to_index(
+        normalized_address_to_subscript(normalized_address, shape),
+        shape
+    );
+}
+
+fn subdivision_idx_compute_node_index(subdivision_index: u32, normalized_address: vec3<f32>) -> u32 {
     return subdivision_idx_get_node_offset(subdivision_index) +
-        subscript_to_index(
-            normalized_address_to_subscript(normalized_address, shape),
-            shape
-        );
+        subdivision_idx_compute_local_node_index(subdivision_index, normalized_address);
 }
 
 fn subdivision_idx_first_child_index(subdivision_index: u32, node_index: u32) -> u32 {
