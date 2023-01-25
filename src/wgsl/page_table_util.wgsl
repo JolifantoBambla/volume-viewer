@@ -1,3 +1,8 @@
+fn pt_to_lcoal_page_address(page_table_index: u32, local_page_address: uint3) {
+    let page_table_meta = page_table_meta.metas[page_table_index];
+    return page_table_meta.page_table_offset + local_page_address;
+}
+
 /// Computes the address of a page w.r.t. the page table table's offset for a given position in the unit cube ([0,1]^3)
 /// The result is in range [0, page_table.extent[i] - 1], i = 0,1,2.
 fn pt_compute_local_page_address(page_table_index: u32, position: float3) -> uint3 {
