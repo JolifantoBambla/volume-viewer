@@ -99,7 +99,7 @@ fn update_node_min_max_values(@builtin(global_invocation_id) global_invocation_i
     let global_id = global_invocation_id.x;
     let brick_index = global_id / threads_per_brick;
 
-    if (brick_index < cache_update_meta.num_mapped_first_time) {
+    if (brick_index >= cache_update_meta.num_mapped_first_time) {
         return;
     }
 
@@ -118,7 +118,7 @@ fn update_node_min_max_values(@builtin(global_invocation_id) global_invocation_i
 
     let volume_offset = local_page_address * brick_size + thread_block_offset;
     let volume_size = pt_get_volume_size(page_table_index);
-    if (any(volume_offset < volume_size)) {
+    if (any(volume_offset >= volume_size)) {
         return;
     }
 
@@ -136,7 +136,7 @@ fn update_node_min_max_values(@builtin(global_invocation_id) global_invocation_i
                 let position = vec3<u32>(x, y, z);
 
                 let volume_position = volume_offset + position;
-                let out_of_bounds = any(volume_position < volume_size);
+                let out_of_bounds = any(volume_position >= volume_size);
 
                 if (!out_of_bounds) {
                     let node_index = subdivision_idx_compute_node_index(
