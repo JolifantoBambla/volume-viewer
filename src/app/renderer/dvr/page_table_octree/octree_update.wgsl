@@ -10,11 +10,11 @@
 @include(util)
 
 // with histogram/bitmask:
-// 1. compute min max does this instead:
+// 1. compute min max:
 //  - compute bitmask for values in block
 //  - read node and check if bitmask is different
 //  - if so, atomicOr in helper buffer
-// 2. process mapped does this instead: (maybe exclude first mapped from this process and do a combined one in min max pass)
+// 2. process mapped: (maybe exclude first mapped from this process and do a combined one in min max pass for those)
 //  - compute bitmask for resolution
 //  - read node and check if bitmask is different
 //  - if so, atomicOr in helper buffer (same as min & max)
@@ -29,6 +29,31 @@
 //  - check child nodes and do Or
 //  - if changed, set parent node in helper buffer b to true
 // repeat 4. and 5. until root node
+
+// with min max:
+// 1. compute min max:
+//  - compute min and store in helper a (atomicMin)
+//  - compute max and store in helper b (atomicMax)
+// 2. update min max:
+//  - if min or max in helper buffers is not default value
+//  - update node
+//  - set helper buffers 0
+// 2. process mapped:
+//  - compute bitmask for resolution
+//  - read node and check if bitmask is different
+//  - if so, atomicOr in helper buffer
+// 3. process helper buffer:
+//  - if non-zero: Or in node buffer
+//  - set helper buffer 0
+//  - mark parent node in helper buffer b
+// 4. process parent node buffer:
+//  - if non-zero add node in helper buffer b to a, etc.
+//  - set helper buffer b 0
+// 5. process parent nodes:
+//  - check child nodes and do Or
+//  - if changed, set parent node in helper buffer b to true
+// repeat 4. and 5. until root node
+
 
 
 // prerequisites:
