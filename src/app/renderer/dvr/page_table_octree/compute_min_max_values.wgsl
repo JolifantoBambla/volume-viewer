@@ -1,3 +1,4 @@
+@include(cache_update_meta)
 @include(dispatch_indirect)
 @include(page_directory_util)
 @include(page_table)
@@ -5,13 +6,6 @@
 @include(volume_subdivision)
 @include(volume_subdivision_util)
 @include(util)
-
-struct CacheUpdateMeta {
-    num_mapped: u32,
-    num_unmapped: u32,
-    num_mapped_first_time: u32,
-    num_unsuccessful_map_attempt: u32,
-}
 
 // (read-only) global data bind group
 @group(0) @binding(0) var<storage> volume_subdivisions: array<VolumeSubdivision>;

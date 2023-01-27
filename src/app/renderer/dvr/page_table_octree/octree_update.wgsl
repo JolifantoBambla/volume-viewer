@@ -9,6 +9,37 @@
 @include(volume_subdivision_util)
 @include(util)
 
+// with histogram/bitmask:
+// 1. compute min max does this instead:
+//  - compute bitmask for values in block
+//  - read node and check if bitmask is different
+//  - if so, atomicOr in helper buffer
+// 2. process mapped does this instead: (maybe exclude first mapped from this process and do a combined one in min max pass)
+//  - compute bitmask for resolution
+//  - read node and check if bitmask is different
+//  - if so, atomicOr in helper buffer (same as min & max)
+// 3. process helper buffer:
+//  - if non-zero: Or in node buffer
+//  - set helper buffer 0
+//  - mark parent node in helper buffer b
+// 4. process parent node buffer:
+//  - if non-zero add node in helper buffer b to a, etc.
+//  - set helper buffer b 0
+// 5. process parent nodes:
+//  - check child nodes and do Or
+//  - if changed, set parent node in helper buffer b to true
+// repeat 4. and 5. until root node
+
+
+// prerequisites:
+// todo: compute_min_max_values: set minima to 255
+// todo: compute_min_max_values: set maxima to 0
+// todo: process_mapped_bricks: set node_helper_buffer_a to 0
+// todo: set_up_next_level_update: set num_nodes_next_level to 0
+// todo: set_up_next_level_update: set next_level_update_indirect.workgroup_count_x to 0
+
+
+
 @group(0) @binding(0) var<storage> volume_subdivisions: array<VolumeSubdivision>;
 @group(0) @binding(1) var<storage, read_write> octree_nodes: array<u32>;
 
@@ -55,191 +86,6 @@ struct OctreeLevelUpdateMeta {
 // 6th pass: update nodes on next level
 //  - b) mark parent indices
 // repeat 5 & 6 until root node is reached
-
-struct CacheUpdateMeta {
-    num_mapped: u32,
-    num_unmapped: u32,
-    num_mapped_first_time: u32,
-    num_unsuccessful_map_attempt: u32,
-}
-
-// (read-only) global data bind group
-@group(0) @binding(0) var<storage> volume_subdivisions: array<VolumeSubdivision>;
-@group(0) @binding(1) var<uniform> page_directory_meta: PageDirectoryMeta;
-@group(0) @binding(2) var<storage> page_table_meta: PageTableMetas;
-@group(0) @binding(3) var page_directory: texture_3d<f32>;
-@group(0) @binding(4) var brick_cache: texture_3d<f32>;
-
-// (read-only) cache update bind group
-@group(1) @binding(0) var<storage> cache_update_meta: CacheUpdateMeta;
-@group(1) @binding(1) var<storage> new_brick_ids: array<u32>;
-
-// (read-write) output minima & maxima
-@group(2) @binding(0) var<storage, read_write> node_helper_buffer_a: array<atomic<u32>>;
-@group(2) @binding(1) var<storage, read_write> node_helper_buffer_b: array<atomic<u32>>;
-
-const THREAD_BLOCK_SIZE: vec3<u32> = vec3<u32>(2, 2, 2);
-
-@compute
-@workgroup_size(64, 1, 1)
-fn update_node_min_max_values(@builtin(global_invocation_id) global_invocation_id: uint3) {
-    let brick_size = page_directory_meta.brick_size;
-    let processing_size = brick_size / THREAD_BLOCK_SIZE;
-    let threads_per_brick = processing_size.x * processing_size.y * processing_size.z;
-
-    let global_id = global_invocation_id.x;
-    let brick_index = global_id / threads_per_brick;
-
-    if (brick_index >= cache_update_meta.num_mapped_first_time) {
-        return;
-    }
-
-    let local_id = global_id - brick_index * threads_per_brick;
-    let thread_block_offset = index_to_subscript(local_id, processing_size) * THREAD_BLOCK_SIZE;
-
-    let brick_id = new_brick_ids[brick_index];
-    let unpacked_brick_id = unpack4x8uint(brick_id);
-    let local_page_address = unpacked_brick_id.xyz;
-    let page_table_index = unpacked_brick_id.w;
-    let page_address = pt_to_local_page_address(page_table_index, local_page_address);
-    let page = to_page_table_entry(textureLoad(page_directory, int3(page_address.xyz)));
-    let brick_chache_offset = page.location;
-
-    let offset = brick_cache_offset + thread_block_offset;
-
-    let volume_offset = local_page_address * brick_size + thread_block_offset;
-    let volume_size = pt_get_volume_size(page_table_index);
-    if (any(volume_offset >= volume_size)) {
-        return;
-    }
-
-    let subdivision_index = arrayLength(volume_subdivisions) - 1;
-    var current_node_index = subdivision_idx_compute_node_index(
-        subdivision_index,
-        subscript_to_normalized_address(volume_offset, volume_size)
-    );
-
-    var current_min = 255;
-    var current_max = 0;
-    for (var z = 0; z < THREAD_BLOCK_SIZE.z; z += 1) {
-        for (var x = 0; x < THREAD_BLOCK_SIZE.x; x += 1) {
-            for (var y = 0; y < THREAD_BLOCK_SIZE.y; y += 1) {
-                let position = vec3<u32>(x, y, z);
-
-                let volume_position = volume_offset + position;
-                let out_of_bounds = any(volume_position >= volume_size);
-
-                if (!out_of_bounds) {
-                    let node_index = subdivision_idx_compute_node_index(
-                        subdivision_index,
-                        subscript_to_normalized_address(volume_offset, volume_size)
-                    );
-
-                    // if we've entered a new node, we commit our intermediate results before we move on
-                    if (node_index != current_node_index) {
-                        if (current_min < 255) {
-                            atomicMin(node_helper_buffer_a[current_node_index], current_min);
-                        }
-                        if (current_max > 0) {
-                            atomicMax(node_helper_buffer_b[current_node_index], current_max);
-                        }
-                        current_node_index = node_index;
-                        current_min = 255;
-                        current_max = 0;
-                    }
-
-                    let chache_position = offset + position;
-                    let value = u32(textureLoad(brick_cache, int3(chache_position), 0).x * 255.0);
-                    current_min = min(current_min, value);
-                    current_max = max(current_max, value);
-                }
-            }
-        }
-    }
-    if (current_min < 255) {
-        atomicMin(node_helper_buffer_a[current_node_index], current_min);
-    }
-    if (current_max > 0) {
-        atomicMax(node_helper_buffer_b[current_node_index], current_max);
-    }
-}
-
-
-@compute
-@workgroup_size(64, 1, 1)
-fn map_bricks_to_leaf_nodes(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
-    // todo: check for out of bounds
-
-    // todo: check if order is correct
-    let page_directory_shape = vec3<u32>(
-        page_directory_meta.max_resolutions,
-        page_directory_meta.max_channels,
-        1
-    );
-
-
-    let brick_id = 0;
-    // todo: find nodes that overlap with this brick
-    let brick_address = unpach4x8uint(brick_id);
-    let channel_and_resolution = index_to_subscript(brick_address.w, page_directory_shape);
-
-    // todo: I need the spatial offset & extent of the brick to determine which nodes are affected by this brick
-    // todo: I think I need to check for padding here
-    let brick_scale = brick_size / resolution.volume_size;
-
-    // something like this?
-    let bounds_min = brick_address.xyz * brick_scale;
-    let bounds_max = (brick_address.xyz + brick_size) * brick_scale;
-
-    // add all nodes the brick contributes to
-    let min_node = subdivision_idx_compute_node_index(max_subdivision_index, bounds_min);
-    let max_node = subdivision_idx_compute_node_index(max_subdivision_index, bounds_max);
-    for (var i = min_node; i <= max_node; i += 1) {
-        let node_index = to_multichannel_index(
-            subdivision_idx_local_node_index(max_subdivision_index, i),
-            num_channels,
-            channel_index
-        );
-        // todo: update partially mapped
-        // todo: next_level_update_node_indices needs to be reset at some point (or work with timestamps)
-        next_level_update_node_indices[node_index] = u32(true);
-    }
-
-    // todo: compute min & max only if the brick has not been uploaded before
-}
-
-@compute
-@workgroup_size(64, 1, 1)
-fn set_up_next_level_update(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
-    // todo: this will be in a struct
-    let subidivision_index = 0;
-
-    // todo: where does this come from? is a constant across all passes -> can use global uniform buffer
-    let num_channels = 0; // the maximum number of representable channels in the octree
-
-    let num_nodes_in_level = subdivision_idx_num_nodes_in_subdivision(subdivision_index) * num_channels;
-
-    if (global_invocation_id.x >= num_nodes_in_level) {
-        return;
-    }
-
-    let subdivision_local_multi_channel_node_index = global_invocation_id.x;
-    let update_node = next_level_update_node_indices[subdivision_local_multi_channel_node_index] != 0;
-    if (update_node) {
-        // todo: where is num_update_nodes?
-        // todo: when is num_update_nodes set to 0?
-        let index = atomicAdd(num_update_nodes, 1);
-
-        let channel_index = subdivision_local_multi_channel_node_index % num_channels;
-        let channel_local_node_index = (subdivision_local_multi_channel_node_index - channel_index) / num_channels;
-        update_node_indices[index] = to_multichannel_node_index(
-            subdivision_idx_global_node_index(subdivision_index, channel_local_node_index),
-            num_channels,
-            channel_index
-        );
-        atomicMax(next_level_update_indirect.workgroup_count_x, max(index / 64, 1));
-    }
-}
 
 @compute
 @workgroup_size(64, 1, 1)

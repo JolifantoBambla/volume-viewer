@@ -33,8 +33,8 @@ fn node_idx_get_min_max(node_index: u32, num_channels: u32, channel_index: u32) 
 
 fn node_idx_set_min_max_global(node_index: u32, new_min: u32, new_max: u32) {
     let node = node_idx_load_global(node_index);
-    node_set_min(node, new_min);
-    node_set_max(node, new_max);
+    node_set_min(&node, new_min);
+    node_set_max(&node, new_max);
     node_store_global(node_index, node);
 }
 
@@ -52,7 +52,7 @@ fn node_idx_get_mapped_resolutions(node_index: u32, num_channels: u32, channel_i
 
 fn node_idx_set_mapped_resolutions_global(node_index: u32, new_mapped_resolutions_bitmask: u32) {
     let node = node_idx_load_global(node_index);
-    node_set_mapped_resolutions(node, new_mapped_resolutions_bitmask);
+    node_set_mapped_resolutions(&node, new_mapped_resolutions_bitmask);
     node_store_global(node_index, node);
 }
 
@@ -70,7 +70,7 @@ fn node_idx_get_partially_mapped_resolutions(node_index: u32, num_channels: u32,
 
 fn node_idx_set_partially_mapped_resolutions_global(node_index: u32, new_partially_mapped_resolutions_bitmask: u32) {
     let node = node_idx_load_global(node_index);
-    node_set_partially_mapped_resolutions(node, new_partially_mapped_resolutions_bitmask);
+    node_set_partially_mapped_resolutions(&node, new_partially_mapped_resolutions_bitmask);
     node_store_global(node_index, node);
 }
 
