@@ -65,13 +65,14 @@ fn compute_min_max_values(@builtin(global_invocation_id) global_invocation_id: v
     }
 
     let subdivision_index = arrayLength(volume_subdivisions) - 1;
+    let num_channels = page_directory_meta.max_channels;
 
-    var current_node_index = to_multichannel_node_index(
+    var current_multichannel_local_index = to_multichannel_node_index(
         subdivision_idx_compute_local_node_index(
             subdivision_index,
             subscript_to_normalized_address(volume_offset, volume_size)
         ),
-        page_directory_meta.max_channels,
+        num_channels,
         channel_index
     );
 
@@ -91,19 +92,19 @@ fn compute_min_max_values(@builtin(global_invocation_id) global_invocation_id: v
                             subdivision_index,
                             subscript_to_normalized_address(volume_offset, volume_size)
                         ),
-                        page_directory_meta.max_channels,
+                        num_channels,
                         channel_index
                     );
 
                     // if we've entered a new node, we commit our intermediate results before we move on
-                    if (node_index != current_node_index) {
+                    if (node_index != current_multichannel_local_index) {
                         if (current_min < 255) {
-                            atomicMin(node_helper_buffer_a[current_node_index], current_min);
+                            atomicMin(node_helper_buffer_a[current_multichannel_local_index], current_min);
                         }
                         if (current_max > 0) {
-                            atomicMax(node_helper_buffer_b[current_node_index], current_max);
+                            atomicMax(node_helper_buffer_b[current_multichannel_local_index], current_max);
                         }
-                        current_node_index = node_index;
+                        current_multichannel_local_index = node_index;
                         current_min = 255;
                         current_max = 0;
                     }
@@ -117,9 +118,9 @@ fn compute_min_max_values(@builtin(global_invocation_id) global_invocation_id: v
         }
     }
     if (current_min < 255) {
-        atomicMin(node_helper_buffer_a[current_node_index], current_min);
+        atomicMin(node_helper_buffer_a[current_multichannel_local_index], current_min);
     }
     if (current_max > 0) {
-        atomicMax(node_helper_buffer_b[current_node_index], current_max);
+        atomicMax(node_helper_buffer_b[current_multichannel_local_index], current_max);
     }
 }
