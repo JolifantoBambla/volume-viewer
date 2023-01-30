@@ -34,11 +34,16 @@ fn update_node_min_max_values(@builtin(global_invocation_id) global_invocation_i
     let offset = subdivision_idx_get_node_offset(subdivision_index) * num_channels;
     let global_node_index = offset + multichannel_local_node_index;
     let node = octree_nodes[global_node_index];
-    node_set_min(&node, min(minimum, node_get_min(node)));
-    node_set_max(&node, max(maximum, node_get_max(node)));
+    let old_min = node_get_min(node);
+    let old_max = node_get_max(node);
+    node_set_min(&node, min(minimum, old_min));
+    node_set_max(&node, max(maximum, old_max));
     octree_nodes[global_node_index] = node;
 
+    // mark node as changed
+    let node_changed = insertBits(0, u32(old_min > minimum || old_max < maximum), NODE_MIN_OFFSET, NODE_MIN_COUNT);
+    node_helper_buffer_b[multichannel_local_node_index] = node_changed;
+
     // clean up for next passes
-    node_helper_buffer_a[multichannel_local_node_index] = 0;
-    node_helper_buffer_b[multichannel_local_node_index] = 0;
+    node_helper_buffer_a[multichannel_local_node_index] = 255;
 }

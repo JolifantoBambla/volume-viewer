@@ -59,15 +59,28 @@ fn subdivision_idx_compute_node_index(subdivision_index: u32, normalized_address
         subdivision_idx_compute_local_node_index(subdivision_index, normalized_address);
 }
 
-fn subdivision_idx_first_child_index(subdivision_index: u32, node_index: u32) -> u32 {
+fn subdivision_idx_first_child_index_from_local(subdivision_index: u32, local_node_index: u32) -> u32 {
     return subdivision_idx_next_subdivision_offset(subdivision_index) +
-        subdivision_idx_local_node_index(subdivision_index, node_index) *
-        subdivision_idx_get_children_per_node(subdivision_index);
+        local_node_index * subdivision_idx_get_children_per_node(subdivision_index);
+}
+
+fn subdivision_idx_first_child_index(subdivision_index: u32, node_index: u32) -> u32 {
+    return subdivision_idx_first_child_index_from_local(
+        subdivision_index,
+        subdivision_idx_local_node_index(subdivision_index, node_index)
+    );
+}
+
+fn subdivision_idx_local_parent_node_index_from_local(subdivision_index: u32, local_node_index: u32) -> u32 {
+   let parent_subdivision_index = subdivision_index - 1;
+   return local_node_index / subdivision_idx_get_children_per_node(parent_subdivision_index);
 }
 
 fn subdivision_idx_local_parent_node_index(subdivision_index: u32, node_index: u32) -> u32 {
-    let parent_subdivision_index = subdivision_index - 1;
-    return subdivision_idx_local_node_index(subdivision_index, node_index) / subdivision_idx_get_children_per_node(parent_subdivision_index);
+    return subdivision_idx_local_parent_node_index_from_local(
+        subdivision_index,
+        subdivision_idx_local_node_index(subdivision_index, node_index)
+    );
 }
 
 fn subdivision_idx_parent_node_index(subdivision_index: u32, node_index: u32) -> u32 {

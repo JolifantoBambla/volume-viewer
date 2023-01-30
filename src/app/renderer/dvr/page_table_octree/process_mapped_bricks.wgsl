@@ -20,8 +20,8 @@
 @group(1) @binding(0) var<storage> cache_update_meta: CacheUpdateMeta;
 @group(1) @binding(1) var<storage> mapped_brick_ids: array<u32>;
 
-// (read-write) output minima & maxima
-@group(2) @binding(1) var<storage, read_write> node_helper_buffer_a: array<atomic<u32>>;
+// (read-write) output resolution mapping
+@group(2) @binding(1) var<storage, read_write> node_helper_buffer_b: array<atomic<u32>>;
 
 // Maps bricks to octree leaf nodes and marks their local index in node_helper_buffer_a as updated with the updated
 // non-zero bitmask of partially mapped resolutions
@@ -68,7 +68,7 @@ fn process_mapped_bricks(@builtin(global_invocation_id) global_invocation_id: ve
                 let node = octree_nodes[multichannel_global_index];
                 let partially_mapped_bitmask = node_get_partially_mapped_resolutions(node);
                 if (!bool(partially_mapped_bitmask & resolution_mask)) {
-                    atomicOr(node_helper_buffer_a[multichannel_local_index], resolution_mask);
+                    atomicOr(node_helper_buffer_b[multichannel_local_index], resolution_mask);
                 }
             }
         }

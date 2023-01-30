@@ -37,21 +37,22 @@
 // 2. update min max:
 //  - if min or max in helper buffers is not default value
 //  - update node
-//  - set helper buffers 0
+//  - mark in helper buffer b if min max changed
+//  - set helper buffer a to 255
 // 2. process mapped:
 //  - compute bitmask for resolution
 //  - read node and check if bitmask is different
-//  - if so, atomicOr in helper buffer
-// 3. process helper buffer:
-//  - if non-zero: Or in node buffer
-//  - set helper buffer 0
-//  - mark parent node in helper buffer b
-// 4. process parent node buffer:
-//  - if non-zero add node in helper buffer b to a, etc.
-//  - set helper buffer b 0
-// 5. process parent nodes:
-//  - check child nodes and do Or
+//  - if so, atomicOr in helper buffer b
+// 3. process helper buffers:
+//  - if helper buffer b non-zero: update node & collect parent node in helper buffer a
+//  - set helper buffer b to 0
+// 4. process parent nodes:
+//  - check child nodes and update node
 //  - if changed, set parent node in helper buffer b to true
+//  - set helper buffer a to 255
+// 5. process parent node buffer:
+//  - if helper buffer b non-zero: atomicAdd index & add node index to helper buffer a
+//  - set helper buffer b 0
 // repeat 4. and 5. until root node
 
 
@@ -63,12 +64,8 @@
 // todo: set_up_next_level_update: set num_nodes_next_level to 0
 // todo: set_up_next_level_update: set next_level_update_indirect.workgroup_count_x to 0
 
-
-
 @group(0) @binding(0) var<storage> volume_subdivisions: array<VolumeSubdivision>;
 @group(0) @binding(1) var<storage, read_write> octree_nodes: array<u32>;
-
-
 
 struct OctreeLevelUpdateMeta {
     num_update_nodes: atomic<u32>,
