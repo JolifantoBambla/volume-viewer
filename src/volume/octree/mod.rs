@@ -16,11 +16,13 @@ use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivisio
 use crate::volume::BrickedMultiResolutionMultiVolumeMeta;
 
 pub mod direct_access_tree;
+pub mod octree_manager;
 pub mod page_table_octree;
 pub mod resolution_mapping;
 pub mod storage;
 pub mod subdivision;
 pub mod top_down_tree;
+pub mod update;
 
 #[derive(Clone, Debug)]
 pub struct MultiChannelPageTableOctreeDescriptor<'a> {
@@ -131,12 +133,12 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
         }
 
         let gpu_subdivisions =
-            Buffer::from_data("subdivisions", &subdivisions, BufferUsages::STORAGE, gpu);
+            Buffer::from_data("subdivisions", subdivisions.as_slice(), BufferUsages::STORAGE, gpu);
 
         // the buffer does not need to be initialized because all nodes are zero anyway
         let gpu_buffer = Buffer::from_data(
             "octree",
-            &active_node_storage,
+            active_node_storage.as_slice(),
             BufferUsages::STORAGE | BufferUsages::COPY_DST,
             gpu,
         );
