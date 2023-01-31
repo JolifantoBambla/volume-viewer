@@ -55,7 +55,7 @@ fn update_non_leaf_nodes(@builtin(global_invocation_id) global_invocation_id) {
     }
 
     let old_node = octree_nodes[global_node_index];
-    let new_node = node_new(minimum, maximum, 0, partially_mapped_resolutions);
+    let new_node = node_new(minimum, maximum, partially_mapped_resolutions);
     let changed = old_node != new_node;
     if (changed) {
         octree_nodes[global_node_index] = new_node;
