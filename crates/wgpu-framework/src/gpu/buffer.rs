@@ -24,7 +24,7 @@ impl<T: bytemuck::Pod> Buffer<T> {
         ctx: &Arc<Gpu>,
     ) -> Self {
         let data = vec![unsafe { mem::zeroed() }; num_elements];
-        Buffer::from_data(label, &data, usage, ctx)
+        Buffer::from_data(label, data.as_slice(), usage, ctx)
     }
 
     pub fn new_single_element(
@@ -34,10 +34,10 @@ impl<T: bytemuck::Pod> Buffer<T> {
         ctx: &Arc<Gpu>,
     ) -> Self {
         let data = vec![element];
-        Buffer::from_data(label, &data, usage, ctx)
+        Buffer::from_data(label, data.as_slice(), usage, ctx)
     }
 
-    pub fn from_data(label: &str, data: &Vec<T>, usage: BufferUsages, ctx: &Arc<Gpu>) -> Self {
+    pub fn from_data(label: &str, data: &[T], usage: BufferUsages, ctx: &Arc<Gpu>) -> Self {
         let buffer = ctx.device().create_buffer_init(&BufferInitDescriptor {
             label: Label::from(label),
             contents: bytemuck::cast_slice(data),
