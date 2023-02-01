@@ -12,10 +12,10 @@
 
 // (read-write) output nodes
 @group(2) @binding(0) var<storage, read_write> octree_nodes: array<u32>;
-@group(2) @binding(0) var<storage, read_write> next_level_update_indirect: DispatchWorkgroupsIndirect;
-@group(2) @binding(1) var<storage, read_write> num_nodes_next_level: atomic<u32>;
+@group(2) @binding(1) var<storage, read_write> next_level_update_indirect: DispatchWorkgroupsIndirect;
+@group(2) @binding(2) var<storage, read_write> num_nodes_next_level: atomic<u32>;
 // parent node indices
-@group(2) @binding(2) var<storage, read_write> node_helper_buffer_a: array<u32>;
+@group(2) @binding(3) var<storage, read_write> node_helper_buffer_a: array<u32>;
 
 @compute
 @workgroup_size(64, 1, 1)
