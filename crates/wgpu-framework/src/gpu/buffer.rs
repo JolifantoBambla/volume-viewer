@@ -71,8 +71,8 @@ impl<T: bytemuck::Pod> Buffer<T> {
         }
     }
 
-    pub fn write_buffer(&self, data: &Vec<T>) {
-        self.write_buffer_with_offset(data.as_slice(), 0);
+    pub fn write_buffer(&self, data: &[T]) {
+        self.write_buffer_with_offset(data, 0);
     }
 
     pub fn write_buffer_with_offset(&self, data: &[T], offset: BufferAddress) {

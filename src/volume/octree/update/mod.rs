@@ -1,7 +1,9 @@
 use std::borrow::Cow;
 use std::rc::Rc;
+use std::sync::Arc;
 use glam::UVec3;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferUsages, ComputePass, ComputePipelineDescriptor, Label};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferUsages, CommandEncoder, ComputePass, ComputePassDescriptor, ComputePipelineDescriptor, Label};
+use wgpu_framework::context::Gpu;
 use wgpu_framework::gpu::buffer::Buffer;
 use wgsl_preprocessor::WGSLPreprocessor;
 use crate::renderer::pass::{StaticComputeEncodeDescriptor, ComputeEncodeIndirectDescriptor, ComputePassData, ComputePipelineData, DispatchWorkgroupsIndirect, DynamicComputeEncodeDescriptor};
@@ -11,9 +13,17 @@ use crate::volume::octree::octree_manager::OctreeManager;
 const WORKGROUP_SIZE: u32 = 64;
 const MIN_MAX_THREAD_BLOCK_SIZE: UVec3 = UVec3::new(2, 2, 2);
 
+#[derive(Clone, Debug, Default)]
+pub struct CacheUpdateMeta {
+    mapped_local_brick_ids: Vec<u32>,
+    unmapped_local_brick_ids: Vec<u32>,
+    mapped_first_time_local_brick_ids: Vec<u32>,
+    unsuccessful_map_attempt_local_brick_ids: Vec<u32>,
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct CacheUpdateMeta {
+pub struct CacheUpdateMetaGPU {
     num_mapped: u32,
     num_unmapped: u32,
     num_mapped_first_time: u32,
@@ -57,8 +67,10 @@ impl OnMappedPasses {
 
 #[derive(Debug)]
 struct OctreeUpdate {
+    gpu: Arc<Gpu>,
+
     // buffers that need updating every frame
-    cache_update_meta_buffer: Buffer<CacheUpdateMeta>,
+    cache_update_meta_buffer: Buffer<CacheUpdateMetaGPU>,
     new_brick_ids_buffer: Buffer<u32>,
     mapped_brick_ids_buffer: Buffer<u32>,
     unmapped_brick_ids_buffer: Buffer<u32>,
@@ -101,19 +113,62 @@ struct OctreeUpdate {
 // repeat 4. and 5. until root node
 
 impl OctreeUpdate {
+    pub fn on_brick_cache_updated(&self, command_encoder: &mut CommandEncoder, cache_update_meta: &CacheUpdateMeta) {
+        let indirect_initial_data = vec![DispatchWorkgroupsIndirect::new_1d(); 1];
+        for indirect_buffer in self.indirect_buffers.iter() {
+            indirect_buffer.write_buffer(indirect_initial_data.as_slice());
+        }
+
+        let num_nodes_to_update_initial_data = vec![0];
+        for buffer in self.num_nodes_to_update_buffers.iter() {
+            buffer.write_buffer(num_nodes_to_update_initial_data.as_slice());
+        }
+
+        // todo: all this can be done on the GPU directly if cache management is moved there
+        let cache_update_meta_data = vec![CacheUpdateMetaGPU {
+            num_mapped: cache_update_meta.mapped_local_brick_ids.len() as u32,
+            num_unmapped: cache_update_meta.unmapped_local_brick_ids.len() as u32,
+            num_mapped_first_time: cache_update_meta.mapped_first_time_local_brick_ids.len() as u32,
+            num_unsuccessful_map_attempt: cache_update_meta.unsuccessful_map_attempt_local_brick_ids.len() as u32
+        }];
+        self.cache_update_meta_buffer.write_buffer(cache_update_meta_data.as_slice());
+        self.new_brick_ids_buffer.write_buffer(cache_update_meta.mapped_first_time_local_brick_ids.as_slice());
+        self.mapped_brick_ids_buffer.write_buffer(cache_update_meta.mapped_local_brick_ids.as_slice());
+        self.unmapped_brick_ids_buffer.write_buffer(cache_update_meta.unmapped_local_brick_ids.as_slice());
+
+        // todo: encode on unmapped passes
+
+        {
+            let mut on_new_bricks_pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Label::from("on new bricks pass")
+            });
+            self.on_mapped_first_time_passes.encode(&mut on_new_bricks_pass, cache_update_meta.mapped_first_time_local_brick_ids.len() as u32);
+        }
+        {
+            let mut on_mapped_bricks_pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Label::from("on new bricks pass")
+            });
+            self.on_mapped_passes.encode(&mut on_mapped_bricks_pass, cache_update_meta.mapped_local_brick_ids.len() as u32);
+        }
+    }
+
     fn new(octree: &OctreeManager,
            volume_manager: &VolumeManager,
            wgsl_preprocessor: &WGSLPreprocessor,
     ) -> Self {
+        // todo: clean up
+        // todo: set up on unmapped passes
+
         let gpu = octree.gpu();
         let max_bricks_per_update: usize = 32;
 
         let num_nodes_per_subdivision = octree.nodes_per_subdivision();
         let num_leaf_nodes = *num_nodes_per_subdivision.last().unwrap();
 
-        let helper_buffer_a = Buffer::new_zeroed(
+        let helper_buffer_a_initial_data = vec![255; num_leaf_nodes];
+        let helper_buffer_a = Buffer::from_data(
             "helper buffer a",
-            num_leaf_nodes,
+            helper_buffer_a_initial_data.as_slice(),
             BufferUsages::STORAGE,
             octree.gpu()
         );
@@ -126,7 +181,7 @@ impl OctreeUpdate {
 
         let cache_update_meta_buffer = Buffer::new_single_element(
             "cache update meta",
-            CacheUpdateMeta::default(),
+            CacheUpdateMetaGPU::default(),
             BufferUsages::STORAGE,
             octree.gpu()
         );
@@ -397,9 +452,8 @@ impl OctreeUpdate {
         let indirect_initial_data = vec![DispatchWorkgroupsIndirect::new_1d(); 1];
 
         let mut subdivision_index_buffers = Vec::new();
-        // todo: this needs to be reset every frame (set workgroup size x 0)
+
         let mut indirect_buffers = Vec::new();
-        // todo: this needs to be reset every frame (set 0)
         let mut num_nodes_to_update_buffers = Vec::new();
 
         let mut on_cache_update_compute_passes = Vec::new();
@@ -739,6 +793,7 @@ impl OctreeUpdate {
         };
 
         Self {
+            gpu: gpu.clone(),
             cache_update_meta_buffer,
             new_brick_ids_buffer,
             mapped_brick_ids_buffer,
@@ -753,26 +808,3 @@ impl OctreeUpdate {
         }
     }
 }
-
-/*
-external resources
-------------------
-memory management
-- page directory meta
-- page directory
-- page table meta
-- brick cache
-
-octree
-subdivisions
-octree nodes
-
-internal resources
-------------------
-helper buffer a
-helper buffer b
-num_nodes_next_level
-next_level_update_indirect
-subdivision index
- */
-

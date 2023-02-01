@@ -219,7 +219,7 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
         }
 
         if visible_channels_updated {
-            self.gpu_nodes.write_buffer(&self.active_node_storage);
+            self.gpu_nodes.write_buffer(self.active_node_storage.as_slice());
         }
     }
 
