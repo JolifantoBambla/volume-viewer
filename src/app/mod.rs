@@ -27,6 +27,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::EventLoop;
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
+use crate::app::scene::volume::VolumeSceneObject;
 
 /// The `GLOBAL_EVENT_LOOP_PROXY` is a means to send data to the running application.
 /// It is initialized by `start_event_loop`.
@@ -121,7 +122,9 @@ impl App {
             surface_configuration,
             gpu,
         );
-        let scene = MultiChannelVolumeScene::new(window_size, volume_manager);
+
+        let volume = VolumeSceneObject::new_page_table_volume(volume_manager);
+        let scene = MultiChannelVolumeScene::new(window_size, volume);
 
         let last_channel_selection = render_settings.get_sorted_visible_channel_indices();
 
@@ -303,21 +306,20 @@ impl OnCommandsSubmitted for App {
         // todo: both of these should go into volume_texture's post_render & add_channel_configuration should not be exposed
         if self.channel_selection_changed {
             self.channel_selection_changed = false;
-            let channel_mapping = self
-                .scene
-                .volume_manager_mut()
-                .add_channel_configuration(&self.last_channel_selection, input.frame().number())
-                .iter()
-                .map(|c| c.unwrap() as u32)
-                .collect();
+            let channel_mapping = self.scene
+                .volume_mut()
+                .update_channel_selection(
+                    &self.last_channel_selection,
+                    input.frame().number()
+                );
             self.channel_configuration = ChannelConfiguration {
                 visible_channel_indices: self.last_channel_selection.clone(),
                 channel_mapping,
             };
-            // todo: update visible channels of octree
         }
-        // todo: pass result to an octree
-        let _ = self.scene.volume_manager_mut().update_cache(input);
+        self.scene
+            .volume_mut()
+            .update_cache(input);
     }
 }
 

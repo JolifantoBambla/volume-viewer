@@ -83,12 +83,12 @@ impl VolumeSceneObject {
 
     pub fn update_channel_selection(
         &mut self,
-        visible_channels: Vec<u32>,
+        visible_channels: &Vec<u32>,
         timestamp: u32,
     ) -> Vec<u32> {
         let channel_mapping = self
             .volume_manager_mut()
-            .add_channel_configuration(&visible_channels, timestamp)
+            .add_channel_configuration(visible_channels, timestamp)
             .iter()
             .map(|c| c.unwrap() as u32)
             .collect();
@@ -104,17 +104,19 @@ impl VolumeSceneObject {
     pub fn update_cache(&mut self, input: &Input) {
         let cache_update = self.volume_manager_mut().update_cache(input);
         if let VolumeSceneObject::TopDownOctreeVolume(v) = self {
-            let gpu = v.octree.gpu();
-            let mut command_encoder =
-                gpu.device()
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Label::from("octree update"),
-                    });
+            if !cache_update.is_empty() {
+                let gpu = v.octree.gpu();
+                let mut command_encoder =
+                    gpu.device()
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Label::from("octree update"),
+                        });
 
-            v.octree_update
-                .on_brick_cache_updated(&mut command_encoder, &cache_update);
+                v.octree_update
+                    .on_brick_cache_updated(&mut command_encoder, &cache_update);
 
-            gpu.queue().submit(Some(command_encoder.finish()));
+                gpu.queue().submit(Some(command_encoder.finish()));
+            }
         }
     }
 }

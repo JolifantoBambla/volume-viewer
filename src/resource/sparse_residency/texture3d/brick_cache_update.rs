@@ -82,6 +82,9 @@ pub struct CacheUpdateMeta {
 }
 
 impl CacheUpdateMeta {
+    pub fn is_empty(&self) -> bool {
+        self.mapped_local_brick_ids.is_empty() && self.unmapped_local_brick_ids.is_empty()
+    }
     pub fn add_mapped_brick_id(&mut self, brick_id: u32, new: bool) {
         self.mapped_local_brick_ids.push(brick_id);
         if new {

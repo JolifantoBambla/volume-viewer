@@ -16,20 +16,24 @@ pub struct MultiChannelVolumeScene {
 }
 
 impl MultiChannelVolumeScene {
-    pub fn new(window_size: UVec2, volume_manager: VolumeManager) -> Self {
+    pub fn new(window_size: UVec2, volume: VolumeSceneObject) -> Self {
         // TODO: use framework::camera instead
         // TODO: refactor these params
         let distance_from_center = 500.;
         let camera_speed = 5.0;
         let camera = Camera::new(window_size, distance_from_center, camera_speed);
 
-        let volume = VolumeSceneObject::new_page_table_volume(volume_manager);
-
         Self { camera, volume }
     }
 
     pub fn camera(&self) -> &Camera {
         &self.camera
+    }
+    pub fn volume(&self) -> &VolumeSceneObject {
+        &self.volume
+    }
+    pub fn volume_mut(&mut self) -> &mut VolumeSceneObject {
+        &mut self.volume
     }
     pub fn volume_transform(&self) -> Mat4 {
         self.volume.volume_transform()
