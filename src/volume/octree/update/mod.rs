@@ -1,14 +1,20 @@
+use crate::renderer::pass::{
+    ComputeEncodeIndirectDescriptor, ComputePassData, ComputePipelineData,
+    DispatchWorkgroupsIndirect, DynamicComputeEncodeDescriptor, StaticComputeEncodeDescriptor,
+};
+use crate::resource::VolumeManager;
+use crate::volume::octree::octree_manager::Octree;
+use glam::UVec3;
 use std::borrow::Cow;
 use std::rc::Rc;
 use std::sync::Arc;
-use glam::UVec3;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferUsages, CommandEncoder, ComputePass, ComputePassDescriptor, ComputePipelineDescriptor, Label};
+use wgpu::{
+    BindGroupDescriptor, BindGroupEntry, BufferUsages, CommandEncoder, ComputePass,
+    ComputePassDescriptor, ComputePipelineDescriptor, Label,
+};
 use wgpu_framework::context::Gpu;
 use wgpu_framework::gpu::buffer::Buffer;
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::renderer::pass::{StaticComputeEncodeDescriptor, ComputeEncodeIndirectDescriptor, ComputePassData, ComputePipelineData, DispatchWorkgroupsIndirect, DynamicComputeEncodeDescriptor};
-use crate::resource::VolumeManager;
-use crate::volume::octree::octree_manager::OctreeManager;
 
 const WORKGROUP_SIZE: u32 = 64;
 const MIN_MAX_THREAD_BLOCK_SIZE: UVec3 = UVec3::new(2, 2, 2);
@@ -40,7 +46,10 @@ struct OnFirstTimeMappedPasses {
 impl OnFirstTimeMappedPasses {
     pub fn encode<'a>(&'a self, compute_pass: &mut ComputePass<'a>, num_new_bricks: u32) {
         if num_new_bricks > 0 {
-            self.compute_min_max_pass.encode_1d(compute_pass, num_new_bricks * self.processing_size / WORKGROUP_SIZE);
+            self.compute_min_max_pass.encode_1d(
+                compute_pass,
+                num_new_bricks * self.processing_size / WORKGROUP_SIZE,
+            );
             self.update_min_max_values_pass.encode(compute_pass);
         }
     }
@@ -55,7 +64,8 @@ struct OnMappedPasses {
 impl OnMappedPasses {
     pub fn encode<'a>(&'a self, compute_pass: &mut ComputePass<'a>, num_mapped_bricks: u32) {
         if num_mapped_bricks > 0 {
-            self.process_mapped_bricks_pass.encode_1d(compute_pass, num_mapped_bricks / WORKGROUP_SIZE);
+            self.process_mapped_bricks_pass
+                .encode_1d(compute_pass, num_mapped_bricks / WORKGROUP_SIZE);
             for pass in self.dependent_passes.iter() {
                 pass.encode(compute_pass);
             }
@@ -63,10 +73,9 @@ impl OnMappedPasses {
     }
 }
 
-
-
 #[derive(Debug)]
-struct OctreeUpdate {
+pub struct OctreeUpdate {
+    #[allow(unused)]
     gpu: Arc<Gpu>,
 
     // buffers that need updating every frame
@@ -78,8 +87,11 @@ struct OctreeUpdate {
     num_nodes_to_update_buffers: Vec<Buffer<u32>>,
 
     // buffers that must not go out of scope
+    #[allow(unused)]
     helper_buffer_a: Buffer<u32>,
+    #[allow(unused)]
     helper_buffer_b: Buffer<u32>,
+    #[allow(unused)]
     subdivision_index_buffers: Vec<Buffer<u32>>,
 
     // passes
@@ -113,7 +125,11 @@ struct OctreeUpdate {
 // repeat 4. and 5. until root node
 
 impl OctreeUpdate {
-    pub fn on_brick_cache_updated(&self, command_encoder: &mut CommandEncoder, cache_update_meta: &CacheUpdateMeta) {
+    pub fn on_brick_cache_updated(
+        &self,
+        command_encoder: &mut CommandEncoder,
+        cache_update_meta: &CacheUpdateMeta,
+    ) {
         let indirect_initial_data = vec![DispatchWorkgroupsIndirect::new_1d(); 1];
         for indirect_buffer in self.indirect_buffers.iter() {
             indirect_buffer.write_buffer(indirect_initial_data.as_slice());
@@ -129,32 +145,50 @@ impl OctreeUpdate {
             num_mapped: cache_update_meta.mapped_local_brick_ids.len() as u32,
             num_unmapped: cache_update_meta.unmapped_local_brick_ids.len() as u32,
             num_mapped_first_time: cache_update_meta.mapped_first_time_local_brick_ids.len() as u32,
-            num_unsuccessful_map_attempt: cache_update_meta.unsuccessful_map_attempt_local_brick_ids.len() as u32
+            num_unsuccessful_map_attempt: cache_update_meta
+                .unsuccessful_map_attempt_local_brick_ids
+                .len() as u32,
         }];
-        self.cache_update_meta_buffer.write_buffer(cache_update_meta_data.as_slice());
-        self.new_brick_ids_buffer.write_buffer(cache_update_meta.mapped_first_time_local_brick_ids.as_slice());
-        self.mapped_brick_ids_buffer.write_buffer(cache_update_meta.mapped_local_brick_ids.as_slice());
-        self.unmapped_brick_ids_buffer.write_buffer(cache_update_meta.unmapped_local_brick_ids.as_slice());
+        self.cache_update_meta_buffer
+            .write_buffer(cache_update_meta_data.as_slice());
+        self.new_brick_ids_buffer.write_buffer(
+            cache_update_meta
+                .mapped_first_time_local_brick_ids
+                .as_slice(),
+        );
+        self.mapped_brick_ids_buffer
+            .write_buffer(cache_update_meta.mapped_local_brick_ids.as_slice());
+        self.unmapped_brick_ids_buffer
+            .write_buffer(cache_update_meta.unmapped_local_brick_ids.as_slice());
 
         // todo: encode on unmapped passes
 
         {
-            let mut on_new_bricks_pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: Label::from("on new bricks pass")
-            });
-            self.on_mapped_first_time_passes.encode(&mut on_new_bricks_pass, cache_update_meta.mapped_first_time_local_brick_ids.len() as u32);
+            let mut on_new_bricks_pass =
+                command_encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Label::from("on new bricks pass"),
+                });
+            self.on_mapped_first_time_passes.encode(
+                &mut on_new_bricks_pass,
+                cache_update_meta.mapped_first_time_local_brick_ids.len() as u32,
+            );
         }
         {
-            let mut on_mapped_bricks_pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: Label::from("on new bricks pass")
-            });
-            self.on_mapped_passes.encode(&mut on_mapped_bricks_pass, cache_update_meta.mapped_local_brick_ids.len() as u32);
+            let mut on_mapped_bricks_pass =
+                command_encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Label::from("on new bricks pass"),
+                });
+            self.on_mapped_passes.encode(
+                &mut on_mapped_bricks_pass,
+                cache_update_meta.mapped_local_brick_ids.len() as u32,
+            );
         }
     }
 
-    fn new(octree: &OctreeManager,
-           volume_manager: &VolumeManager,
-           wgsl_preprocessor: &WGSLPreprocessor,
+    pub fn new(
+        octree: &Octree,
+        volume_manager: &VolumeManager,
+        wgsl_preprocessor: &WGSLPreprocessor,
     ) -> Self {
         // todo: clean up
         // todo: set up on unmapped passes
@@ -170,169 +204,169 @@ impl OctreeUpdate {
             "helper buffer a",
             helper_buffer_a_initial_data.as_slice(),
             BufferUsages::STORAGE,
-            octree.gpu()
+            octree.gpu(),
         );
         let helper_buffer_b = Buffer::new_zeroed(
             "helper buffer b",
             num_leaf_nodes,
             BufferUsages::STORAGE,
-            octree.gpu()
+            octree.gpu(),
         );
 
         let cache_update_meta_buffer = Buffer::new_single_element(
             "cache update meta",
             CacheUpdateMetaGPU::default(),
             BufferUsages::STORAGE,
-            octree.gpu()
+            octree.gpu(),
         );
 
         let new_brick_ids_buffer = Buffer::new_zeroed(
             "new brick ids",
             max_bricks_per_update,
             BufferUsages::STORAGE,
-            octree.gpu()
+            octree.gpu(),
         );
         let mapped_brick_ids_buffer = Buffer::new_zeroed(
             "new brick ids",
             max_bricks_per_update,
             BufferUsages::STORAGE,
-            octree.gpu()
+            octree.gpu(),
         );
         let unmapped_brick_ids_buffer = Buffer::new_zeroed(
             "new brick ids",
             max_bricks_per_update,
             BufferUsages::STORAGE,
-            octree.gpu()
+            octree.gpu(),
         );
 
         // first timers: min max
 
-        let compute_min_max_shader_module = gpu
-            .device()
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
-                    &*wgsl_preprocessor
-                        .preprocess(include_str!("compute_min_max_values.wgsl"))
-                        .ok()
-                        .unwrap(),
-                )),
-            });
+        let compute_min_max_shader_module =
+            gpu.device()
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: None,
+                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
+                        &*wgsl_preprocessor
+                            .preprocess(include_str!("compute_min_max_values.wgsl"))
+                            .ok()
+                            .unwrap(),
+                    )),
+                });
         let compute_min_max_pipeline: ComputePipelineData<3> = ComputePipelineData::new(
             &ComputePipelineDescriptor {
                 label: Label::from("compute min max"),
                 layout: None,
-                module : &compute_min_max_shader_module,
-                entry_point: "main"
+                module: &compute_min_max_shader_module,
+                entry_point: "main",
             },
             gpu.device(),
         );
 
-        let update_node_min_max_values_shader_module = gpu
-            .device()
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
-                    &*wgsl_preprocessor
-                        .preprocess(include_str!("update_node_min_max_values.wgsl"))
-                        .ok()
-                        .unwrap(),
-                )),
-            });
+        let update_node_min_max_values_shader_module =
+            gpu.device()
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: None,
+                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
+                        &*wgsl_preprocessor
+                            .preprocess(include_str!("update_node_min_max_values.wgsl"))
+                            .ok()
+                            .unwrap(),
+                    )),
+                });
         let update_node_min_max_values_pipeline: ComputePipelineData<3> = ComputePipelineData::new(
             &ComputePipelineDescriptor {
                 label: Label::from("update node min max values"),
                 layout: None,
-                module : &update_node_min_max_values_shader_module,
-                entry_point: "main"
+                module: &update_node_min_max_values_shader_module,
+                entry_point: "main",
             },
             gpu.device(),
         );
 
         // all mapped bricks
 
-        let process_mapped_bricks_shader_module = gpu
-            .device()
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
-                    &*wgsl_preprocessor
-                        .preprocess(include_str!("process_mapped_bricks.wgsl"))
-                        .ok()
-                        .unwrap(),
-                )),
-            });
+        let process_mapped_bricks_shader_module =
+            gpu.device()
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: None,
+                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
+                        &*wgsl_preprocessor
+                            .preprocess(include_str!("process_mapped_bricks.wgsl"))
+                            .ok()
+                            .unwrap(),
+                    )),
+                });
         let process_mapped_bricks_pipeline: ComputePipelineData<3> = ComputePipelineData::new(
             &ComputePipelineDescriptor {
                 label: Label::from("process mapped bricks"),
                 layout: None,
-                module : &process_mapped_bricks_shader_module,
-                entry_point: "main"
+                module: &process_mapped_bricks_shader_module,
+                entry_point: "main",
             },
             gpu.device(),
         );
 
-        let update_leaf_nodes_shader_module = gpu
-            .device()
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
-                    &*wgsl_preprocessor
-                        .preprocess(include_str!("update_leaf_nodes.wgsl"))
-                        .ok()
-                        .unwrap(),
-                )),
-            });
+        let update_leaf_nodes_shader_module =
+            gpu.device()
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: None,
+                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
+                        &*wgsl_preprocessor
+                            .preprocess(include_str!("update_leaf_nodes.wgsl"))
+                            .ok()
+                            .unwrap(),
+                    )),
+                });
         let update_leaf_nodes_pipeline: ComputePipelineData<3> = ComputePipelineData::new(
             &ComputePipelineDescriptor {
                 label: Label::from("update leaf nodes"),
                 layout: None,
-                module : &update_leaf_nodes_shader_module,
-                entry_point: "main"
+                module: &update_leaf_nodes_shader_module,
+                entry_point: "main",
             },
             gpu.device(),
         );
 
         // upper levels
 
-        let set_up_next_level_update_shader_module = gpu
-            .device()
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
-                    &*wgsl_preprocessor
-                        .preprocess(include_str!("set_up_next_level_update.wgsl"))
-                        .ok()
-                        .unwrap(),
-                )),
-            });
+        let set_up_next_level_update_shader_module =
+            gpu.device()
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: None,
+                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
+                        &*wgsl_preprocessor
+                            .preprocess(include_str!("set_up_next_level_update.wgsl"))
+                            .ok()
+                            .unwrap(),
+                    )),
+                });
         let set_up_next_level_update_pipeline: ComputePipelineData<3> = ComputePipelineData::new(
             &ComputePipelineDescriptor {
                 label: Label::from("set up next level update"),
                 layout: None,
-                module : &set_up_next_level_update_shader_module,
-                entry_point: "main"
+                module: &set_up_next_level_update_shader_module,
+                entry_point: "main",
             },
             gpu.device(),
         );
 
-        let update_non_leaf_nodes_shader_module = gpu
-            .device()
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
-                    &*wgsl_preprocessor
-                        .preprocess(include_str!("update_non_leaf_nodes.wgsl"))
-                        .ok()
-                        .unwrap(),
-                )),
-            });
+        let update_non_leaf_nodes_shader_module =
+            gpu.device()
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: None,
+                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
+                        &*wgsl_preprocessor
+                            .preprocess(include_str!("update_non_leaf_nodes.wgsl"))
+                            .ok()
+                            .unwrap(),
+                    )),
+                });
         let update_non_leaf_nodes_pipeline: ComputePipelineData<3> = ComputePipelineData::new(
             &ComputePipelineDescriptor {
                 label: Label::from("update non leaf nodes"),
                 layout: None,
-                module : &update_non_leaf_nodes_shader_module,
-                entry_point: "main"
+                module: &update_non_leaf_nodes_shader_module,
+                entry_point: "main",
             },
             gpu.device(),
         );
@@ -340,57 +374,63 @@ impl OctreeUpdate {
         let compute_min_max_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 0"),
-                layout: &compute_min_max_pipeline.bind_group_layout(0),
+                layout: compute_min_max_pipeline.bind_group_layout(0),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: octree.volume_subdivisions_as_binding_resource()
+                        resource: octree.volume_subdivisions_as_binding_resource(),
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: volume_manager.page_table_directory().page_directory_meta_as_binding_resource()
+                        resource: volume_manager
+                            .page_table_directory()
+                            .page_directory_meta_as_binding_resource(),
                     },
                     BindGroupEntry {
                         binding: 2,
-                        resource: volume_manager.page_table_directory().page_table_meta_as_binding_resource()
+                        resource: volume_manager
+                            .page_table_directory()
+                            .page_table_meta_as_binding_resource(),
                     },
                     BindGroupEntry {
                         binding: 3,
-                        resource: volume_manager.page_table_directory().page_directory_as_binding_resource()
+                        resource: volume_manager
+                            .page_table_directory()
+                            .page_directory_as_binding_resource(),
                     },
                     BindGroupEntry {
                         binding: 4,
-                        resource: volume_manager.lru_cache().cache_as_binding_resource()
-                    }
-                ]
+                        resource: volume_manager.lru_cache().cache_as_binding_resource(),
+                    },
+                ],
             });
             let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 1"),
-                layout: &compute_min_max_pipeline.bind_group_layout(1),
+                layout: compute_min_max_pipeline.bind_group_layout(1),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: cache_update_meta_buffer.buffer().as_entire_binding()
+                        resource: cache_update_meta_buffer.buffer().as_entire_binding(),
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: new_brick_ids_buffer.buffer().as_entire_binding()
-                    }
-                ]
+                        resource: new_brick_ids_buffer.buffer().as_entire_binding(),
+                    },
+                ],
             });
             let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 2"),
-                layout: &compute_min_max_pipeline.bind_group_layout(2),
+                layout: compute_min_max_pipeline.bind_group_layout(2),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: helper_buffer_a.buffer().as_entire_binding()
+                        resource: helper_buffer_a.buffer().as_entire_binding(),
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: helper_buffer_b.buffer().as_entire_binding()
-                    }
-                ]
+                        resource: helper_buffer_b.buffer().as_entire_binding(),
+                    },
+                ],
             });
             DynamicComputeEncodeDescriptor::new(
                 compute_min_max_pipeline.pipeline(),
@@ -400,41 +440,41 @@ impl OctreeUpdate {
         let update_min_max_values_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 0"),
-                layout: &update_node_min_max_values_pipeline.bind_group_layout(0),
+                layout: update_node_min_max_values_pipeline.bind_group_layout(0),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: octree.volume_subdivisions_as_binding_resource()
+                        resource: octree.volume_subdivisions_as_binding_resource(),
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: volume_manager.page_table_directory().page_directory_meta_as_binding_resource()
-                    }
-                ]
+                        resource: volume_manager
+                            .page_table_directory()
+                            .page_directory_meta_as_binding_resource(),
+                    },
+                ],
             });
             let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 1"),
-                layout: &update_node_min_max_values_pipeline.bind_group_layout(1),
+                layout: update_node_min_max_values_pipeline.bind_group_layout(1),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: helper_buffer_a.buffer().as_entire_binding()
+                        resource: helper_buffer_a.buffer().as_entire_binding(),
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: helper_buffer_b.buffer().as_entire_binding()
-                    }
-                ]
+                        resource: helper_buffer_b.buffer().as_entire_binding(),
+                    },
+                ],
             });
             let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 2"),
-                layout: &update_node_min_max_values_pipeline.bind_group_layout(2),
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: octree.octree_nodes_as_binding_resource()
-                    }
-                ]
+                layout: update_node_min_max_values_pipeline.bind_group_layout(2),
+                entries: &[BindGroupEntry {
+                    binding: 0,
+                    resource: octree.octree_nodes_as_binding_resource(),
+                }],
             });
             StaticComputeEncodeDescriptor::new_1d(
                 update_node_min_max_values_pipeline.pipeline(),
@@ -442,9 +482,12 @@ impl OctreeUpdate {
                 num_leaf_nodes as u32 / WORKGROUP_SIZE,
             )
         };
-        let min_max_processing_size_3d = volume_manager.lru_cache().cache_entry_size() / MIN_MAX_THREAD_BLOCK_SIZE;
+        let min_max_processing_size_3d =
+            volume_manager.lru_cache().cache_entry_size() / MIN_MAX_THREAD_BLOCK_SIZE;
         let on_mapped_first_time_passes = OnFirstTimeMappedPasses {
-            processing_size: min_max_processing_size_3d.x * min_max_processing_size_3d.y * min_max_processing_size_3d.z,
+            processing_size: min_max_processing_size_3d.x
+                * min_max_processing_size_3d.y
+                * min_max_processing_size_3d.z,
             compute_min_max_pass,
             update_min_max_values_pass,
         };
@@ -461,123 +504,121 @@ impl OctreeUpdate {
         let process_mapped_bricks_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 0"),
-                layout: &process_mapped_bricks_pipeline.bind_group_layout(0),
+                layout: process_mapped_bricks_pipeline.bind_group_layout(0),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: octree.volume_subdivisions_as_binding_resource()
+                        resource: octree.volume_subdivisions_as_binding_resource(),
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: volume_manager.page_table_directory().page_directory_meta_as_binding_resource()
+                        resource: volume_manager
+                            .page_table_directory()
+                            .page_directory_meta_as_binding_resource(),
                     },
                     BindGroupEntry {
                         binding: 2,
-                        resource: volume_manager.page_table_directory().page_table_meta_as_binding_resource()
+                        resource: volume_manager
+                            .page_table_directory()
+                            .page_table_meta_as_binding_resource(),
                     },
                     BindGroupEntry {
                         binding: 3,
-                        resource: volume_manager.page_table_directory().page_directory_as_binding_resource()
+                        resource: volume_manager
+                            .page_table_directory()
+                            .page_directory_as_binding_resource(),
                     },
                     BindGroupEntry {
                         binding: 4,
-                        resource: volume_manager.lru_cache().cache_as_binding_resource()
-                    }
-                ]
+                        resource: volume_manager.lru_cache().cache_as_binding_resource(),
+                    },
+                ],
             });
             let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 1"),
-                layout: &process_mapped_bricks_pipeline.bind_group_layout(1),
+                layout: process_mapped_bricks_pipeline.bind_group_layout(1),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: cache_update_meta_buffer.buffer().as_entire_binding()
+                        resource: cache_update_meta_buffer.buffer().as_entire_binding(),
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: mapped_brick_ids_buffer.buffer().as_entire_binding()
-                    }
-                ]
+                        resource: mapped_brick_ids_buffer.buffer().as_entire_binding(),
+                    },
+                ],
             });
             let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 2"),
-                layout: &process_mapped_bricks_pipeline.bind_group_layout(2),
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: helper_buffer_b.buffer().as_entire_binding()
-                    }
-                ]
+                layout: process_mapped_bricks_pipeline.bind_group_layout(2),
+                entries: &[BindGroupEntry {
+                    binding: 0,
+                    resource: helper_buffer_b.buffer().as_entire_binding(),
+                }],
             });
             DynamicComputeEncodeDescriptor::new(
                 process_mapped_bricks_pipeline.pipeline(),
                 vec![bind_group_0, bind_group_1, bind_group_2],
             )
         };
-        let first_subdivision_index_buffer = Buffer::new_single_element(
-            "subdivision_index",
-            1 as u32,
-            BufferUsages::UNIFORM,
-            gpu
-        );
+        let first_subdivision_index_buffer =
+            Buffer::new_single_element("subdivision_index", 1, BufferUsages::UNIFORM, gpu);
         let first_indirect_buffer = Rc::new(Buffer::from_data(
             "indirect buffer",
             indirect_initial_data.as_slice(),
             BufferUsages::STORAGE | BufferUsages::INDIRECT,
-            gpu
+            gpu,
         ));
-        let first_num_nodes_to_update_buffer = Buffer::new_single_element(
-            "num nodes next level",
-            0u32,
-            BufferUsages::STORAGE,
-            gpu
-        );
+        let first_num_nodes_to_update_buffer =
+            Buffer::new_single_element("num nodes next level", 0u32, BufferUsages::STORAGE, gpu);
         let update_leaf_nodes_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 0"),
-                layout: &update_leaf_nodes_pipeline.bind_group_layout(0),
+                layout: update_leaf_nodes_pipeline.bind_group_layout(0),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: octree.volume_subdivisions_as_binding_resource()
+                        resource: octree.volume_subdivisions_as_binding_resource(),
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: volume_manager.page_table_directory().page_directory_meta_as_binding_resource()
-                    }
-                ]
+                        resource: volume_manager
+                            .page_table_directory()
+                            .page_directory_meta_as_binding_resource(),
+                    },
+                ],
             });
             let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 1"),
-                layout: &update_leaf_nodes_pipeline.bind_group_layout(1),
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: helper_buffer_b.buffer().as_entire_binding()
-                    }
-                ]
+                layout: update_leaf_nodes_pipeline.bind_group_layout(1),
+                entries: &[BindGroupEntry {
+                    binding: 0,
+                    resource: helper_buffer_b.buffer().as_entire_binding(),
+                }],
             });
             let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 2"),
-                layout: &update_leaf_nodes_pipeline.bind_group_layout(2),
+                layout: update_leaf_nodes_pipeline.bind_group_layout(2),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: octree.octree_nodes_as_binding_resource()
+                        resource: octree.octree_nodes_as_binding_resource(),
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: first_indirect_buffer.buffer().as_entire_binding()
+                        resource: first_indirect_buffer.buffer().as_entire_binding(),
                     },
                     BindGroupEntry {
                         binding: 2,
-                        resource: first_num_nodes_to_update_buffer.buffer().as_entire_binding()
+                        resource: first_num_nodes_to_update_buffer
+                            .buffer()
+                            .as_entire_binding(),
                     },
                     BindGroupEntry {
                         binding: 3,
-                        resource: helper_buffer_a.buffer().as_entire_binding()
-                    }
-                ]
+                        resource: helper_buffer_a.buffer().as_entire_binding(),
+                    },
+                ],
             });
             ComputePassData::Direct(StaticComputeEncodeDescriptor::new_1d(
                 update_leaf_nodes_pipeline.pipeline(),
@@ -590,55 +631,59 @@ impl OctreeUpdate {
         let update_first_parent_level_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 0"),
-                layout: &update_non_leaf_nodes_pipeline.bind_group_layout(0),
+                layout: update_non_leaf_nodes_pipeline.bind_group_layout(0),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: octree.volume_subdivisions_as_binding_resource()
+                        resource: octree.volume_subdivisions_as_binding_resource(),
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: volume_manager.page_table_directory().page_directory_meta_as_binding_resource()
-                    }
-                ]
+                        resource: volume_manager
+                            .page_table_directory()
+                            .page_directory_meta_as_binding_resource(),
+                    },
+                ],
             });
             let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 1"),
-                layout: &update_non_leaf_nodes_pipeline.bind_group_layout(1),
+                layout: update_non_leaf_nodes_pipeline.bind_group_layout(1),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: first_subdivision_index_buffer.buffer().as_entire_binding()
+                        resource: first_subdivision_index_buffer.buffer().as_entire_binding(),
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: first_num_nodes_to_update_buffer.buffer().as_entire_binding()
+                        resource: first_num_nodes_to_update_buffer
+                            .buffer()
+                            .as_entire_binding(),
                     },
                     BindGroupEntry {
                         binding: 2,
-                        resource: helper_buffer_a.buffer().as_entire_binding()
-                    }
-                ]
+                        resource: helper_buffer_a.buffer().as_entire_binding(),
+                    },
+                ],
             });
             let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("bind group 2"),
-                layout: &update_non_leaf_nodes_pipeline.bind_group_layout(2),
+                layout: update_non_leaf_nodes_pipeline.bind_group_layout(2),
                 entries: &[
                     BindGroupEntry {
                         binding: 0,
-                        resource: octree.octree_nodes_as_binding_resource()
+                        resource: octree.octree_nodes_as_binding_resource(),
                     },
                     BindGroupEntry {
                         binding: 1,
-                        resource: helper_buffer_b.buffer().as_entire_binding()
-                    }
-                ]
+                        resource: helper_buffer_b.buffer().as_entire_binding(),
+                    },
+                ],
             });
             ComputePassData::Indirect(ComputeEncodeIndirectDescriptor::with_indirect_buffer(
                 update_non_leaf_nodes_pipeline.pipeline(),
                 vec![bind_group_0, bind_group_1, bind_group_2],
                 &first_indirect_buffer,
-                0
+                0,
             ))
         };
         on_cache_update_compute_passes.push(update_first_parent_level_pass);
@@ -655,69 +700,71 @@ impl OctreeUpdate {
                 "subdivision_index",
                 i as u32,
                 BufferUsages::UNIFORM,
-                gpu
+                gpu,
             );
 
             let indirect_buffer = Rc::new(Buffer::from_data(
                 "indirect buffer",
                 indirect_initial_data.as_slice(),
                 BufferUsages::STORAGE | BufferUsages::INDIRECT,
-                gpu
+                gpu,
             ));
 
             let num_nodes_to_update_buffer = Buffer::new_single_element(
                 "num nodes next level",
                 0u32,
                 BufferUsages::STORAGE,
-                gpu
+                gpu,
             );
 
             let stream_compaction_pass = {
                 let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
                     label: Label::from("bind group 0"),
-                    layout: &set_up_next_level_update_pipeline.bind_group_layout(0),
+                    layout: set_up_next_level_update_pipeline.bind_group_layout(0),
                     entries: &[
                         BindGroupEntry {
                             binding: 0,
-                            resource: octree.volume_subdivisions_as_binding_resource()
+                            resource: octree.volume_subdivisions_as_binding_resource(),
                         },
                         BindGroupEntry {
                             binding: 1,
-                            resource: volume_manager.page_table_directory().page_directory_meta_as_binding_resource()
-                        }
-                    ]
+                            resource: volume_manager
+                                .page_table_directory()
+                                .page_directory_meta_as_binding_resource(),
+                        },
+                    ],
                 });
                 let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
                     label: Label::from("bind group 1"),
-                    layout: &set_up_next_level_update_pipeline.bind_group_layout(1),
+                    layout: set_up_next_level_update_pipeline.bind_group_layout(1),
                     entries: &[
                         BindGroupEntry {
                             binding: 0,
-                            resource: subdivision_index_buffer.buffer().as_entire_binding()
+                            resource: subdivision_index_buffer.buffer().as_entire_binding(),
                         },
                         BindGroupEntry {
                             binding: 1,
-                            resource: helper_buffer_b.buffer().as_entire_binding()
-                        }
-                    ]
+                            resource: helper_buffer_b.buffer().as_entire_binding(),
+                        },
+                    ],
                 });
                 let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
                     label: Label::from("bind group 2"),
-                    layout: &set_up_next_level_update_pipeline.bind_group_layout(2),
+                    layout: set_up_next_level_update_pipeline.bind_group_layout(2),
                     entries: &[
                         BindGroupEntry {
                             binding: 0,
-                            resource: indirect_buffer.buffer().as_entire_binding()
+                            resource: indirect_buffer.buffer().as_entire_binding(),
                         },
                         BindGroupEntry {
                             binding: 1,
-                            resource: num_nodes_to_update_buffer.buffer().as_entire_binding()
+                            resource: num_nodes_to_update_buffer.buffer().as_entire_binding(),
                         },
                         BindGroupEntry {
                             binding: 2,
-                            resource: helper_buffer_a.buffer().as_entire_binding()
-                        }
-                    ]
+                            resource: helper_buffer_a.buffer().as_entire_binding(),
+                        },
+                    ],
                 });
                 ComputePassData::Direct(StaticComputeEncodeDescriptor::new_1d(
                     set_up_next_level_update_pipeline.pipeline(),
@@ -728,55 +775,57 @@ impl OctreeUpdate {
             let update_non_leaf_nodes_pass = {
                 let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
                     label: Label::from("bind group 0"),
-                    layout: &update_non_leaf_nodes_pipeline.bind_group_layout(0),
+                    layout: update_non_leaf_nodes_pipeline.bind_group_layout(0),
                     entries: &[
                         BindGroupEntry {
                             binding: 0,
-                            resource: octree.volume_subdivisions_as_binding_resource()
+                            resource: octree.volume_subdivisions_as_binding_resource(),
                         },
                         BindGroupEntry {
                             binding: 1,
-                            resource: volume_manager.page_table_directory().page_directory_meta_as_binding_resource()
-                        }
-                    ]
+                            resource: volume_manager
+                                .page_table_directory()
+                                .page_directory_meta_as_binding_resource(),
+                        },
+                    ],
                 });
                 let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
                     label: Label::from("bind group 1"),
-                    layout: &update_non_leaf_nodes_pipeline.bind_group_layout(1),
+                    layout: update_non_leaf_nodes_pipeline.bind_group_layout(1),
                     entries: &[
                         BindGroupEntry {
                             binding: 0,
-                            resource: subdivision_index_buffer.buffer().as_entire_binding()
+                            resource: subdivision_index_buffer.buffer().as_entire_binding(),
                         },
                         BindGroupEntry {
                             binding: 1,
-                            resource: num_nodes_to_update_buffer.buffer().as_entire_binding()
+                            resource: num_nodes_to_update_buffer.buffer().as_entire_binding(),
                         },
                         BindGroupEntry {
                             binding: 2,
-                            resource: helper_buffer_a.buffer().as_entire_binding()
-                        }
-                    ]
+                            resource: helper_buffer_a.buffer().as_entire_binding(),
+                        },
+                    ],
                 });
                 let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
                     label: Label::from("bind group 2"),
-                    layout: &update_non_leaf_nodes_pipeline.bind_group_layout(2),
+                    layout: update_non_leaf_nodes_pipeline.bind_group_layout(2),
                     entries: &[
                         BindGroupEntry {
                             binding: 0,
-                            resource: octree.octree_nodes_as_binding_resource()
+                            resource: octree.octree_nodes_as_binding_resource(),
                         },
                         BindGroupEntry {
                             binding: 1,
-                            resource: helper_buffer_b.buffer().as_entire_binding()
-                        }
-                    ]
+                            resource: helper_buffer_b.buffer().as_entire_binding(),
+                        },
+                    ],
                 });
                 ComputePassData::Indirect(ComputeEncodeIndirectDescriptor::with_indirect_buffer(
                     update_non_leaf_nodes_pipeline.pipeline(),
                     vec![bind_group_0, bind_group_1, bind_group_2],
                     &indirect_buffer,
-                    0
+                    0,
                 ))
             };
 
@@ -789,7 +838,7 @@ impl OctreeUpdate {
 
         let on_mapped_passes = OnMappedPasses {
             process_mapped_bricks_pass,
-            dependent_passes: on_cache_update_compute_passes
+            dependent_passes: on_cache_update_compute_passes,
         };
 
         Self {

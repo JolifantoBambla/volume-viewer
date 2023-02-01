@@ -45,6 +45,7 @@ pub struct MultiChannelPageTableOctreeDescriptor<'a> {
 
 #[derive(Clone, Debug)]
 pub struct MultiChannelPageTableOctree<Tree: PageTableOctree> {
+    #[allow(unused)]
     gpu: Arc<Gpu>,
 
     subdivisions: Rc<Vec<VolumeSubdivision>>,
@@ -132,8 +133,12 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
                 });
         }
 
-        let gpu_subdivisions =
-            Buffer::from_data("subdivisions", subdivisions.as_slice(), BufferUsages::STORAGE, gpu);
+        let gpu_subdivisions = Buffer::from_data(
+            "subdivisions",
+            subdivisions.as_slice(),
+            BufferUsages::STORAGE,
+            gpu,
+        );
 
         // the buffer does not need to be initialized because all nodes are zero anyway
         let gpu_buffer = Buffer::from_data(
@@ -168,7 +173,7 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
             self.subdivisions.as_slice(),
             self.data_subdivisions.as_slice(),
             min_lod,
-            max_lod
+            max_lod,
         );
         if let Some(octree) = self.octrees.get_mut(&channel) {
             let is_channel_visible = self.visible_channels.contains(&channel);
@@ -219,7 +224,8 @@ impl<Tree: PageTableOctree> MultiChannelPageTableOctree<Tree> {
         }
 
         if visible_channels_updated {
-            self.gpu_nodes.write_buffer(self.active_node_storage.as_slice());
+            self.gpu_nodes
+                .write_buffer(self.active_node_storage.as_slice());
         }
     }
 

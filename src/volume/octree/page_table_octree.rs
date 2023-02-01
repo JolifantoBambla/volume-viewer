@@ -36,7 +36,11 @@ pub trait PageTableOctree {
 
     fn resolution_mapping(&self) -> &ResolutionMapping;
 
-    fn set_resolution_mapping(&mut self, resolution_mapping: ResolutionMapping, node_storage: &mut OctreeStorage<Self::Node>);
+    fn set_resolution_mapping(
+        &mut self,
+        resolution_mapping: ResolutionMapping,
+        node_storage: &mut OctreeStorage<Self::Node>,
+    );
 
     fn on_brick_cache_update(
         &mut self,

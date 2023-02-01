@@ -1,4 +1,4 @@
-use crate::renderer::pass::{StaticComputeEncodeDescriptor, ComputePipelineData};
+use crate::renderer::pass::{ComputePipelineData, StaticComputeEncodeDescriptor};
 use crate::resource::buffer::{map_buffer, TypedBuffer};
 use crate::resource::MappableBuffer;
 use std::borrow::Cow;

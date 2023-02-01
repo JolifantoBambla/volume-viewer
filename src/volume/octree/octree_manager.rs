@@ -1,16 +1,15 @@
-use std::rc::Rc;
+use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
+use crate::volume::octree::MultiChannelPageTableOctreeDescriptor;
 use std::sync::Arc;
 use wgpu::{BindingResource, BufferUsages};
 use wgpu_framework::context::Gpu;
 use wgpu_framework::gpu::buffer::Buffer;
-use crate::volume::octree::MultiChannelPageTableOctreeDescriptor;
-use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
 
 // the default node is min=255, max=0 -> default_node = 255;
 const DEFAULT_NODE: u32 = 255;
 
 #[derive(Debug)]
-pub struct OctreeManager {
+pub struct Octree {
     gpu: Arc<Gpu>,
     subdivisions: Vec<VolumeSubdivision>,
     max_num_channels: u32,
@@ -18,18 +17,23 @@ pub struct OctreeManager {
     gpu_nodes: Buffer<u32>,
 }
 
-impl OctreeManager {
+impl Octree {
     pub fn new(descriptor: MultiChannelPageTableOctreeDescriptor, gpu: &Arc<Gpu>) -> Self {
         let subdivisions = VolumeSubdivision::from_input_and_target_shape(
             descriptor.volume.resolutions[0].volume_size,
             descriptor.brick_size,
         );
 
-        let gpu_subdivisions =
-            Buffer::from_data("subdivisions", subdivisions.as_slice(), BufferUsages::STORAGE, gpu);
+        let gpu_subdivisions = Buffer::from_data(
+            "subdivisions",
+            subdivisions.as_slice(),
+            BufferUsages::STORAGE,
+            gpu,
+        );
 
         let num_nodes_per_channel = total_number_of_nodes(subdivisions.as_slice());
-        let initial_octree = vec![DEFAULT_NODE; num_nodes_per_channel * descriptor.max_num_channels as usize];
+        let initial_octree =
+            vec![DEFAULT_NODE; num_nodes_per_channel * descriptor.max_num_channels as usize];
         let gpu_buffer = Buffer::from_data(
             "octree",
             initial_octree.as_slice(),
@@ -56,7 +60,8 @@ impl OctreeManager {
         self.max_num_channels
     }
     pub fn nodes_per_subdivision(&self) -> Vec<usize> {
-        self.subdivisions.iter()
+        self.subdivisions
+            .iter()
             .map(|s| s.num_nodes() * self.max_num_channels as usize)
             .collect()
     }

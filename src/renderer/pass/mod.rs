@@ -2,11 +2,14 @@ pub mod dvr;
 pub mod present_to_screen;
 pub mod scan;
 
-use std::mem::size_of;
 use glam::{UVec2, UVec3};
+use std::mem::size_of;
 use std::rc::Rc;
 use std::sync::Arc;
-use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, BufferAddress, BufferUsages, ComputePass, ComputePipeline, ComputePipelineDescriptor, Device};
+use wgpu::{
+    BindGroup, BindGroupEntry, BindGroupLayout, BufferAddress, BufferUsages, ComputePass,
+    ComputePipeline, ComputePipelineDescriptor, Device,
+};
 use wgpu_framework::context::Gpu;
 use wgpu_framework::gpu::buffer::Buffer;
 
@@ -64,7 +67,11 @@ pub struct ComputeEncodeIndirectDescriptor {
 }
 
 impl ComputeEncodeIndirectDescriptor {
-    pub fn new(pipeline: &Rc<ComputePipeline>, bind_groups: Vec<BindGroup>, gpu: &Arc<Gpu>) -> Self {
+    pub fn new(
+        pipeline: &Rc<ComputePipeline>,
+        bind_groups: Vec<BindGroup>,
+        gpu: &Arc<Gpu>,
+    ) -> Self {
         let indirect_buffer = Rc::new(Buffer::new_zeroed(
             "indirect buffer",
             1,
@@ -73,24 +80,31 @@ impl ComputeEncodeIndirectDescriptor {
         ));
         Self::with_indirect_buffer(pipeline, bind_groups, &indirect_buffer, 0)
     }
-    pub fn with_indirect_buffer(pipeline: &Rc<ComputePipeline>, bind_groups: Vec<BindGroup>, indirect_buffer: &Rc<Buffer<DispatchWorkgroupsIndirect>>, indirect_offset: BufferAddress) -> Self {
+    pub fn with_indirect_buffer(
+        pipeline: &Rc<ComputePipeline>,
+        bind_groups: Vec<BindGroup>,
+        indirect_buffer: &Rc<Buffer<DispatchWorkgroupsIndirect>>,
+        indirect_offset: BufferAddress,
+    ) -> Self {
         assert!(indirect_buffer.supports(BufferUsages::INDIRECT));
         assert!(indirect_buffer.size() > indirect_offset);
         assert!((indirect_buffer.size() - indirect_offset) as usize >= size_of::<u32>() * 3);
-        Self { pipeline: pipeline.clone(), bind_groups, indirect_buffer: indirect_buffer.clone(), indirect_offset }
+        Self {
+            pipeline: pipeline.clone(),
+            bind_groups,
+            indirect_buffer: indirect_buffer.clone(),
+            indirect_offset,
+        }
     }
     pub fn encode<'a>(&'a self, compute_pass: &mut ComputePass<'a>) {
         compute_pass.set_pipeline(&self.pipeline);
         for (i, b) in self.bind_groups.iter().enumerate() {
             compute_pass.set_bind_group(i as u32, b, &[]);
         }
-        compute_pass.dispatch_workgroups_indirect(
-            self.indirect_buffer.buffer(),
-            self.indirect_offset,
-        );
+        compute_pass
+            .dispatch_workgroups_indirect(self.indirect_buffer.buffer(), self.indirect_offset);
     }
 }
-
 
 #[derive(Debug)]
 pub struct StaticComputeEncodeDescriptor {
@@ -148,10 +162,7 @@ pub struct DynamicComputeEncodeDescriptor {
 }
 
 impl DynamicComputeEncodeDescriptor {
-    pub fn new(
-        pipeline: &Rc<ComputePipeline>,
-        bind_groups: Vec<BindGroup>,
-    ) -> Self {
+    pub fn new(pipeline: &Rc<ComputePipeline>, bind_groups: Vec<BindGroup>) -> Self {
         Self {
             pipeline: pipeline.clone(),
             bind_groups,
@@ -168,11 +179,7 @@ impl DynamicComputeEncodeDescriptor {
         for (i, b) in self.bind_groups.iter().enumerate() {
             compute_pass.set_bind_group(i as u32, b, &[]);
         }
-        compute_pass.dispatch_workgroups(
-            work_group_size.x,
-            work_group_size.y,
-            work_group_size.z,
-        );
+        compute_pass.dispatch_workgroups(work_group_size.x, work_group_size.y, work_group_size.z);
     }
 }
 

@@ -18,7 +18,9 @@ use wasm_bindgen::JsCast;
 use wgpu::{SubmissionIndex, SurfaceConfiguration, TextureView};
 use wgpu_framework::app::{GpuApp, MapToWindowEvent};
 use wgpu_framework::context::{ContextDescriptor, Gpu, SurfaceContext};
-use wgpu_framework::event::lifecycle::{OnCommandsSubmitted, OnFrameBegin, OnFrameEnd, PrepareRender, Update};
+use wgpu_framework::event::lifecycle::{
+    OnCommandsSubmitted, OnFrameBegin, OnFrameEnd, PrepareRender, Update,
+};
 use wgpu_framework::event::window::{OnResize, OnUserEvent, OnWindowEvent};
 use wgpu_framework::input::Input;
 use winit::event::WindowEvent;
@@ -196,7 +198,6 @@ impl GpuApp for App {
             &mut encoder,
         );
 
-        // todo: process request & usage buffers
         self.scene
             .volume_manager_mut()
             .encode_cache_management(&mut encoder, input.frame().number());

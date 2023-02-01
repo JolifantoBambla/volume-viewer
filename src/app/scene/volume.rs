@@ -1,17 +1,20 @@
+use crate::resource::VolumeManager;
+use crate::volume::octree::octree_manager::Octree;
+use crate::volume::octree::update::{CacheUpdateMeta, OctreeUpdate};
+use crate::volume::octree::MultiChannelPageTableOctreeDescriptor;
+use glam::Mat4;
 use std::fmt::Debug;
 use std::sync::Arc;
-use glam::{Mat4, UVec3};
+use wgpu::Label;
 use wgpu_framework::context::Gpu;
 use wgpu_framework::input::Input;
-use crate::resource::VolumeManager;
-use crate::volume::octree::page_table_octree::PageTableOctree;
-use crate::volume::octree::top_down_tree::TopDownTree;
-use crate::volume::octree::{MultiChannelPageTableOctree, MultiChannelPageTableOctreeDescriptor};
+use wgsl_preprocessor::WGSLPreprocessor;
 
 #[derive(Debug)]
-pub struct OctreeVolume<T: PageTableOctree> {
+pub struct OctreeVolume {
     object_to_world: Mat4,
-    octree: MultiChannelPageTableOctree<T>,
+    octree: Octree,
+    octree_update: OctreeUpdate,
     volume_manager: VolumeManager,
 }
 
@@ -23,7 +26,7 @@ pub struct PageTableVolume {
 
 #[derive(Debug)]
 pub enum VolumeSceneObject {
-    TopDownOctreeVolume(OctreeVolume<TopDownTree>),
+    TopDownOctreeVolume(OctreeVolume),
     PageTableVolume(PageTableVolume),
 }
 
@@ -41,18 +44,26 @@ impl VolumeSceneObject {
         })
     }
 
-    pub fn new_octree_volume(descriptor: MultiChannelPageTableOctreeDescriptor, volume_manager: VolumeManager, gpu: &Arc<Gpu>) -> Self {
+    pub fn new_octree_volume(
+        descriptor: MultiChannelPageTableOctreeDescriptor,
+        volume_manager: VolumeManager,
+        wgsl_preprocessor: &WGSLPreprocessor,
+        gpu: &Arc<Gpu>,
+    ) -> Self {
+        let octree = Octree::new(descriptor, gpu);
+        let octree_update = OctreeUpdate::new(&octree, &volume_manager, wgsl_preprocessor);
         Self::TopDownOctreeVolume(OctreeVolume {
             object_to_world: Self::make_volume_transform(&volume_manager),
             volume_manager,
-            octree: MultiChannelPageTableOctree::new(descriptor, gpu),
+            octree,
+            octree_update,
         })
     }
 
     pub fn volume_transform(&self) -> Mat4 {
         match self {
             VolumeSceneObject::TopDownOctreeVolume(v) => v.object_to_world,
-            VolumeSceneObject::PageTableVolume(v) => v.object_to_world
+            VolumeSceneObject::PageTableVolume(v) => v.object_to_world,
         }
     }
 
@@ -70,7 +81,11 @@ impl VolumeSceneObject {
         }
     }
 
-    pub fn update_channel_selection(&mut self, visible_channels: Vec<u32>, timestamp: u32) -> Vec<u32> {
+    pub fn update_channel_selection(
+        &mut self,
+        visible_channels: Vec<u32>,
+        timestamp: u32,
+    ) -> Vec<u32> {
         let channel_mapping = self
             .volume_manager_mut()
             .add_channel_configuration(&visible_channels, timestamp)
@@ -78,17 +93,29 @@ impl VolumeSceneObject {
             .map(|c| c.unwrap() as u32)
             .collect();
 
-        if let VolumeSceneObject::TopDownOctreeVolume(v) = self {
-            v.octree.set_visible_channels(visible_channels.as_slice());
+        if let VolumeSceneObject::TopDownOctreeVolume(_v) = self {
+            // todo: handle new channel selection in octree update
+            //v.octree.set_visible_channels(visible_channels.as_slice());
         }
 
         channel_mapping
     }
 
     pub fn update_cache(&mut self, input: &Input) {
-        let cache_update = self.volume_manager_mut().update_cache(input);
+        let _cache_update = self.volume_manager_mut().update_cache(input);
         if let VolumeSceneObject::TopDownOctreeVolume(v) = self {
-            v.octree.on_brick_cache_updated(&cache_update);
+            let gpu = v.octree.gpu();
+            let mut command_encoder =
+                gpu.device()
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Label::from("octree update"),
+                    });
+
+            let cache_update_meta = CacheUpdateMeta::default();
+            v.octree_update
+                .on_brick_cache_updated(&mut command_encoder, &cache_update_meta);
+
+            gpu.queue().submit(Some(command_encoder.finish()));
         }
     }
 }

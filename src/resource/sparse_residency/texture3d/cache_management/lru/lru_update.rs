@@ -1,5 +1,5 @@
 use crate::renderer::pass::scan::Scan;
-use crate::renderer::pass::{StaticComputeEncodeDescriptor, ComputePipelineData};
+use crate::renderer::pass::{ComputePipelineData, StaticComputeEncodeDescriptor};
 use crate::resource::buffer::TypedBuffer;
 use crate::resource::sparse_residency::texture3d::cache_management::lru::NumUsedEntries;
 use crate::resource::Texture;

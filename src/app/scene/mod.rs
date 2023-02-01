@@ -1,13 +1,11 @@
 use crate::app::scene::camera::Camera;
+use crate::app::scene::volume::VolumeSceneObject;
 use crate::resource::VolumeManager;
 use crate::Event;
 use glam::{Mat4, UVec2};
-use wgpu::SubmissionIndex;
-use wgpu_framework::event::lifecycle::{OnCommandsSubmitted, Update};
+use wgpu_framework::event::lifecycle::Update;
 use wgpu_framework::event::window::{OnUserEvent, OnWindowEvent};
-use wgpu_framework::geometry::bounds::Bounds3;
 use wgpu_framework::input::Input;
-use crate::app::scene::volume::VolumeSceneObject;
 
 pub mod camera;
 pub mod volume;
@@ -27,10 +25,7 @@ impl MultiChannelVolumeScene {
 
         let volume = VolumeSceneObject::new_page_table_volume(volume_manager);
 
-        Self {
-            camera,
-            volume,
-        }
+        Self { camera, volume }
     }
 
     pub fn camera(&self) -> &Camera {
@@ -40,7 +35,7 @@ impl MultiChannelVolumeScene {
         self.volume.volume_transform()
     }
     pub fn volume_manager(&self) -> &VolumeManager {
-        &self.volume.volume_manager()
+        self.volume.volume_manager()
     }
     pub fn volume_manager_mut(&mut self) -> &mut VolumeManager {
         self.volume.volume_manager_mut()
