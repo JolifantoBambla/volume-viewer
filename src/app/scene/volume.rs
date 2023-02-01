@@ -1,6 +1,6 @@
 use crate::resource::VolumeManager;
 use crate::volume::octree::octree_manager::Octree;
-use crate::volume::octree::update::{CacheUpdateMeta, OctreeUpdate};
+use crate::volume::octree::update::OctreeUpdate;
 use crate::volume::octree::MultiChannelPageTableOctreeDescriptor;
 use glam::Mat4;
 use std::fmt::Debug;
@@ -102,7 +102,7 @@ impl VolumeSceneObject {
     }
 
     pub fn update_cache(&mut self, input: &Input) {
-        let _cache_update = self.volume_manager_mut().update_cache(input);
+        let cache_update = self.volume_manager_mut().update_cache(input);
         if let VolumeSceneObject::TopDownOctreeVolume(v) = self {
             let gpu = v.octree.gpu();
             let mut command_encoder =
@@ -111,9 +111,8 @@ impl VolumeSceneObject {
                         label: Label::from("octree update"),
                     });
 
-            let cache_update_meta = CacheUpdateMeta::default();
             v.octree_update
-                .on_brick_cache_updated(&mut command_encoder, &cache_update_meta);
+                .on_brick_cache_updated(&mut command_encoder, &cache_update);
 
             gpu.queue().submit(Some(command_encoder.finish()));
         }

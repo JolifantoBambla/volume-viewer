@@ -72,3 +72,38 @@ impl BrickCacheUpdateResult {
         Self { updates }
     }
 }
+
+#[derive(Clone, Debug, Default)]
+pub struct CacheUpdateMeta {
+    mapped_local_brick_ids: Vec<u32>,
+    unmapped_local_brick_ids: Vec<u32>,
+    mapped_first_time_local_brick_ids: Vec<u32>,
+    unsuccessful_map_attempt_local_brick_ids: Vec<u32>,
+}
+
+impl CacheUpdateMeta {
+    pub fn add_mapped_brick_id(&mut self, brick_id: u32, new: bool) {
+        self.mapped_local_brick_ids.push(brick_id);
+        if new {
+            self.mapped_first_time_local_brick_ids.push(brick_id);
+        }
+    }
+    pub fn add_unmapped_brick_id(&mut self, brick_id: u32) {
+        self.unmapped_local_brick_ids.push(brick_id);
+    }
+    pub fn add_unsuccessful_map_attempt_brick_id(&mut self, brick_id: u32) {
+        self.unsuccessful_map_attempt_local_brick_ids.push(brick_id);
+    }
+    pub fn mapped_local_brick_ids(&self) -> &Vec<u32> {
+        &self.mapped_local_brick_ids
+    }
+    pub fn unmapped_local_brick_ids(&self) -> &Vec<u32> {
+        &self.unmapped_local_brick_ids
+    }
+    pub fn mapped_first_time_local_brick_ids(&self) -> &Vec<u32> {
+        &self.mapped_first_time_local_brick_ids
+    }
+    pub fn unsuccessful_map_attempt_local_brick_ids(&self) -> &Vec<u32> {
+        &self.unsuccessful_map_attempt_local_brick_ids
+    }
+}

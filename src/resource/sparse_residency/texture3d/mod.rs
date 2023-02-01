@@ -4,7 +4,7 @@ mod page_table;
 
 use glam::{UVec3, Vec3};
 use std::cmp::min;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
@@ -18,9 +18,7 @@ use crate::resource::Texture;
 use crate::volume::{BrickAddress, VolumeDataSource};
 use wgpu_framework::input::Input;
 
-use crate::resource::sparse_residency::texture3d::brick_cache_update::{
-    BrickCacheUpdateResult, ChannelBrickCacheUpdateResult, MappedBrick, UnmappedBrick,
-};
+use crate::resource::sparse_residency::texture3d::brick_cache_update::CacheUpdateMeta;
 use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
 use crate::resource::sparse_residency::texture3d::page_table::PageTableDirectory;
 use cache_management::{
@@ -272,7 +270,7 @@ impl VolumeManager {
         }
     }
 
-    fn process_new_bricks(&mut self, input: &Input) -> BrickCacheUpdateResult {
+    fn process_new_bricks(&mut self, input: &Input) -> CacheUpdateMeta {
         // update CPU local LRU cache
         self.lru_cache.update_local_lru(input.frame().number());
 
@@ -281,13 +279,14 @@ impl VolumeManager {
             self.lru_cache.num_writable_bricks(),
         ));
 
-        let mut update_result = HashMap::new();
+        let mut update_result = CacheUpdateMeta::default();
 
         // write bricks to cache
         if !bricks.is_empty() {
             for (global_address, brick) in bricks {
                 if let Some(local_address) = self.map_to_page_table(&global_address, None) {
                     let brick_id = global_address.into();
+                    let local_brick_id: u64 = local_address.into();
                     if brick.data.is_empty() {
                         self.page_table_directory.mark_as_empty(&local_address);
                     } else {
@@ -301,14 +300,9 @@ impl VolumeManager {
                                     .map_brick(&local_address, &brick_location);
                                 self.cached_bricks.insert(brick_id);
 
-                                update_result
-                                    .entry(global_address.channel)
-                                    .or_insert_with(ChannelBrickCacheUpdateResult::new)
-                                    .add_mapped(MappedBrick::new(
-                                        global_address,
-                                        brick.min,
-                                        brick.max,
-                                    ));
+                                // todo: check if first time
+                                let mapped_first_time = true;
+                                update_result.add_mapped_brick_id(local_brick_id as u32, mapped_first_time);
 
                                 if let Some(unmapped_brick_local_address) = unmapped_brick_address {
                                     let unmapped_brick_global_address = self.map_from_page_table(
@@ -318,17 +312,14 @@ impl VolumeManager {
                                     let unmapped_brick_id = unmapped_brick_global_address.into();
                                     self.cached_bricks.remove(&unmapped_brick_id);
 
-                                    update_result
-                                        .entry(unmapped_brick_global_address.channel)
-                                        .or_insert_with(ChannelBrickCacheUpdateResult::new)
-                                        .add_unmapped(UnmappedBrick::new(
-                                            unmapped_brick_global_address,
-                                        ));
+                                    let local_unmapped_brick_id: u64 = unmapped_brick_local_address.into();
+                                    update_result.add_unmapped_brick_id(local_unmapped_brick_id as u32);
                                 }
                             }
                             Err(_) => {
                                 // todo: error handling
                                 log::error!("Could not add brick to cache");
+                                update_result.add_unsuccessful_map_attempt_brick_id(local_brick_id as u32);
                             }
                         }
                     }
@@ -342,11 +333,11 @@ impl VolumeManager {
             // update the page directory
             self.page_table_directory.commit_changes();
         }
-        BrickCacheUpdateResult::new(update_result)
+        update_result
     }
 
     /// Call this after rendering has completed to read back requests & usages
-    pub fn update_cache(&mut self, input: &Input) -> BrickCacheUpdateResult {
+    pub fn update_cache(&mut self, input: &Input) -> CacheUpdateMeta {
         self.process_requests();
         self.process_new_bricks(input)
     }

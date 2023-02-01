@@ -15,17 +15,10 @@ use wgpu::{
 use wgpu_framework::context::Gpu;
 use wgpu_framework::gpu::buffer::Buffer;
 use wgsl_preprocessor::WGSLPreprocessor;
+use crate::resource::sparse_residency::texture3d::brick_cache_update::CacheUpdateMeta;
 
 const WORKGROUP_SIZE: u32 = 64;
 const MIN_MAX_THREAD_BLOCK_SIZE: UVec3 = UVec3::new(2, 2, 2);
-
-#[derive(Clone, Debug, Default)]
-pub struct CacheUpdateMeta {
-    mapped_local_brick_ids: Vec<u32>,
-    unmapped_local_brick_ids: Vec<u32>,
-    mapped_first_time_local_brick_ids: Vec<u32>,
-    unsuccessful_map_attempt_local_brick_ids: Vec<u32>,
-}
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
@@ -142,24 +135,24 @@ impl OctreeUpdate {
 
         // todo: all this can be done on the GPU directly if cache management is moved there
         let cache_update_meta_data = vec![CacheUpdateMetaGPU {
-            num_mapped: cache_update_meta.mapped_local_brick_ids.len() as u32,
-            num_unmapped: cache_update_meta.unmapped_local_brick_ids.len() as u32,
-            num_mapped_first_time: cache_update_meta.mapped_first_time_local_brick_ids.len() as u32,
+            num_mapped: cache_update_meta.mapped_local_brick_ids().len() as u32,
+            num_unmapped: cache_update_meta.unmapped_local_brick_ids().len() as u32,
+            num_mapped_first_time: cache_update_meta.mapped_first_time_local_brick_ids().len() as u32,
             num_unsuccessful_map_attempt: cache_update_meta
-                .unsuccessful_map_attempt_local_brick_ids
+                .unsuccessful_map_attempt_local_brick_ids()
                 .len() as u32,
         }];
         self.cache_update_meta_buffer
             .write_buffer(cache_update_meta_data.as_slice());
         self.new_brick_ids_buffer.write_buffer(
             cache_update_meta
-                .mapped_first_time_local_brick_ids
+                .mapped_first_time_local_brick_ids()
                 .as_slice(),
         );
         self.mapped_brick_ids_buffer
-            .write_buffer(cache_update_meta.mapped_local_brick_ids.as_slice());
+            .write_buffer(cache_update_meta.mapped_local_brick_ids().as_slice());
         self.unmapped_brick_ids_buffer
-            .write_buffer(cache_update_meta.unmapped_local_brick_ids.as_slice());
+            .write_buffer(cache_update_meta.unmapped_local_brick_ids().as_slice());
 
         // todo: encode on unmapped passes
 
@@ -170,7 +163,7 @@ impl OctreeUpdate {
                 });
             self.on_mapped_first_time_passes.encode(
                 &mut on_new_bricks_pass,
-                cache_update_meta.mapped_first_time_local_brick_ids.len() as u32,
+                cache_update_meta.mapped_first_time_local_brick_ids().len() as u32,
             );
         }
         {
@@ -180,7 +173,7 @@ impl OctreeUpdate {
                 });
             self.on_mapped_passes.encode(
                 &mut on_mapped_bricks_pass,
-                cache_update_meta.mapped_local_brick_ids.len() as u32,
+                cache_update_meta.mapped_local_brick_ids().len() as u32,
             );
         }
     }
