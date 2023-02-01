@@ -6,6 +6,9 @@ use wgpu_framework::gpu::buffer::Buffer;
 use crate::volume::octree::MultiChannelPageTableOctreeDescriptor;
 use crate::volume::octree::subdivision::{total_number_of_nodes, VolumeSubdivision};
 
+// the default node is min=255, max=0 -> default_node = 255;
+const DEFAULT_NODE: u32 = 255;
+
 #[derive(Debug)]
 pub struct OctreeManager {
     gpu: Arc<Gpu>,
@@ -26,8 +29,7 @@ impl OctreeManager {
             Buffer::from_data("subdivisions", subdivisions.as_slice(), BufferUsages::STORAGE, gpu);
 
         let num_nodes_per_channel = total_number_of_nodes(subdivisions.as_slice());
-        // todo: should not be 0 but whatever node with min=255 is
-        let initial_octree = vec![0; num_nodes_per_channel * descriptor.max_num_channels as usize];
+        let initial_octree = vec![DEFAULT_NODE; num_nodes_per_channel * descriptor.max_num_channels as usize];
         let gpu_buffer = Buffer::from_data(
             "octree",
             initial_octree.as_slice(),
