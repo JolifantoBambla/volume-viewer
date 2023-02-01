@@ -1,5 +1,5 @@
 use crate::renderer::pass::scan::Scan;
-use crate::renderer::pass::{ComputeEncodeDescriptor, ComputePipelineData};
+use crate::renderer::pass::{StaticComputeEncodeDescriptor, ComputePipelineData};
 use crate::resource::buffer::TypedBuffer;
 use crate::resource::sparse_residency::texture3d::cache_management::lru::NumUsedEntries;
 use crate::resource::Texture;
@@ -50,9 +50,9 @@ pub(crate) struct LRUUpdate {
     // temp buffer
     lru_updated: TypedBuffer<u32>,
 
-    initialize_offsets_pass: ComputeEncodeDescriptor,
+    initialize_offsets_pass: StaticComputeEncodeDescriptor,
     scan: Scan,
-    update_lru_pass: ComputeEncodeDescriptor,
+    update_lru_pass: StaticComputeEncodeDescriptor,
 }
 
 impl LRUUpdate {
@@ -163,7 +163,7 @@ impl LRUUpdate {
 
         let scan = Scan::new(&offsets, wgsl_preprocessor, ctx);
 
-        let initialize_offsets_pass = ComputeEncodeDescriptor::new_1d(
+        let initialize_offsets_pass = StaticComputeEncodeDescriptor::new_1d(
             lru_update_init_pipeline.pipeline(),
             vec![
                 LRUUpdate::create_base_bind_group(
@@ -193,7 +193,7 @@ impl LRUUpdate {
             ],
             WORKGROUP_SIZE,
         );
-        let update_lru_pass = ComputeEncodeDescriptor::new_1d(
+        let update_lru_pass = StaticComputeEncodeDescriptor::new_1d(
             lru_update_sort_pipeline.pipeline(),
             vec![
                 LRUUpdate::create_base_bind_group(

@@ -1,4 +1,4 @@
-use crate::renderer::pass::{ComputeEncodeDescriptor, ComputePipelineData};
+use crate::renderer::pass::{StaticComputeEncodeDescriptor, ComputePipelineData};
 use crate::resource::buffer::{map_buffer, TypedBuffer};
 use crate::resource::MappableBuffer;
 use std::borrow::Cow;
@@ -16,7 +16,7 @@ const WORKGROUP_SIZE_DOUBLED: u32 = WORKGROUP_SIZE * 2;
 
 #[derive(Debug)]
 pub struct Scan {
-    passes: Vec<ComputeEncodeDescriptor>,
+    passes: Vec<StaticComputeEncodeDescriptor>,
 }
 
 impl Scan {
@@ -83,7 +83,7 @@ impl Scan {
         input: &TypedBuffer<u32>,
         scan_pipeline: &ComputePipelineData<1>,
         sum_pipeline: &ComputePipelineData<1>,
-        passes: &mut Vec<ComputeEncodeDescriptor>,
+        passes: &mut Vec<StaticComputeEncodeDescriptor>,
         device: &Device,
     ) {
         let reduced_size =
@@ -112,7 +112,7 @@ impl Scan {
             ],
         });
 
-        passes.push(ComputeEncodeDescriptor::new_1d(
+        passes.push(StaticComputeEncodeDescriptor::new_1d(
             scan_pipeline.pipeline(),
             vec![scan_bind_group],
             reduced_size as u32,
@@ -142,7 +142,7 @@ impl Scan {
                 ],
             });
 
-            passes.push(ComputeEncodeDescriptor::new_1d(
+            passes.push(StaticComputeEncodeDescriptor::new_1d(
                 sum_pipeline.pipeline(),
                 vec![sum_bind_group],
                 (input.num_elements() as f32 / WORKGROUP_SIZE as f32).ceil() as u32,

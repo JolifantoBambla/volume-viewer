@@ -17,7 +17,7 @@
 
 @compute
 @workgroup_size(64, 1, 1)
-fn update_node_min_max_values(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
+fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     let subdivision_index = arrayLength(volume_subdivisions) - 1;
     let num_channels = page_directory_meta.max_channels;
 

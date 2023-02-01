@@ -18,7 +18,7 @@
 
 @compute
 @workgroup_size(64, 1, 1)
-fn set_up_next_level_update(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
+fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     let num_channels = page_directory_meta.max_channels;
 
     let multichannel_local_node_index = global_invocation_id.x;

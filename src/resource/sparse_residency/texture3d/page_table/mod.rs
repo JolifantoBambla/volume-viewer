@@ -256,15 +256,15 @@ impl PageTableDirectory {
         self.meta.normalized_volume_size()
     }
 
-    pub fn get_page_directory_meta_as_binding_resource(&self) -> BindingResource {
+    pub fn page_directory_meta_as_binding_resource(&self) -> BindingResource {
         self.page_directory_meta_buffer.buffer().as_entire_binding()
     }
 
-    pub fn get_page_table_meta_as_binding_resource(&self) -> BindingResource {
+    pub fn page_table_meta_as_binding_resource(&self) -> BindingResource {
         self.page_table_meta_buffer.as_entire_binding()
     }
 
-    pub fn get_page_directory_as_binding_resource(&self) -> BindingResource {
+    pub fn page_directory_as_binding_resource(&self) -> BindingResource {
         BindingResource::TextureView(&self.page_directory.view)
     }
 

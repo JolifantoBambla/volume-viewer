@@ -213,7 +213,7 @@ impl LRUCache {
         }
     }
 
-    pub(crate) fn get_cache_as_binding_resource(&self) -> BindingResource {
+    pub(crate) fn cache_as_binding_resource(&self) -> BindingResource {
         BindingResource::TextureView(&self.cache.view)
     }
 

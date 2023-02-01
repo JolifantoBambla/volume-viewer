@@ -8,22 +8,22 @@
 
 // (read-only) cache update bind group
 @group(1) @binding(0) var<uniform> subdivision_index: u32;
+@group(1) @binding(1) var<storage> num_nodes_to_update: u32;
 // node indices, reset to 255
-@group(1) @binding(1) var<storage, read_write> node_helper_buffer_a: array<u32>;
+@group(1) @binding(2) var<storage, read_write> node_helper_buffer_a: array<u32>;
 
 // (read-write) output nodes
 @group(2) @binding(0) var<storage, read_write> octree_nodes: array<u32>;
 // parent node indices
-@group(2) @binding(2) var<storage, read_write> node_helper_buffer_b: array<u32>;
+@group(2) @binding(1) var<storage, read_write> node_helper_buffer_b: array<u32>;
 
 @compute
 @workgroup_size(64, 1, 1)
-fn update_non_leaf_nodes(@builtin(global_invocation_id) global_invocation_id) {
+fn main(@builtin(global_invocation_id) global_invocation_id) {
     let num_channels = page_directory_meta.max_channels;
 
     let global_id = global_invocation_id.x;
-    let num_nodes = subdivision_idx_num_nodes_in_subdivision(subdivision_index) * num_channels;
-    if (global_id >= num_nodes) {
+    if (global_id >= num_nodes_to_update) {
         return;
     }
 

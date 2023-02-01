@@ -19,7 +19,7 @@
 
 @compute
 @workgroup_size(64, 1, 1)
-fn update_leaf_nodes(@builtin(global_invocation_id) global_invocation_id) {
+fn main(@builtin(global_invocation_id) global_invocation_id) {
     let subdivision_index = arrayLength(volume_subdivisions) - 1;
     let num_channels = page_directory_meta.max_channels;
 

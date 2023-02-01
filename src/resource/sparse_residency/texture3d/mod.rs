@@ -2,7 +2,7 @@ pub mod brick_cache_update;
 mod cache_management;
 mod page_table;
 
-use glam::Vec3;
+use glam::{UVec3, Vec3};
 use std::cmp::min;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -442,6 +442,18 @@ impl VolumeManager {
         }
         panic!("SparseResidencyTexture3D has no channel configuration");
     }
+
+    pub fn page_table_directory(&self) -> &PageTableDirectory {
+        &self.page_table_directory
+    }
+
+    pub fn lru_cache(&self) -> &LRUCache {
+        &self.lru_cache
+    }
+
+    pub fn brick_size(&self) -> UVec3 {
+        self.lru_cache().cache_entry_size()
+    }
 }
 
 impl AsBindGroupEntries for VolumeManager {
@@ -451,23 +463,23 @@ impl AsBindGroupEntries for VolumeManager {
                 binding: 0,
                 resource: self
                     .page_table_directory
-                    .get_page_directory_meta_as_binding_resource(),
+                    .page_directory_meta_as_binding_resource(),
             },
             BindGroupEntry {
                 binding: 1,
                 resource: self
                     .page_table_directory
-                    .get_page_table_meta_as_binding_resource(),
+                    .page_table_meta_as_binding_resource(),
             },
             BindGroupEntry {
                 binding: 2,
                 resource: self
                     .page_table_directory
-                    .get_page_directory_as_binding_resource(),
+                    .page_directory_as_binding_resource(),
             },
             BindGroupEntry {
                 binding: 3,
-                resource: self.lru_cache.get_cache_as_binding_resource(), //BindingResource::TextureView(&self.brick_cache.view),
+                resource: self.lru_cache.cache_as_binding_resource(), //BindingResource::TextureView(&self.brick_cache.view),
             },
             BindGroupEntry {
                 binding: 4,
