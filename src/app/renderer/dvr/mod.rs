@@ -51,7 +51,7 @@ impl RayGuidedDVR {
     pub fn new(volume: &VolumeSceneObject, wgsl_preprocessor: &WGSLPreprocessor, gpu: &Arc<Gpu>) -> Self {
         match volume {
             VolumeSceneObject::TopDownOctreeVolume(o) => {
-                Self::PageTableOctree(PageTableOctreeDVR::new(volume.volume_manager(), wgsl_preprocessor, gpu))
+                Self::PageTableOctree(PageTableOctreeDVR::new(volume.volume_manager(), o.octree(), wgsl_preprocessor, gpu))
             }
             VolumeSceneObject::PageTableVolume(pt) => {
                 Self::PageTable(PageTableDVR::new(volume.volume_manager(), wgsl_preprocessor, gpu))

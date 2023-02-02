@@ -5,6 +5,7 @@ use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
 use crate::app::renderer::dvr::Resources;
+use crate::volume::octree::octree_manager::Octree;
 
 #[derive(Debug)]
 pub struct PageTableOctreeDVR {
@@ -16,7 +17,8 @@ pub struct PageTableOctreeDVR {
 
 impl PageTableOctreeDVR {
     pub fn new(
-        volume_texture: &VolumeManager,
+        volume_manager: &VolumeManager,
+        octree: &Octree,
         wgsl_preprocessor_base: &WGSLPreprocessor,
         gpu: &Arc<Gpu>,
     ) -> Self {
@@ -32,7 +34,7 @@ impl PageTableOctreeDVR {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
                     &*wgsl_preprocessor
-                        .preprocess(include_str!("../ray_cast.wgsl"))
+                        .preprocess(include_str!("ray_cast.wgsl"))
                         .ok()
                         .unwrap(),
                 )),
@@ -48,10 +50,22 @@ impl PageTableOctreeDVR {
         let bind_group_layout = pipeline.get_bind_group_layout(0);
 
         let internal_bind_group_layout = pipeline.get_bind_group_layout(1);
+        let mut volume_manager_bind_group_entries = volume_manager.as_bind_group_entries();
+        let mut octree_bind_group_entries = vec![
+            BindGroupEntry {
+                binding: 6,
+                resource: octree.volume_subdivisions_as_binding_resource()
+            },
+            BindGroupEntry {
+                binding: 7,
+                resource: octree.octree_nodes_as_binding_resource()
+            }
+        ];
+        volume_manager_bind_group_entries.append(&mut octree_bind_group_entries);
         let internal_bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &internal_bind_group_layout,
-            entries: &volume_texture.as_bind_group_entries(),
+            entries: &volume_manager_bind_group_entries,
         });
 
         Self {

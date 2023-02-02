@@ -18,6 +18,12 @@ pub struct OctreeVolume {
     volume_manager: VolumeManager,
 }
 
+impl OctreeVolume {
+    pub fn octree(&self) -> &Octree {
+        &self.octree
+    }
+}
+
 #[derive(Debug)]
 pub struct PageTableVolume {
     object_to_world: Mat4,

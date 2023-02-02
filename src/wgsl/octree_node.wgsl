@@ -20,6 +20,22 @@ fn node_new(min_value: u32, max_value: u32, partially_mapped_bitmask: u32) -> u3
     return node;
 }
 
+fn node_has_no_data(node: u32) -> bool {
+    return node_get_min(node) > node_get_max(node);
+}
+
+fn node_is_not_mapped(node: u32) -> bool {
+    return node_get_partially_mapped_resolutions(node) == 0;
+}
+
+fn node_is_empty(node: u32, minimum: u32, maximum: u32) -> bool {
+    return !(node_get_min(node) >= minimum && node_get_max(node) <= maximum);
+}
+
+fn node_is_homogeneous(node: u32, threshold: f32) -> bool {
+    return distance(f32(node_get_max(node)), f32(node_get_min(node))) < threshold;
+}
+
 fn node_get_min(node: u32) -> u32 {
     return extractBits(node, NODE_MIN_OFFSET, NODE_MIN_COUNT);
 }
@@ -46,4 +62,8 @@ fn node_set_partially_mapped_resolutions(node: ptr<function, u32>, new_partially
 
 fn node_make_mask_for_resolution(resolution: u32) -> u32 {
     return insertBits(0u, 1, resolution, 1);
+}
+
+fn node_resolution_is_partially_mapped(node: u32, resolution: u32) -> bool {
+    return (node_get_partially_mapped_resolutions(node) & node_make_mask_for_resolution(resolution)) > 0;
 }
