@@ -13,7 +13,7 @@ const PARTIALLY_MAPPED_RESOLUTIONS_COUNT: u32 = (32 - NODE_MIN_COUNT - NODE_MAX_
 // ----------------------------------------------------------------------------
 
 fn node_new(min_value: u32, max_value: u32, partially_mapped_bitmask: u32) -> u32 {
-    var node = 0;
+    var node: u32 = 0;
     node = insertBits(node, min_value, NODE_MIN_OFFSET, NODE_MIN_COUNT);
     node = insertBits(node, max_value, NODE_MAX_OFFSET, NODE_MAX_COUNT);
     node = insertBits(node, partially_mapped_bitmask, PARTIALLY_MAPPED_RESOLUTIONS_OFFSET, PARTIALLY_MAPPED_RESOLUTIONS_COUNT);
@@ -45,5 +45,5 @@ fn node_set_partially_mapped_resolutions(node: ptr<function, u32>, new_partially
 }
 
 fn node_make_mask_for_resolution(resolution: u32) -> u32 {
-    return insertBits(0, 1, resolution, 1);
+    return insertBits(0u, 1, resolution, 1);
 }

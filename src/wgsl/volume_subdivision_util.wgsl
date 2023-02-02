@@ -9,7 +9,11 @@
 // continuous list of nodes belonging to a single channel sorted by subdivision
 // level (from lowest to highest subdivision)
 
-fn subdivision_idx_get_shape(subdivision_index: u32) -> u32 {
+fn subdivision_get_leaf_node_level_index() -> u32 {
+    return arrayLength(&volume_subdivisions) - 1;
+}
+
+fn subdivision_idx_get_shape(subdivision_index: u32) -> vec3<u32> {
     return volume_subdivisions[subdivision_index].shape;
 }
 

@@ -11,7 +11,7 @@ use web_sys::{CustomEvent, EventTarget};
 use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 
 pub trait VolumeDataSource: Debug {
-    fn get_meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta;
+    fn meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta;
 
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>);
 
@@ -79,7 +79,7 @@ impl HtmlEventTargetVolumeDataSource {
 
 #[cfg(target_arch = "wasm32")]
 impl VolumeDataSource for HtmlEventTargetVolumeDataSource {
-    fn get_meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta {
+    fn meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta {
         &self.volume_meta
     }
 

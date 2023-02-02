@@ -1,5 +1,8 @@
 @include(multichannel_octree_util)
 @include(octree_node)
+@include(octree_node_util)
+@include(page_table)
+@include(volume_subdivision)
 @include(volume_subdivision_util)
 
 // (read-only) global data bind group
@@ -19,7 +22,7 @@
 
 @compute
 @workgroup_size(64, 1, 1)
-fn main(@builtin(global_invocation_id) global_invocation_id) {
+fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     let num_channels = page_directory_meta.max_channels;
 
     let global_id = global_invocation_id.x;
@@ -33,6 +36,7 @@ fn main(@builtin(global_invocation_id) global_invocation_id) {
     let offset = subdivision_idx_get_node_offset(subdivision_index) * num_channels;
     let global_node_index = offset + multichannel_local_node_index;
     let single_channel_local_index = multi_local_to_single_channel_local_index(multichannel_local_node_index, num_channels);
+    let channel_index = multi_local_to_channel_index(multichannel_local_node_index, num_channels);
 
     let num_child_nodes = subdivision_idx_get_children_per_node(subdivision_index);
     var child_index = to_multichannel_node_index(
@@ -41,10 +45,10 @@ fn main(@builtin(global_invocation_id) global_invocation_id) {
         channel_index
     );
 
-    var minimum = 255;
-    var maximum = 0;
-    var partially_mapped_resolutions = 0;
-    for (var i = 0; i < num_child_nodes; i += 1) {
+    var minimum: u32 = 255;
+    var maximum: u32 = 0;
+    var partially_mapped_resolutions: u32 = 0;
+    for (var i: u32 = 0; i < num_child_nodes; i += 1) {
         let child_node = node_idx_load_global(child_index);
 
         minimum = min(minimum, node_get_min(child_node));

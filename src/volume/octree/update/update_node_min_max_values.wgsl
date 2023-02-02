@@ -1,5 +1,7 @@
 @include(multichannel_octree_util)
 @include(octree_node)
+@include(page_table)
+@include(volume_subdivision)
 @include(volume_subdivision_util)
 
 // (read-only) global data bind group
@@ -18,7 +20,7 @@
 @compute
 @workgroup_size(64, 1, 1)
 fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
-    let subdivision_index = arrayLength(volume_subdivisions) - 1;
+    let subdivision_index = subdivision_get_leaf_node_level_index();
     let num_channels = page_directory_meta.max_channels;
 
     let multichannel_local_node_index = global_invocation_id.x;
@@ -33,7 +35,7 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     // update node
     let offset = subdivision_idx_get_node_offset(subdivision_index) * num_channels;
     let global_node_index = offset + multichannel_local_node_index;
-    let node = octree_nodes[global_node_index];
+    var node = octree_nodes[global_node_index];
     let old_min = node_get_min(node);
     let old_max = node_get_max(node);
     node_set_min(&node, min(minimum, old_min));

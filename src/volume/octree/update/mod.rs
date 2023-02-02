@@ -155,27 +155,18 @@ impl OctreeUpdate {
             .write_buffer(cache_update_meta.unmapped_local_brick_ids().as_slice());
 
         // todo: encode on unmapped passes
-
-        {
-            let mut on_new_bricks_pass =
-                command_encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Label::from("on new bricks pass"),
-                });
-            self.on_mapped_first_time_passes.encode(
-                &mut on_new_bricks_pass,
-                cache_update_meta.mapped_first_time_local_brick_ids().len() as u32,
-            );
-        }
-        {
-            let mut on_mapped_bricks_pass =
-                command_encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Label::from("on new bricks pass"),
-                });
-            self.on_mapped_passes.encode(
-                &mut on_mapped_bricks_pass,
-                cache_update_meta.mapped_local_brick_ids().len() as u32,
-            );
-        }
+        let mut update_octree_pass =
+            command_encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Label::from("update octree"),
+            });
+        self.on_mapped_first_time_passes.encode(
+            &mut update_octree_pass,
+            cache_update_meta.mapped_first_time_local_brick_ids().len() as u32,
+        );
+        self.on_mapped_passes.encode(
+            &mut update_octree_pass,
+            cache_update_meta.mapped_local_brick_ids().len() as u32,
+        );
     }
 
     pub fn new(
@@ -209,26 +200,26 @@ impl OctreeUpdate {
         let cache_update_meta_buffer = Buffer::new_single_element(
             "cache update meta",
             CacheUpdateMetaGPU::default(),
-            BufferUsages::STORAGE,
+            BufferUsages::STORAGE | BufferUsages::COPY_DST,
             octree.gpu(),
         );
 
         let new_brick_ids_buffer = Buffer::new_zeroed(
             "new brick ids",
             max_bricks_per_update,
-            BufferUsages::STORAGE,
+            BufferUsages::STORAGE | BufferUsages::COPY_DST,
             octree.gpu(),
         );
         let mapped_brick_ids_buffer = Buffer::new_zeroed(
             "new brick ids",
             max_bricks_per_update,
-            BufferUsages::STORAGE,
+            BufferUsages::STORAGE | BufferUsages::COPY_DST,
             octree.gpu(),
         );
         let unmapped_brick_ids_buffer = Buffer::new_zeroed(
             "new brick ids",
             max_bricks_per_update,
-            BufferUsages::STORAGE,
+            BufferUsages::STORAGE | BufferUsages::COPY_DST,
             octree.gpu(),
         );
 
@@ -366,7 +357,7 @@ impl OctreeUpdate {
 
         let compute_min_max_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 0"),
+                label: Label::from("compute min max: bind group 0"),
                 layout: compute_min_max_pipeline.bind_group_layout(0),
                 entries: &[
                     BindGroupEntry {
@@ -398,7 +389,7 @@ impl OctreeUpdate {
                 ],
             });
             let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 1"),
+                label: Label::from("compute min max: bind group 1"),
                 layout: compute_min_max_pipeline.bind_group_layout(1),
                 entries: &[
                     BindGroupEntry {
@@ -412,7 +403,7 @@ impl OctreeUpdate {
                 ],
             });
             let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 2"),
+                label: Label::from("compute min max: bind group 2"),
                 layout: compute_min_max_pipeline.bind_group_layout(2),
                 entries: &[
                     BindGroupEntry {
@@ -432,7 +423,7 @@ impl OctreeUpdate {
         };
         let update_min_max_values_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 0"),
+                label: Label::from("update min max: bind group 0"),
                 layout: update_node_min_max_values_pipeline.bind_group_layout(0),
                 entries: &[
                     BindGroupEntry {
@@ -448,7 +439,7 @@ impl OctreeUpdate {
                 ],
             });
             let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 1"),
+                label: Label::from("update min max: bind group 1"),
                 layout: update_node_min_max_values_pipeline.bind_group_layout(1),
                 entries: &[
                     BindGroupEntry {
@@ -462,7 +453,7 @@ impl OctreeUpdate {
                 ],
             });
             let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 2"),
+                label: Label::from("update min max: bind group 2"),
                 layout: update_node_min_max_values_pipeline.bind_group_layout(2),
                 entries: &[BindGroupEntry {
                     binding: 0,
@@ -496,7 +487,7 @@ impl OctreeUpdate {
 
         let process_mapped_bricks_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 0"),
+                label: Label::from("process mapped: bind group 0"),
                 layout: process_mapped_bricks_pipeline.bind_group_layout(0),
                 entries: &[
                     BindGroupEntry {
@@ -517,18 +508,12 @@ impl OctreeUpdate {
                     },
                     BindGroupEntry {
                         binding: 3,
-                        resource: volume_manager
-                            .page_table_directory()
-                            .page_directory_as_binding_resource(),
-                    },
-                    BindGroupEntry {
-                        binding: 4,
-                        resource: volume_manager.lru_cache().cache_as_binding_resource(),
+                        resource: octree.octree_nodes_as_binding_resource(),
                     },
                 ],
             });
             let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 1"),
+                label: Label::from("process mapped: bind group 1"),
                 layout: process_mapped_bricks_pipeline.bind_group_layout(1),
                 entries: &[
                     BindGroupEntry {
@@ -542,7 +527,7 @@ impl OctreeUpdate {
                 ],
             });
             let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 2"),
+                label: Label::from("process mapped: bind group 2"),
                 layout: process_mapped_bricks_pipeline.bind_group_layout(2),
                 entries: &[BindGroupEntry {
                     binding: 0,
@@ -559,14 +544,14 @@ impl OctreeUpdate {
         let first_indirect_buffer = Rc::new(Buffer::from_data(
             "indirect buffer",
             indirect_initial_data.as_slice(),
-            BufferUsages::STORAGE | BufferUsages::INDIRECT,
+            BufferUsages::STORAGE | BufferUsages::INDIRECT | BufferUsages::COPY_DST,
             gpu,
         ));
         let first_num_nodes_to_update_buffer =
-            Buffer::new_single_element("num nodes next level", 0u32, BufferUsages::STORAGE, gpu);
+            Buffer::new_single_element("num nodes next level", 0u32, BufferUsages::STORAGE | BufferUsages::COPY_DST, gpu);
         let update_leaf_nodes_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 0"),
+                label: Label::from("update leaf nodes: bind group 0"),
                 layout: update_leaf_nodes_pipeline.bind_group_layout(0),
                 entries: &[
                     BindGroupEntry {
@@ -582,7 +567,7 @@ impl OctreeUpdate {
                 ],
             });
             let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 1"),
+                label: Label::from("update leaf nodes: bind group 1"),
                 layout: update_leaf_nodes_pipeline.bind_group_layout(1),
                 entries: &[BindGroupEntry {
                     binding: 0,
@@ -590,7 +575,7 @@ impl OctreeUpdate {
                 }],
             });
             let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 2"),
+                label: Label::from("update leaf nodes: bind group 2"),
                 layout: update_leaf_nodes_pipeline.bind_group_layout(2),
                 entries: &[
                     BindGroupEntry {
@@ -623,7 +608,7 @@ impl OctreeUpdate {
 
         let update_first_parent_level_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 0"),
+                label: Label::from("update first parent level nodes: bind group 0"),
                 layout: update_non_leaf_nodes_pipeline.bind_group_layout(0),
                 entries: &[
                     BindGroupEntry {
@@ -639,7 +624,7 @@ impl OctreeUpdate {
                 ],
             });
             let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 1"),
+                label: Label::from("update first parent level nodes: bind group 1"),
                 layout: update_non_leaf_nodes_pipeline.bind_group_layout(1),
                 entries: &[
                     BindGroupEntry {
@@ -659,7 +644,7 @@ impl OctreeUpdate {
                 ],
             });
             let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("bind group 2"),
+                label: Label::from("update first parent level nodes: bind group 2"),
                 layout: update_non_leaf_nodes_pipeline.bind_group_layout(2),
                 entries: &[
                     BindGroupEntry {
@@ -699,20 +684,20 @@ impl OctreeUpdate {
             let indirect_buffer = Rc::new(Buffer::from_data(
                 "indirect buffer",
                 indirect_initial_data.as_slice(),
-                BufferUsages::STORAGE | BufferUsages::INDIRECT,
+                BufferUsages::STORAGE | BufferUsages::INDIRECT | BufferUsages::COPY_DST,
                 gpu,
             ));
 
             let num_nodes_to_update_buffer = Buffer::new_single_element(
                 "num nodes next level",
                 0u32,
-                BufferUsages::STORAGE,
+                BufferUsages::STORAGE | BufferUsages::COPY_DST,
                 gpu,
             );
 
             let stream_compaction_pass = {
                 let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                    label: Label::from("bind group 0"),
+                    label: Label::from("set up next level: bind group 0"),
                     layout: set_up_next_level_update_pipeline.bind_group_layout(0),
                     entries: &[
                         BindGroupEntry {
@@ -728,7 +713,7 @@ impl OctreeUpdate {
                     ],
                 });
                 let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                    label: Label::from("bind group 1"),
+                    label: Label::from("set up next level: bind group 1"),
                     layout: set_up_next_level_update_pipeline.bind_group_layout(1),
                     entries: &[
                         BindGroupEntry {
@@ -742,7 +727,7 @@ impl OctreeUpdate {
                     ],
                 });
                 let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                    label: Label::from("bind group 2"),
+                    label: Label::from("set up next level: bind group 2"),
                     layout: set_up_next_level_update_pipeline.bind_group_layout(2),
                     entries: &[
                         BindGroupEntry {
@@ -767,7 +752,7 @@ impl OctreeUpdate {
             };
             let update_non_leaf_nodes_pass = {
                 let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                    label: Label::from("bind group 0"),
+                    label: Label::from("update non leaf node: bind group 0"),
                     layout: update_non_leaf_nodes_pipeline.bind_group_layout(0),
                     entries: &[
                         BindGroupEntry {
@@ -783,7 +768,7 @@ impl OctreeUpdate {
                     ],
                 });
                 let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                    label: Label::from("bind group 1"),
+                    label: Label::from("update non leaf node: bind group 1"),
                     layout: update_non_leaf_nodes_pipeline.bind_group_layout(1),
                     entries: &[
                         BindGroupEntry {
@@ -801,7 +786,7 @@ impl OctreeUpdate {
                     ],
                 });
                 let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                    label: Label::from("bind group 2"),
+                    label: Label::from("update non leaf node: bind group 2"),
                     layout: update_non_leaf_nodes_pipeline.bind_group_layout(2),
                     entries: &[
                         BindGroupEntry {

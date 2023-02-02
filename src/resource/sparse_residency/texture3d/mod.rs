@@ -27,6 +27,7 @@ use cache_management::{
     Timestamp,
 };
 use wgpu_framework::context::Gpu;
+use crate::BrickedMultiResolutionMultiVolumeMeta;
 
 pub struct SparseResidencyTexture3DOptions {
     pub max_visible_channels: u32,
@@ -159,7 +160,7 @@ impl VolumeManager {
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
-        let volume_meta = source.get_meta();
+        let volume_meta = source.meta();
         let brick_size = volume_meta.brick_size;
 
         let page_table_directory = PageTableDirectory::new(
@@ -444,6 +445,10 @@ impl VolumeManager {
 
     pub fn brick_size(&self) -> UVec3 {
         self.lru_cache().cache_entry_size()
+    }
+
+    pub fn meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta {
+        self.source.meta()
     }
 }
 

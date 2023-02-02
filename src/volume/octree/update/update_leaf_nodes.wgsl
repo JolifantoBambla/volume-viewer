@@ -1,5 +1,8 @@
+@include(dispatch_indirect)
 @include(multichannel_octree_util)
 @include(octree_node)
+@include(page_table)
+@include(volume_subdivision)
 @include(volume_subdivision_util)
 
 // (read-only) global data bind group
@@ -19,8 +22,8 @@
 
 @compute
 @workgroup_size(64, 1, 1)
-fn main(@builtin(global_invocation_id) global_invocation_id) {
-    let subdivision_index = arrayLength(volume_subdivisions) - 1;
+fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
+    let subdivision_index = subdivision_get_leaf_node_level_index();
     let num_channels = page_directory_meta.max_channels;
 
     let multichannel_local_node_index = global_invocation_id.x;
@@ -38,7 +41,7 @@ fn main(@builtin(global_invocation_id) global_invocation_id) {
         // update node
         let offset = subdivision_idx_get_node_offset(subdivision_index) * num_channels;
         let global_node_index = offset + multichannel_local_node_index;
-        let node = octree_nodes[global_node_index];
+        var node = octree_nodes[global_node_index];
 
         let resolution_mapping = node_get_partially_mapped_resolutions(node_update);
         let updated_resolution_mapping = node_get_partially_mapped_resolutions(node) | resolution_mapping;
@@ -46,6 +49,7 @@ fn main(@builtin(global_invocation_id) global_invocation_id) {
 
         octree_nodes[global_node_index] = node;
 
+        let channel_index = multi_local_to_channel_index(multichannel_local_node_index, num_channels);
         let multichannel_local_parent_node_index = to_multichannel_node_index(
             subdivision_idx_local_parent_node_index(
                 subdivision_index,
@@ -54,8 +58,8 @@ fn main(@builtin(global_invocation_id) global_invocation_id) {
             num_channels,
             channel_index
         );
-        let index = atomicAdd(num_nodes_next_level, 1);
-        atomicMax(next_level_update_indirect.workgroup_count_x, max(index / 64, 1));
+        let index = atomicAdd(&num_nodes_next_level, 1);
+        atomicMax(&next_level_update_indirect.workgroup_count_x, max(index / 64, 1));
         node_helper_buffer_a[index] = multichannel_local_parent_node_index;
     }
 }

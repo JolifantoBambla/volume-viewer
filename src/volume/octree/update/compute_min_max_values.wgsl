@@ -1,6 +1,8 @@
 @include(cache_update_meta)
 @include(dispatch_indirect)
+@include(multichannel_octree_util)
 @include(page_directory_util)
+@include(page_directory_meta_util)
 @include(page_table)
 @include(page_table_util)
 @include(volume_subdivision)
@@ -11,7 +13,7 @@
 @group(0) @binding(0) var<storage> volume_subdivisions: array<VolumeSubdivision>;
 @group(0) @binding(1) var<uniform> page_directory_meta: PageDirectoryMeta;
 @group(0) @binding(2) var<storage> page_table_meta: PageTableMetas;
-@group(0) @binding(3) var page_directory: texture_3d<f32>;
+@group(0) @binding(3) var page_directory: texture_3d<u32>;
 @group(0) @binding(4) var brick_cache: texture_3d<f32>;
 
 // (read-only) cache update bind group
@@ -46,9 +48,10 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     let local_page_address = unpacked_brick_id.xyz;
     let page_table_index = unpacked_brick_id.w;
     let channel_index = page_directory_compute_page_table_subscript(page_table_index).x;
+    // todo: check if this is correct
     let page_address = pt_to_local_page_address(page_table_index, local_page_address);
-    let page = to_page_table_entry(textureLoad(page_directory, int3(page_address.xyz)));
-    let brick_chache_offset = page.location;
+    let page = page_directory_get_page(page_address.xyz);
+    let brick_cache_offset = page.location;
 
     let offset = brick_cache_offset + thread_block_offset;
 
@@ -58,7 +61,7 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
         return;
     }
 
-    let subdivision_index = arrayLength(volume_subdivisions) - 1;
+    let subdivision_index = subdivision_get_leaf_node_level_index();
     let num_channels = page_directory_meta.max_channels;
 
     var current_multichannel_local_index = to_multichannel_node_index(
@@ -70,11 +73,11 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
         channel_index
     );
 
-    var current_min = 255;
-    var current_max = 0;
-    for (var z = 0; z < THREAD_BLOCK_SIZE.z; z += 1) {
-        for (var x = 0; x < THREAD_BLOCK_SIZE.x; x += 1) {
-            for (var y = 0; y < THREAD_BLOCK_SIZE.y; y += 1) {
+    var current_min: u32 = 255;
+    var current_max: u32 = 0;
+    for (var z: u32 = 0; z < THREAD_BLOCK_SIZE.z; z += 1) {
+        for (var x: u32 = 0; x < THREAD_BLOCK_SIZE.x; x += 1) {
+            for (var y: u32 = 0; y < THREAD_BLOCK_SIZE.y; y += 1) {
                 let position = vec3<u32>(x, y, z);
 
                 let volume_position = volume_offset + position;
@@ -93,10 +96,10 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
                     // if we've entered a new node, we commit our intermediate results before we move on
                     if (node_index != current_multichannel_local_index) {
                         if (current_min < 255) {
-                            atomicMin(node_helper_buffer_a[current_multichannel_local_index], current_min);
+                            atomicMin(&node_helper_buffer_a[current_multichannel_local_index], current_min);
                         }
                         if (current_max > 0) {
-                            atomicMax(node_helper_buffer_b[current_multichannel_local_index], current_max);
+                            atomicMax(&node_helper_buffer_b[current_multichannel_local_index], current_max);
                         }
                         current_multichannel_local_index = node_index;
                         current_min = 255;
@@ -112,9 +115,9 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
         }
     }
     if (current_min < 255) {
-        atomicMin(node_helper_buffer_a[current_multichannel_local_index], current_min);
+        atomicMin(&node_helper_buffer_a[current_multichannel_local_index], current_min);
     }
     if (current_max > 0) {
-        atomicMax(node_helper_buffer_b[current_multichannel_local_index], current_max);
+        atomicMax(&node_helper_buffer_b[current_multichannel_local_index], current_max);
     }
 }

@@ -12,7 +12,7 @@ use crate::util::vec::vec_equals;
 use crate::volume::HtmlEventTargetVolumeDataSource;
 use crate::wgsl::create_wgsl_preprocessor;
 use crate::{BrickedMultiResolutionMultiVolumeMeta, MultiChannelVolumeRendererSettings};
-use glam::UVec2;
+use glam::{UVec2, UVec3};
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
 use wgpu::{SubmissionIndex, SurfaceConfiguration, TextureView};
@@ -28,6 +28,7 @@ use winit::event_loop::EventLoop;
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
 use crate::app::scene::volume::VolumeSceneObject;
+use crate::volume::octree::MultiChannelPageTableOctreeDescriptor;
 
 /// The `GLOBAL_EVENT_LOOP_PROXY` is a means to send data to the running application.
 /// It is initialized by `start_event_loop`.
@@ -123,7 +124,21 @@ impl App {
             gpu,
         );
 
-        let volume = VolumeSceneObject::new_page_table_volume(volume_manager);
+        let volume_meta2 = volume_manager.meta().clone();
+        let volume = VolumeSceneObject::new_octree_volume(
+            MultiChannelPageTableOctreeDescriptor {
+                volume: &volume_meta2,
+                brick_size: UVec3::new(8, 8, 8),
+                max_num_channels: render_settings.create_options.max_visible_channels,
+                channel_settings: &vec![], // unused
+                visible_channels: vec![], // unused
+                interleaved_storage: true // unused
+            },
+            volume_manager,
+            &wgsl_preprocessor,
+            gpu
+        );
+        //let volume = VolumeSceneObject::new_page_table_volume(volume_manager);
         let scene = MultiChannelVolumeScene::new(window_size, volume);
 
         let last_channel_selection = render_settings.get_sorted_visible_channel_indices();
