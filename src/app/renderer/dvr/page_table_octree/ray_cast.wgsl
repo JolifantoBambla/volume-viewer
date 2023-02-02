@@ -250,6 +250,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             let multichannel_global_node_index = to_multichannel_node_index(
                 single_channel_global_node_index,
                 num_channels,
+                // todo: this might need to be translated to a channel_index w.r.t. to the page table
                 channel
             );
             // todo: make sure bricks are only requested if we didn't jump over missing data

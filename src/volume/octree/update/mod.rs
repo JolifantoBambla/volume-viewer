@@ -123,6 +123,8 @@ impl OctreeUpdate {
         command_encoder: &mut CommandEncoder,
         cache_update_meta: &CacheUpdateMeta,
     ) {
+        log::info!("{:?}", cache_update_meta);
+
         let indirect_initial_data = vec![DispatchWorkgroupsIndirect::new_1d(); 1];
         for indirect_buffer in self.indirect_buffers.iter() {
             indirect_buffer.write_buffer(indirect_initial_data.as_slice());
@@ -540,7 +542,7 @@ impl OctreeUpdate {
             )
         };
         let first_subdivision_index_buffer =
-            Buffer::new_single_element("subdivision_index", 1, BufferUsages::UNIFORM, gpu);
+            Buffer::new_single_element("subdivision_index", (num_nodes_per_subdivision.len() - 2) as u32, BufferUsages::UNIFORM, gpu);
         let first_indirect_buffer = Rc::new(Buffer::from_data(
             "indirect buffer",
             indirect_initial_data.as_slice(),
@@ -670,7 +672,7 @@ impl OctreeUpdate {
         indirect_buffers.push(first_indirect_buffer);
         num_nodes_to_update_buffers.push(first_num_nodes_to_update_buffer);
 
-        for i in (2..num_nodes_per_subdivision.len()).rev() {
+        for i in (0..num_nodes_per_subdivision.len() - 2).rev() {
             let num_nodes = num_nodes_per_subdivision[i];
             let stream_compaction_pass_workgroup_size = num_nodes as u32 / WORKGROUP_SIZE;
 
