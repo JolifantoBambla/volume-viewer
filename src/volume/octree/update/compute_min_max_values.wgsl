@@ -48,8 +48,7 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     let local_page_address = unpacked_brick_id.xyz;
     let page_table_index = unpacked_brick_id.w;
     let channel_index = page_directory_compute_page_table_subscript(page_table_index).x;
-    // todo: check if this is correct
-    let page_address = pt_to_local_page_address(page_table_index, local_page_address);
+    let page_address = pt_to_global_page_address(page_table_index, local_page_address);
     let page = page_directory_get_page(page_address.xyz);
     let brick_cache_offset = page.location;
 

@@ -2,7 +2,7 @@ fn pt_get_volume_size(page_table_index: u32) -> vec3<u32> {
     return page_table_meta.metas[page_table_index].volume_size;
 }
 
-fn pt_to_local_page_address(page_table_index: u32, local_page_address: uint3) -> vec3<u32> {
+fn pt_to_global_page_address(page_table_index: u32, local_page_address: uint3) -> vec3<u32> {
     let page_table_meta = page_table_meta.metas[page_table_index];
     return page_table_meta.page_table_offset + local_page_address;
 }
