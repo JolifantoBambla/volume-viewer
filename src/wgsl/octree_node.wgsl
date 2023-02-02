@@ -31,7 +31,7 @@ fn node_is_not_mapped(node: u32) -> bool {
 }
 
 fn node_is_empty(node: u32, minimum: u32, maximum: u32) -> bool {
-    return !(node_get_min(node) >= minimum && node_get_max(node) <= maximum);
+    return (minimum > node_get_max(node)) || (maximum < node_get_min(node));
 }
 
 fn node_is_homogeneous(node: u32, threshold: f32) -> bool {

@@ -39,9 +39,10 @@ struct OnFirstTimeMappedPasses {
 impl OnFirstTimeMappedPasses {
     pub fn encode<'a>(&'a self, compute_pass: &mut ComputePass<'a>, num_new_bricks: u32) {
         if num_new_bricks > 0 {
+            log::info!("first time workgroups {} = new bricks {} * processing size {} / 64", f32::ceil(num_new_bricks as f32 * self.processing_size as f32 / WORKGROUP_SIZE as f32) as u32,num_new_bricks, self.processing_size);
             self.compute_min_max_pass.encode_1d(
                 compute_pass,
-                num_new_bricks * self.processing_size / WORKGROUP_SIZE,
+                f32::ceil(num_new_bricks as f32 * self.processing_size as f32 / WORKGROUP_SIZE as f32) as u32,
             );
             self.update_min_max_values_pass.encode(compute_pass);
         }
@@ -57,8 +58,9 @@ struct OnMappedPasses {
 impl OnMappedPasses {
     pub fn encode<'a>(&'a self, compute_pass: &mut ComputePass<'a>, num_mapped_bricks: u32) {
         if num_mapped_bricks > 0 {
+            log::info!("mapped workgroups {} = num mapped {} / 64", f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32, num_mapped_bricks);
             self.process_mapped_bricks_pass
-                .encode_1d(compute_pass, num_mapped_bricks / WORKGROUP_SIZE);
+                .encode_1d(compute_pass, f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32);
             for pass in self.dependent_passes.iter() {
                 pass.encode(compute_pass);
             }
@@ -465,7 +467,7 @@ impl OctreeUpdate {
             StaticComputeEncodeDescriptor::new_1d(
                 update_node_min_max_values_pipeline.pipeline(),
                 vec![bind_group_0, bind_group_1, bind_group_2],
-                num_leaf_nodes as u32 / WORKGROUP_SIZE,
+                f32::ceil(num_leaf_nodes as f32 / WORKGROUP_SIZE as f32) as u32,
             )
         };
         let min_max_processing_size_3d =
@@ -603,7 +605,7 @@ impl OctreeUpdate {
             ComputePassData::Direct(StaticComputeEncodeDescriptor::new_1d(
                 update_leaf_nodes_pipeline.pipeline(),
                 vec![bind_group_0, bind_group_1, bind_group_2],
-                num_leaf_nodes as u32 / WORKGROUP_SIZE,
+                f32::ceil(num_leaf_nodes as f32 / WORKGROUP_SIZE as f32) as u32,
             ))
         };
         on_cache_update_compute_passes.push(update_leaf_nodes_pass);
@@ -674,7 +676,7 @@ impl OctreeUpdate {
 
         for i in (0..num_nodes_per_subdivision.len() - 2).rev() {
             let num_nodes = num_nodes_per_subdivision[i];
-            let stream_compaction_pass_workgroup_size = num_nodes as u32 / WORKGROUP_SIZE;
+            let stream_compaction_pass_workgroup_size = f32::ceil(num_nodes as f32 / WORKGROUP_SIZE as f32) as u32;
 
             let subdivision_index_buffer = Buffer::new_single_element(
                 "subdivision_index",

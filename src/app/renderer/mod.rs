@@ -19,6 +19,7 @@ use wgpu_framework::input::Input;
 use wgsl_preprocessor::WGSLPreprocessor;
 use crate::app::scene::volume::VolumeSceneObject;
 use crate::{MultiChannelVolumeRendererSettings, resource};
+use crate::app::renderer::dvr::page_table::PageTableDVR;
 
 #[derive(Debug)]
 pub struct MultiChannelVolumeRenderer {
@@ -30,6 +31,10 @@ pub struct MultiChannelVolumeRenderer {
     volume_render_result_extent: Extent3d,
     present_to_screen_pass: PresentToScreen,
     present_to_screen_bind_group: BindGroup,
+
+    // to switch between the two render modes for debugging
+    page_table_render_pass: PageTableDVR,
+    page_table_bind_group: BindGroup,
 }
 
 impl MultiChannelVolumeRenderer {
@@ -106,6 +111,14 @@ impl MultiChannelVolumeRenderer {
                 source_texture: &dvr_result.view,
             });
 
+        let page_table_render_pass = PageTableDVR::new(volume.volume_manager(), wgsl_preprocessor, gpu);
+        let page_table_bind_group = page_table_render_pass.create_bind_group(Resources {
+            volume_sampler: &volume_sampler,
+            output: &dvr_result.view,
+            uniforms: &volume_render_global_settings_buffer,
+            channel_settings: &volume_render_channel_settings_buffer,
+        });
+
         Self {
             gpu: gpu.clone(),
             volume_render_pass,
@@ -115,6 +128,9 @@ impl MultiChannelVolumeRenderer {
             volume_render_result_extent,
             present_to_screen_pass,
             present_to_screen_bind_group,
+
+            page_table_render_pass,
+            page_table_bind_group
         }
     }
 
@@ -126,6 +142,7 @@ impl MultiChannelVolumeRenderer {
         channel_settings: &Vec<GpuChannelSettings>,
         input: &Input,
         command_encoder: &mut CommandEncoder,
+        force_page_table_dvr: bool,
     ) {
         let uniforms = Uniforms::new(
             CameraUniform::from(scene.camera()),
@@ -145,11 +162,21 @@ impl MultiChannelVolumeRenderer {
             bytemuck::cast_slice(channel_settings.as_slice()),
         );
 
-        self.volume_render_pass.encode(
-            command_encoder,
-            &self.volume_render_bind_group,
-            &self.volume_render_result_extent,
-        );
+        // todo: remove (debug)
+        if force_page_table_dvr {
+            self.page_table_render_pass.encode(
+                command_encoder,
+                &self.page_table_bind_group,
+                &self.volume_render_result_extent,
+            );
+        } else {
+            self.volume_render_pass.encode(
+                command_encoder,
+                &self.volume_render_bind_group,
+                &self.volume_render_result_extent,
+            );
+        }
+
         self.present_to_screen_pass.encode(
             command_encoder,
             &self.present_to_screen_bind_group,
