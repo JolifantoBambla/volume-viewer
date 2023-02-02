@@ -115,15 +115,6 @@ impl App {
             channel_mapping,
         };
 
-        let renderer = MultiChannelVolumeRenderer::new(
-            window_size,
-            &volume_manager,
-            &render_settings,
-            &wgsl_preprocessor,
-            surface_configuration,
-            gpu,
-        );
-
         let volume_meta2 = volume_manager.meta().clone();
         let volume = VolumeSceneObject::new_octree_volume(
             MultiChannelPageTableOctreeDescriptor {
@@ -138,7 +129,17 @@ impl App {
             &wgsl_preprocessor,
             gpu
         );
+        // todo: make this configurable
         //let volume = VolumeSceneObject::new_page_table_volume(volume_manager);
+
+        let renderer = MultiChannelVolumeRenderer::new(
+            window_size,
+            &volume,
+            &render_settings,
+            &wgsl_preprocessor,
+            surface_configuration,
+            gpu,
+        );
         let scene = MultiChannelVolumeScene::new(window_size, volume);
 
         let last_channel_selection = render_settings.get_sorted_visible_channel_indices();

@@ -4,36 +4,7 @@ use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
-
-pub struct Resources<'a> {
-    pub volume_sampler: &'a wgpu::Sampler,
-    pub output: &'a wgpu::TextureView,
-    pub uniforms: &'a wgpu::Buffer,
-    pub channel_settings: &'a wgpu::Buffer,
-}
-
-impl<'a> AsBindGroupEntries for Resources<'a> {
-    fn as_bind_group_entries(&self) -> Vec<BindGroupEntry> {
-        vec![
-            BindGroupEntry {
-                binding: 0,
-                resource: self.uniforms.as_entire_binding(),
-            },
-            BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(self.volume_sampler),
-            },
-            BindGroupEntry {
-                binding: 2,
-                resource: wgpu::BindingResource::TextureView(self.output),
-            },
-            BindGroupEntry {
-                binding: 3,
-                resource: self.channel_settings.as_entire_binding(),
-            },
-        ]
-    }
-}
+use crate::app::renderer::dvr::Resources;
 
 #[derive(Debug)]
 pub struct PageTableDVR {
