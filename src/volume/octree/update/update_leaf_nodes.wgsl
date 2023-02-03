@@ -33,10 +33,6 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     }
 
     let node_update = node_helper_buffer_b[multichannel_local_node_index];
-
-    // clean up for next passes
-    node_helper_buffer_b[multichannel_local_node_index] = 0;
-
     if (node_update > 0) {
         // update node
         let offset = subdivision_idx_get_node_offset(subdivision_index) * num_channels;
@@ -61,5 +57,8 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
         let index = atomicAdd(&num_nodes_next_level, 1);
         atomicMax(&next_level_update_indirect.workgroup_count_x, max(index / 64, 1));
         node_helper_buffer_a[index] = multichannel_local_parent_node_index;
+
+        // clean up for next passes
+        node_helper_buffer_b[multichannel_local_node_index] = 0;
     }
 }

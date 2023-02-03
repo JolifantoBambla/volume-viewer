@@ -320,10 +320,26 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     requested_brick = true;
                 }
                 color = RED;
+
+                let target_mask = node_make_mask_for_resolution(lod);
+                if (target_mask > 0) {
+                    let test_node = node_new(0,0,target_mask);
+                    if ((0 | target_mask) != 0u) {
+                        color = GREEN;
+                    }
+                }
                 break;
                 //channel += 1;
                 //continue;
             }
+            /*
+            else {
+                if (node_get_min(node) == 255 && node_get_max(node) == 255 && node_get_partially_mapped_resolutions(node) == 255) {
+                    color = MAGENTA;
+                    break;
+                }
+            }
+            */
             if (subdivision_index != target_culling_level) {
                 continue;
             }
@@ -372,6 +388,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     break;
                 }
             }
+            /*
             else {
                 let value = f32(node_get_max(node)) / 255.0;
                 if (value > 0.0) {
@@ -383,6 +400,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 }
                 break;
             }
+            */
 
             channel += 1;
         }

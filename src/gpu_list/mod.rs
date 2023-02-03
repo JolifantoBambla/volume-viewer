@@ -145,6 +145,16 @@ impl<T: bytemuck::Pod> GpuList<T> {
     }
 }
 
+// todo: use wgpu_framework::Buffer instead which implements Drop
+impl<T: bytemuck::Pod + bytemuck::Zeroable> Drop for GpuList<T> {
+    fn drop(&mut self) {
+        self.list_buffer.buffer().destroy();
+        self.list_read_buffer.buffer().destroy();
+        self.meta_buffer.buffer().destroy();
+        self.meta_read_buffer.buffer().destroy();
+    }
+}
+
 impl<T: bytemuck::Pod + bytemuck::Zeroable> AsBindGroupEntries for GpuList<T> {
     fn as_bind_group_entries(&self) -> Vec<BindGroupEntry> {
         vec![

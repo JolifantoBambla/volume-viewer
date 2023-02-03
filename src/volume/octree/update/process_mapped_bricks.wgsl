@@ -42,22 +42,23 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     let page_table_index = unpacked_brick_id.w;
     let volume_size = pt_get_volume_size(page_table_index);
 
-    let brick_min = subdivision_idx_compute_subscript(
+    let volume_min = local_page_address * brick_size;
+    let node_min = subdivision_idx_compute_subscript(
         subdivision_index,
-        subscript_to_normalized_address(local_page_address * brick_size, volume_size)
+        subscript_to_normalized_address(local_page_address, pt_get_page_table_extent(page_table_index))
     );
-    let brick_max = subdivision_idx_compute_subscript(
+    let node_max = subdivision_idx_compute_subscript(
         subdivision_index,
-        subscript_to_normalized_address(min(brick_min + brick_size, volume_size), volume_size)
+        subscript_to_normalized_address(min(local_page_address * brick_size + brick_size, volume_size), volume_size)
     );
 
     let channel_and_resolution = page_directory_compute_page_table_subscript(page_table_index);
     let channel_index = channel_and_resolution.x;
     let resolution_mask = node_make_mask_for_resolution(channel_and_resolution.y);
 
-    for (var x = brick_min.x; x <= brick_max.x; x += 1) {
-        for (var y = brick_min.y; y <= brick_max.y; y += 1) {
-            for (var z = brick_min.z; z <= brick_max.z; z += 1) {
+    for (var x = node_min.x; x <= node_max.x; x += 1) {
+        for (var y = node_min.y; y <= node_max.y; y += 1) {
+            for (var z = node_min.z; z <= node_max.z; z += 1) {
                 let single_channel_local_index = subdivision_idx_subscript_to_local_index(subdivision_index, vec3<u32>(x, y, z));
                 let multichannel_local_index = to_multichannel_node_index(
                     single_channel_local_index,
