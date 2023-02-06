@@ -8,12 +8,9 @@ use glam::UVec3;
 use std::borrow::Cow;
 use std::rc::Rc;
 use std::sync::Arc;
-use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BufferUsages, CommandEncoder, ComputePass,
-    ComputePassDescriptor, ComputePipelineDescriptor, Label,
-};
+use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferUsages, CommandEncoder, ComputePass, ComputePassDescriptor, ComputePipelineDescriptor, Label, MapMode};
 use wgpu_framework::context::Gpu;
-use wgpu_framework::gpu::buffer::Buffer;
+use wgpu_framework::gpu::buffer::{Buffer, MappableBuffer};
 use wgsl_preprocessor::WGSLPreprocessor;
 use crate::resource::sparse_residency::texture3d::brick_cache_update::CacheUpdateMeta;
 
@@ -59,12 +56,72 @@ impl OnMappedPasses {
     pub fn encode<'a>(&'a self, compute_pass: &mut ComputePass<'a>, num_mapped_bricks: u32) {
         if num_mapped_bricks > 0 {
             log::info!("mapped workgroups {} = num mapped {} / 64", f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32, num_mapped_bricks);
-            self.process_mapped_bricks_pass
-                .encode_1d(compute_pass, f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32);
-            for pass in self.dependent_passes.iter() {
-                pass.encode(compute_pass);
-            }
+            /*
+                        self.process_mapped_bricks_pass
+                            .encode_1d(compute_pass, f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32);
+
+                                    for pass in self.dependent_passes.iter() {
+                                        pass.encode(compute_pass);
+                                    }
+
+                                     */
         }
+    }
+}
+
+#[derive(Debug)]
+struct BreakPointBuffers {
+    helper_buffer_a: MappableBuffer<u32>,
+    helper_buffer_b: MappableBuffer<u32>,
+}
+
+impl BreakPointBuffers {
+    pub fn new(helper_buffer_a: &Buffer<u32>, helper_buffer_b: &Buffer<u32>) -> Self {
+        Self { helper_buffer_a: MappableBuffer::from_buffer(helper_buffer_a), helper_buffer_b: MappableBuffer::from_buffer(helper_buffer_b) }
+    }
+
+    pub fn copy_to_read_buffer(&self,
+                               command_encoder: &mut CommandEncoder,
+                               helper_buffer_a: &Buffer<u32>,
+                               helper_buffer_b: &Buffer<u32>
+    ) {
+        if self.helper_buffer_a.is_ready() {
+            log::info!("copy to a");
+            command_encoder.copy_buffer_to_buffer(
+                helper_buffer_a.buffer(),
+                0,
+                self.helper_buffer_a.buffer(),
+                0,
+                helper_buffer_a.size()
+            );
+        }
+        if self.helper_buffer_b.is_ready() {
+            log::info!("copy to b");
+            command_encoder.copy_buffer_to_buffer(
+                helper_buffer_b.buffer(),
+                0,
+                self.helper_buffer_b.buffer(),
+                0,
+                helper_buffer_b.size()
+            );
+        }
+    }
+
+    pub fn map(&self) {
+        if self.helper_buffer_a.map_async(MapMode::Read, ..).is_err() {
+            log::info!("could not map buffer a");
+        }
+        if self.helper_buffer_b.map_async(MapMode::Read, ..).is_err() {
+            log::info!("could not map buffer b")
+        }
+    }
+
+    pub fn maybe_print(&self) -> bool {
+        if self.helper_buffer_a.is_mapped() && self.helper_buffer_b.is_mapped() {
+            log::info!("helper buffer a {:?}", self.helper_buffer_a.read_all().unwrap());
+            log::info!("helper buffer b {:?}", self.helper_buffer_b.read_all().unwrap());
+            true
+        } else { false }
     }
 }
 
@@ -92,6 +149,9 @@ pub struct OctreeUpdate {
     // passes
     on_mapped_first_time_passes: OnFirstTimeMappedPasses,
     on_mapped_passes: OnMappedPasses,
+
+    // todo: remove (debug)
+    break_point: BreakPointBuffers,
 }
 
 // with min max:
@@ -159,18 +219,32 @@ impl OctreeUpdate {
             .write_buffer(cache_update_meta.unmapped_local_brick_ids().as_slice());
 
         // todo: encode on unmapped passes
-        let mut update_octree_pass =
-            command_encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: Label::from("update octree"),
-            });
-        self.on_mapped_first_time_passes.encode(
-            &mut update_octree_pass,
-            cache_update_meta.mapped_first_time_local_brick_ids().len() as u32,
-        );
-        self.on_mapped_passes.encode(
-            &mut update_octree_pass,
-            cache_update_meta.mapped_local_brick_ids().len() as u32,
-        );
+        {
+            let mut update_octree_pass =
+                command_encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Label::from("update octree"),
+                });
+            self.on_mapped_first_time_passes.encode(
+                &mut update_octree_pass,
+                cache_update_meta.mapped_first_time_local_brick_ids().len() as u32,
+            );
+            self.on_mapped_passes.encode(
+                &mut update_octree_pass,
+                cache_update_meta.mapped_local_brick_ids().len() as u32,
+            );
+        }
+    }
+    pub fn copy_to_readable(&self, command_encoder: &mut CommandEncoder) {
+        self.break_point.copy_to_read_buffer(command_encoder, &self.helper_buffer_a, &self.helper_buffer_b);
+    }
+    pub fn map_break_point(&self) {
+        self.break_point.map();
+    }
+    pub fn maybe_print_break_point(&self) {
+        if self.break_point.maybe_print() {
+            self.helper_buffer_a.buffer().destroy();
+            self.helper_buffer_b.buffer().destroy();
+        }
     }
 
     pub fn new(
@@ -191,13 +265,13 @@ impl OctreeUpdate {
         let helper_buffer_a = Buffer::from_data(
             "helper buffer a",
             helper_buffer_a_initial_data.as_slice(),
-            BufferUsages::STORAGE,
+            BufferUsages::STORAGE | BufferUsages::COPY_SRC, // todo: remove copy_src
             octree.gpu(),
         );
         let helper_buffer_b = Buffer::new_zeroed(
             "helper buffer b",
             num_leaf_nodes,
-            BufferUsages::STORAGE,
+            BufferUsages::STORAGE | BufferUsages::COPY_SRC, // todo: remove copy_src
             octree.gpu(),
         );
 
@@ -464,6 +538,7 @@ impl OctreeUpdate {
                     resource: octree.octree_nodes_as_binding_resource(),
                 }],
             });
+            log::info!("workgroup size = {}", f32::ceil(num_leaf_nodes as f32 / WORKGROUP_SIZE as f32) as u32);
             StaticComputeEncodeDescriptor::new_1d(
                 update_node_min_max_values_pipeline.pipeline(),
                 vec![bind_group_0, bind_group_1, bind_group_2],
@@ -823,6 +898,8 @@ impl OctreeUpdate {
             dependent_passes: on_cache_update_compute_passes,
         };
 
+
+        let break_point = BreakPointBuffers::new(&helper_buffer_a, &helper_buffer_b);
         Self {
             gpu: gpu.clone(),
             cache_update_meta_buffer,
@@ -836,6 +913,7 @@ impl OctreeUpdate {
             helper_buffer_b,
             on_mapped_first_time_passes,
             on_mapped_passes,
+            break_point,
         }
     }
 }

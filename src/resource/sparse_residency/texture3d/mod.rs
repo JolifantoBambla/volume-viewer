@@ -288,6 +288,7 @@ impl VolumeManager {
                 if let Some(local_address) = self.map_to_page_table(&global_address, None) {
                     let brick_id = global_address.into();
                     let local_brick_id: u64 = local_address.into();
+                    log::info!("local brick id {}, address: {:?}", local_brick_id, local_address);
                     if brick.data.is_empty() {
                         self.page_table_directory.mark_as_empty(&local_address);
                     } else {

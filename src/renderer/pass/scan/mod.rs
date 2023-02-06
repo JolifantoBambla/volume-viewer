@@ -187,7 +187,7 @@ pub async fn test_scan(ctx: &Arc<Gpu>) {
         BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
         ctx.device(),
     );
-    let read_buffer = MappableBuffer::from_buffer(&buffer, ctx.device());
+    let read_buffer = MappableBuffer::from_typed_buffer(&buffer, ctx.device());
 
     let prep = WGSLPreprocessor::default();
     let scan = Scan::new(&buffer, &prep, ctx);

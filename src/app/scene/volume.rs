@@ -121,8 +121,15 @@ impl VolumeSceneObject {
                 v.octree_update
                     .on_brick_cache_updated(&mut command_encoder, &cache_update);
 
+                v.octree_update.copy_to_readable(&mut command_encoder);
+
                 gpu.queue().submit(Some(command_encoder.finish()));
+
+                if cache_update.mapped_local_brick_ids().len() > 1 {
+                    v.octree_update.map_break_point();
+                }
             }
+            v.octree_update.maybe_print_break_point();
         }
     }
 }

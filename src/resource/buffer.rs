@@ -126,7 +126,7 @@ pub struct MappableBuffer<T: bytemuck::Pod> {
 }
 
 impl<T: bytemuck::Pod> MappableBuffer<T> {
-    pub fn from_buffer(buffer: &TypedBuffer<T>, device: &Device) -> Self {
+    pub fn from_typed_buffer(buffer: &TypedBuffer<T>, device: &Device) -> Self {
         Self {
             buffer: buffer.create_read_buffer(device),
             state: Arc::new(Mutex::new(MappableBufferState {
@@ -208,7 +208,7 @@ impl<T: bytemuck::Pod> ReadableStorageBuffer<T> {
             BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
             device,
         ));
-        let read_buffer = MappableBuffer::from_buffer(&storage_buffer, device);
+        let read_buffer = MappableBuffer::from_typed_buffer(&storage_buffer, device);
         Self {
             storage_buffer,
             read_buffer,
@@ -222,7 +222,7 @@ impl<T: bytemuck::Pod> ReadableStorageBuffer<T> {
             BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
             device,
         ));
-        let read_buffer = MappableBuffer::from_buffer(&storage_buffer, device);
+        let read_buffer = MappableBuffer::from_typed_buffer(&storage_buffer, device);
         Self {
             storage_buffer,
             read_buffer,

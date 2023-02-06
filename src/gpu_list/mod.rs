@@ -58,8 +58,8 @@ impl<T: bytemuck::Pod> GpuList<T> {
             ctx.device(),
         );
 
-        let list_read_buffer = MappableBuffer::from_buffer(&list_buffer, ctx.device());
-        let meta_read_buffer = MappableBuffer::from_buffer(&meta_buffer, ctx.device());
+        let list_read_buffer = MappableBuffer::from_typed_buffer(&list_buffer, ctx.device());
+        let meta_read_buffer = MappableBuffer::from_typed_buffer(&meta_buffer, ctx.device());
 
         Self {
             ctx: ctx.clone(),

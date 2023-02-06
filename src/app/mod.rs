@@ -121,7 +121,7 @@ impl App {
         let volume = VolumeSceneObject::new_octree_volume(
             MultiChannelPageTableOctreeDescriptor {
                 volume: &volume_meta2,
-                brick_size: UVec3::new(32, 32, 32),
+                brick_size: UVec3::new(64, 64, 64),
                 max_num_channels: render_settings.create_options.max_visible_channels,
                 channel_settings: &vec![], // unused
                 visible_channels: vec![], // unused
