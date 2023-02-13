@@ -3,10 +3,13 @@ pub mod dvr;
 
 use crate::app::renderer::common::CameraUniform;
 use crate::app::renderer::dvr::common::{GpuChannelSettings, Uniforms};
+use crate::app::renderer::dvr::page_table::PageTableDVR;
 use crate::app::renderer::dvr::{RayGuidedDVR, Resources};
+use crate::app::scene::volume::VolumeSceneObject;
 use crate::app::scene::MultiChannelVolumeScene;
 use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::{present_to_screen, GPUPass};
+use crate::{resource, MultiChannelVolumeRendererSettings};
 use glam::UVec2;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
@@ -17,9 +20,6 @@ use wgpu::{
 use wgpu_framework::context::Gpu;
 use wgpu_framework::input::Input;
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::app::scene::volume::VolumeSceneObject;
-use crate::{MultiChannelVolumeRendererSettings, resource};
-use crate::app::renderer::dvr::page_table::PageTableDVR;
 
 #[derive(Debug)]
 pub struct MultiChannelVolumeRenderer {
@@ -111,7 +111,8 @@ impl MultiChannelVolumeRenderer {
                 source_texture: &dvr_result.view,
             });
 
-        let page_table_render_pass = PageTableDVR::new(volume.volume_manager(), wgsl_preprocessor, gpu);
+        let page_table_render_pass =
+            PageTableDVR::new(volume.volume_manager(), wgsl_preprocessor, gpu);
         let page_table_bind_group = page_table_render_pass.create_bind_group(Resources {
             volume_sampler: &volume_sampler,
             output: &dvr_result.view,
@@ -130,7 +131,7 @@ impl MultiChannelVolumeRenderer {
             present_to_screen_bind_group,
 
             page_table_render_pass,
-            page_table_bind_group
+            page_table_bind_group,
         }
     }
 

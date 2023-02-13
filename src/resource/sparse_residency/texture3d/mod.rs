@@ -21,14 +21,14 @@ use wgpu_framework::input::Input;
 use crate::resource::sparse_residency::texture3d::brick_cache_update::CacheUpdateMeta;
 use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
 use crate::resource::sparse_residency::texture3d::page_table::PageTableDirectory;
+use crate::util::extent::SubscriptToIndex;
+use crate::BrickedMultiResolutionMultiVolumeMeta;
 use cache_management::{
     lru::LRUCache,
     process_requests::{ProcessRequests, Resources},
     Timestamp,
 };
 use wgpu_framework::context::Gpu;
-use crate::BrickedMultiResolutionMultiVolumeMeta;
-use crate::util::extent::SubscriptToIndex;
 
 pub struct SparseResidencyTexture3DOptions {
     pub max_visible_channels: u32,
@@ -248,31 +248,29 @@ impl VolumeManager {
         // read back requests from the GPU
         self.process_requests_pass.map_for_reading();
         let brick_requests = self.process_requests_pass.read();
-
         // request bricks from data source
         if let Some(request) = brick_requests {
+
+            //log::info!("request {:?}", request);
+
             let (requested_ids, timestamp) = request.into();
+
+            // todo: remove and investigate why frame 0 requests level 0 bricks
+            if timestamp == 0 {
+                return;
+            }
+
             let mut brick_addresses =
                 Vec::with_capacity(min(requested_ids.len(), self.brick_request_limit));
-            for id in requested_ids {
+            for local_brick_id in requested_ids {
                 let brick_address = self.map_from_page_table(
-                    self.page_table_directory.brick_id_to_brick_address(id),
+                    self.page_table_directory
+                        .brick_id_to_brick_address(local_brick_id),
                     timestamp,
                 );
-
-                // todo: remove(debug)
-                let local_brick_address = self.map_to_page_table(
-                    &brick_address,
-                    Some(timestamp)
-                ).unwrap();
-                let reconstructed_id = ((local_brick_address.index.x) << 24)
-                    + ((local_brick_address.index.y) << 16)
-                    + ((local_brick_address.index.z) << 8)
-                    + UVec2::new(local_brick_address.channel, local_brick_address.level).to_index(&self.page_table_directory.shape()) as u32;
-                log::info!("id {}, reconstructed: {}", id,reconstructed_id);
-
-                let brick_id = brick_address.into();
-                if !self.cached_bricks.contains(&brick_id) && self.requested_bricks.insert(brick_id)
+                let global_brick_id = brick_address.into();
+                if !self.cached_bricks.contains(&global_brick_id)
+                    && self.requested_bricks.insert(global_brick_id)
                 {
                     brick_addresses.push(brick_address);
                 }
@@ -300,8 +298,9 @@ impl VolumeManager {
             for (global_address, brick) in bricks {
                 if let Some(local_address) = self.map_to_page_table(&global_address, None) {
                     let brick_id = global_address.into();
-                    let local_brick_id: u64 = local_address.into();
-                    log::info!("local brick id {}, address: {:?}", local_brick_id, local_address);
+                    let local_brick_id = self
+                        .page_table_directory
+                        .brick_address_to_brick_id(&local_address);
                     if brick.data.is_empty() {
                         self.page_table_directory.mark_as_empty(&local_address);
                     } else {
@@ -315,9 +314,11 @@ impl VolumeManager {
                                     .map_brick(&local_address, &brick_location);
                                 self.cached_bricks.insert(brick_id);
 
+                                log::info!("brick address {:?}", local_address);
                                 // todo: check if first time
                                 let mapped_first_time = true;
-                                update_result.add_mapped_brick_id(local_brick_id as u32, mapped_first_time);
+                                update_result
+                                    .add_mapped_brick_id(local_brick_id, mapped_first_time);
 
                                 if let Some(unmapped_brick_local_address) = unmapped_brick_address {
                                     let unmapped_brick_global_address = self.map_from_page_table(
@@ -327,14 +328,16 @@ impl VolumeManager {
                                     let unmapped_brick_id = unmapped_brick_global_address.into();
                                     self.cached_bricks.remove(&unmapped_brick_id);
 
-                                    let local_unmapped_brick_id: u64 = unmapped_brick_local_address.into();
-                                    update_result.add_unmapped_brick_id(local_unmapped_brick_id as u32);
+                                    let local_unmapped_brick_id = self
+                                        .page_table_directory
+                                        .brick_address_to_brick_id(&unmapped_brick_local_address);
+                                    update_result.add_unmapped_brick_id(local_unmapped_brick_id);
                                 }
                             }
                             Err(_) => {
                                 // todo: error handling
                                 log::error!("Could not add brick to cache");
-                                update_result.add_unsuccessful_map_attempt_brick_id(local_brick_id as u32);
+                                update_result.add_unsuccessful_map_attempt_brick_id(local_brick_id);
                             }
                         }
                     }
@@ -344,6 +347,8 @@ impl VolumeManager {
                     self.requested_bricks.remove(&brick_id);
                 }
             }
+
+            log::info!("self cached bricks len {}", self.cached_bricks.len());
 
             // update the page directory
             self.page_table_directory.commit_changes();

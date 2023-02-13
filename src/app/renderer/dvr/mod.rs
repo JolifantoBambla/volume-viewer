@@ -1,11 +1,11 @@
-use std::sync::Arc;
 use crate::app::renderer::dvr::page_table::PageTableDVR;
 use crate::app::renderer::dvr::page_table_octree::PageTableOctreeDVR;
+use crate::app::scene::volume::VolumeSceneObject;
+use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
+use std::sync::Arc;
 use wgpu::{BindGroup, BindGroupEntry, CommandEncoder, Extent3d};
 use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::app::scene::volume::VolumeSceneObject;
-use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 
 pub mod common;
 pub mod page_table;
@@ -48,21 +48,32 @@ pub enum RayGuidedDVR {
 }
 
 impl RayGuidedDVR {
-    pub fn new(volume: &VolumeSceneObject, wgsl_preprocessor: &WGSLPreprocessor, gpu: &Arc<Gpu>) -> Self {
+    pub fn new(
+        volume: &VolumeSceneObject,
+        wgsl_preprocessor: &WGSLPreprocessor,
+        gpu: &Arc<Gpu>,
+    ) -> Self {
         match volume {
             VolumeSceneObject::TopDownOctreeVolume(o) => {
-                Self::PageTableOctree(PageTableOctreeDVR::new(volume.volume_manager(), o.octree(), wgsl_preprocessor, gpu))
+                Self::PageTableOctree(PageTableOctreeDVR::new(
+                    volume.volume_manager(),
+                    o.octree(),
+                    wgsl_preprocessor,
+                    gpu,
+                ))
             }
-            VolumeSceneObject::PageTableVolume(pt) => {
-                Self::PageTable(PageTableDVR::new(volume.volume_manager(), wgsl_preprocessor, gpu))
-            }
+            VolumeSceneObject::PageTableVolume(pt) => Self::PageTable(PageTableDVR::new(
+                volume.volume_manager(),
+                wgsl_preprocessor,
+                gpu,
+            )),
         }
     }
 
     pub fn create_bind_group(&self, resources: Resources) -> BindGroup {
         match self {
             RayGuidedDVR::PageTable(p) => p.create_bind_group(resources),
-            RayGuidedDVR::PageTableOctree(o) => o.create_bind_group(resources)
+            RayGuidedDVR::PageTableOctree(o) => o.create_bind_group(resources),
         }
     }
 

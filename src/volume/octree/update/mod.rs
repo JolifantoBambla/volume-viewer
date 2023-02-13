@@ -2,17 +2,20 @@ use crate::renderer::pass::{
     ComputeEncodeIndirectDescriptor, ComputePassData, ComputePipelineData,
     DispatchWorkgroupsIndirect, DynamicComputeEncodeDescriptor, StaticComputeEncodeDescriptor,
 };
+use crate::resource::sparse_residency::texture3d::brick_cache_update::CacheUpdateMeta;
 use crate::resource::VolumeManager;
 use crate::volume::octree::octree_manager::Octree;
 use glam::UVec3;
 use std::borrow::Cow;
 use std::rc::Rc;
 use std::sync::Arc;
-use wgpu::{BindGroupDescriptor, BindGroupEntry, BufferUsages, CommandEncoder, ComputePass, ComputePassDescriptor, ComputePipelineDescriptor, Label, MapMode};
+use wgpu::{
+    BindGroupDescriptor, BindGroupEntry, BufferUsages, CommandEncoder, ComputePass,
+    ComputePassDescriptor, ComputePipelineDescriptor, Label, MapMode,
+};
 use wgpu_framework::context::Gpu;
 use wgpu_framework::gpu::buffer::{Buffer, MappableBuffer};
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::resource::sparse_residency::texture3d::brick_cache_update::CacheUpdateMeta;
 
 const WORKGROUP_SIZE: u32 = 64;
 const MIN_MAX_THREAD_BLOCK_SIZE: UVec3 = UVec3::new(2, 2, 2);
@@ -36,12 +39,21 @@ struct OnFirstTimeMappedPasses {
 impl OnFirstTimeMappedPasses {
     pub fn encode<'a>(&'a self, compute_pass: &mut ComputePass<'a>, num_new_bricks: u32) {
         if num_new_bricks > 0 {
-            log::info!("first time workgroups {} = new bricks {} * processing size {} / 64", f32::ceil(num_new_bricks as f32 * self.processing_size as f32 / WORKGROUP_SIZE as f32) as u32,num_new_bricks, self.processing_size);
+            log::info!(
+                "first time workgroups {} = new bricks {} * processing size {} / 64",
+                f32::ceil(
+                    num_new_bricks as f32 * self.processing_size as f32 / WORKGROUP_SIZE as f32
+                ) as u32,
+                num_new_bricks,
+                self.processing_size
+            );
             self.compute_min_max_pass.encode_1d(
                 compute_pass,
-                f32::ceil(num_new_bricks as f32 * self.processing_size as f32 / WORKGROUP_SIZE as f32) as u32,
+                f32::ceil(
+                    num_new_bricks as f32 * self.processing_size as f32 / WORKGROUP_SIZE as f32,
+                ) as u32,
             );
-            self.update_min_max_values_pass.encode(compute_pass);
+            //self.update_min_max_values_pass.encode(compute_pass);
         }
     }
 }
@@ -55,16 +67,20 @@ struct OnMappedPasses {
 impl OnMappedPasses {
     pub fn encode<'a>(&'a self, compute_pass: &mut ComputePass<'a>, num_mapped_bricks: u32) {
         if num_mapped_bricks > 0 {
-            log::info!("mapped workgroups {} = num mapped {} / 64", f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32, num_mapped_bricks);
+            log::info!(
+                "mapped workgroups {} = num mapped {} / 64",
+                f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32,
+                num_mapped_bricks
+            );
             /*
-                        self.process_mapped_bricks_pass
-                            .encode_1d(compute_pass, f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32);
+            self.process_mapped_bricks_pass
+                .encode_1d(compute_pass, f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32);
 
-                                    for pass in self.dependent_passes.iter() {
-                                        pass.encode(compute_pass);
-                                    }
+                        for pass in self.dependent_passes.iter() {
+                            pass.encode(compute_pass);
+                        }
 
-                                     */
+                         */
         }
     }
 }
@@ -77,13 +93,17 @@ struct BreakPointBuffers {
 
 impl BreakPointBuffers {
     pub fn new(helper_buffer_a: &Buffer<u32>, helper_buffer_b: &Buffer<u32>) -> Self {
-        Self { helper_buffer_a: MappableBuffer::from_buffer(helper_buffer_a), helper_buffer_b: MappableBuffer::from_buffer(helper_buffer_b) }
+        Self {
+            helper_buffer_a: MappableBuffer::from_buffer(helper_buffer_a),
+            helper_buffer_b: MappableBuffer::from_buffer(helper_buffer_b),
+        }
     }
 
-    pub fn copy_to_read_buffer(&self,
-                               command_encoder: &mut CommandEncoder,
-                               helper_buffer_a: &Buffer<u32>,
-                               helper_buffer_b: &Buffer<u32>
+    pub fn copy_to_read_buffer(
+        &self,
+        command_encoder: &mut CommandEncoder,
+        helper_buffer_a: &Buffer<u32>,
+        helper_buffer_b: &Buffer<u32>,
     ) {
         if self.helper_buffer_a.is_ready() {
             log::info!("copy to a");
@@ -92,7 +112,7 @@ impl BreakPointBuffers {
                 0,
                 self.helper_buffer_a.buffer(),
                 0,
-                helper_buffer_a.size()
+                helper_buffer_a.size(),
             );
         }
         if self.helper_buffer_b.is_ready() {
@@ -102,7 +122,7 @@ impl BreakPointBuffers {
                 0,
                 self.helper_buffer_b.buffer(),
                 0,
-                helper_buffer_b.size()
+                helper_buffer_b.size(),
             );
         }
     }
@@ -118,10 +138,18 @@ impl BreakPointBuffers {
 
     pub fn maybe_print(&self) -> bool {
         if self.helper_buffer_a.is_mapped() && self.helper_buffer_b.is_mapped() {
-            log::info!("helper buffer a {:?}", self.helper_buffer_a.read_all().unwrap());
-            log::info!("helper buffer b {:?}", self.helper_buffer_b.read_all().unwrap());
+            log::info!(
+                "helper buffer a {:?}",
+                self.helper_buffer_a.read_all().unwrap()
+            );
+            log::info!(
+                "helper buffer b {:?}",
+                self.helper_buffer_b.read_all().unwrap()
+            );
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 }
 
@@ -201,7 +229,8 @@ impl OctreeUpdate {
         let cache_update_meta_data = vec![CacheUpdateMetaGPU {
             num_mapped: cache_update_meta.mapped_local_brick_ids().len() as u32,
             num_unmapped: cache_update_meta.unmapped_local_brick_ids().len() as u32,
-            num_mapped_first_time: cache_update_meta.mapped_first_time_local_brick_ids().len() as u32,
+            num_mapped_first_time: cache_update_meta.mapped_first_time_local_brick_ids().len()
+                as u32,
             num_unsuccessful_map_attempt: cache_update_meta
                 .unsuccessful_map_attempt_local_brick_ids()
                 .len() as u32,
@@ -235,7 +264,11 @@ impl OctreeUpdate {
         }
     }
     pub fn copy_to_readable(&self, command_encoder: &mut CommandEncoder) {
-        self.break_point.copy_to_read_buffer(command_encoder, &self.helper_buffer_a, &self.helper_buffer_b);
+        self.break_point.copy_to_read_buffer(
+            command_encoder,
+            &self.helper_buffer_a,
+            &self.helper_buffer_b,
+        );
     }
     pub fn map_break_point(&self) {
         self.break_point.map();
@@ -538,7 +571,10 @@ impl OctreeUpdate {
                     resource: octree.octree_nodes_as_binding_resource(),
                 }],
             });
-            log::info!("workgroup size = {}", f32::ceil(num_leaf_nodes as f32 / WORKGROUP_SIZE as f32) as u32);
+            log::info!(
+                "workgroup size = {}",
+                f32::ceil(num_leaf_nodes as f32 / WORKGROUP_SIZE as f32) as u32
+            );
             StaticComputeEncodeDescriptor::new_1d(
                 update_node_min_max_values_pipeline.pipeline(),
                 vec![bind_group_0, bind_group_1, bind_group_2],
@@ -618,16 +654,24 @@ impl OctreeUpdate {
                 vec![bind_group_0, bind_group_1, bind_group_2],
             )
         };
-        let first_subdivision_index_buffer =
-            Buffer::new_single_element("subdivision_index", (num_nodes_per_subdivision.len() - 2) as u32, BufferUsages::UNIFORM, gpu);
+        let first_subdivision_index_buffer = Buffer::new_single_element(
+            "subdivision_index",
+            (num_nodes_per_subdivision.len() - 2) as u32,
+            BufferUsages::UNIFORM,
+            gpu,
+        );
         let first_indirect_buffer = Rc::new(Buffer::from_data(
             "indirect buffer",
             indirect_initial_data.as_slice(),
             BufferUsages::STORAGE | BufferUsages::INDIRECT | BufferUsages::COPY_DST,
             gpu,
         ));
-        let first_num_nodes_to_update_buffer =
-            Buffer::new_single_element("num nodes next level", 0u32, BufferUsages::STORAGE | BufferUsages::COPY_DST, gpu);
+        let first_num_nodes_to_update_buffer = Buffer::new_single_element(
+            "num nodes next level",
+            0u32,
+            BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            gpu,
+        );
         let update_leaf_nodes_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("update leaf nodes: bind group 0"),
@@ -751,7 +795,8 @@ impl OctreeUpdate {
 
         for i in (0..num_nodes_per_subdivision.len() - 2).rev() {
             let num_nodes = num_nodes_per_subdivision[i];
-            let stream_compaction_pass_workgroup_size = f32::ceil(num_nodes as f32 / WORKGROUP_SIZE as f32) as u32;
+            let stream_compaction_pass_workgroup_size =
+                f32::ceil(num_nodes as f32 / WORKGROUP_SIZE as f32) as u32;
 
             let subdivision_index_buffer = Buffer::new_single_element(
                 "subdivision_index",
@@ -897,7 +942,6 @@ impl OctreeUpdate {
             process_mapped_bricks_pass,
             dependent_passes: on_cache_update_compute_passes,
         };
-
 
         let break_point = BreakPointBuffers::new(&helper_buffer_a, &helper_buffer_b);
         Self {

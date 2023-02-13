@@ -125,7 +125,7 @@ impl VolumeSceneObject {
 
                 gpu.queue().submit(Some(command_encoder.finish()));
 
-                if cache_update.mapped_local_brick_ids().len() > 1 {
+                if cache_update.mapped_local_brick_ids().len() >= 1 {
                     v.octree_update.map_break_point();
                 }
             }

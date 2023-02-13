@@ -1,11 +1,11 @@
+use crate::app::renderer::dvr::Resources;
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use crate::resource::VolumeManager;
+use crate::volume::octree::octree_manager::Octree;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
 use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::app::renderer::dvr::Resources;
-use crate::volume::octree::octree_manager::Octree;
 
 #[derive(Debug)]
 pub struct PageTableOctreeDVR {
@@ -54,12 +54,12 @@ impl PageTableOctreeDVR {
         let mut octree_bind_group_entries = vec![
             BindGroupEntry {
                 binding: 6,
-                resource: octree.volume_subdivisions_as_binding_resource()
+                resource: octree.volume_subdivisions_as_binding_resource(),
             },
             BindGroupEntry {
                 binding: 7,
-                resource: octree.octree_nodes_as_binding_resource()
-            }
+                resource: octree.octree_nodes_as_binding_resource(),
+            },
         ];
         volume_manager_bind_group_entries.append(&mut octree_bind_group_entries);
         let internal_bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {

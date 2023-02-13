@@ -7,7 +7,7 @@ use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{BindingResource, Buffer, BufferUsages, Extent3d};
 
 use crate::resource::Texture;
-use crate::util::extent::{subscript_to_index, uvec_to_extent, IndexToSubscript};
+use crate::util::extent::{subscript_to_index, uvec_to_extent, IndexToSubscript, SubscriptToIndex};
 use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 
 use crate::resource::buffer::TypedBuffer;
@@ -144,6 +144,14 @@ impl PageTableDirectory {
             subscript.x,
             subscript.y,
         )
+    }
+
+    pub fn brick_address_to_brick_id(&self, brick_address: &BrickAddress) -> u32 {
+        ((brick_address.index.x) << 24)
+            + ((brick_address.index.y) << 16)
+            + ((brick_address.index.z) << 8)
+            + UVec2::new(brick_address.channel, brick_address.level)
+                .to_index(&self.shape()) as u32
     }
 
     /// Maps a given 5D `brick_address` to a 1D index into the page table.

@@ -259,8 +259,24 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             if (node_has_no_data(node)) {
                 // todo: maybe request in other resolution
                 if (!requested_brick) {
-                    pt_request_brick(p, channel_settings_list.channels[channel].min_lod, channel);
-                    requested_brick = true;
+
+                    // todo: remove
+                    let brick = try_fetch_brick(p, 3, channel, true);
+                    if (brick.is_mapped) {
+                        let value = sample_volume(brick.sample_address);
+                        if (value > 0.0) {
+                            let trans_sample = channel_settings_list.channels[channel].color;
+                            var val_color = float4(trans_sample.rgb, value * trans_sample.a);
+                            val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
+                            color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
+                            color.a += 1;
+                        }
+                        //color = GREEN;
+                        break;
+                    }
+
+                    //pt_request_brick(p, 1, channel); //channel_settings_list.channels[channel].min_lod, channel);
+                    //requested_brick = true;
 
                     let subscript = float3(index_to_subscript(
                         subdivision_idx_local_node_index(subdivision_index, single_channel_global_node_index),
@@ -269,10 +285,13 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     let node_color = subscript / float3(subdivision_idx_get_shape(subdivision_index));
 
                     color = float4(node_color, 1);
-                }
+
+                    // todo: remvoe
+                    break;
+                } else {break;}
                 channel += 1;
                 continue;
-            }
+            } else {break;}
             /*
             else {
                 let value = f32(node_get_max(node)) / 255.0;
@@ -406,7 +425,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
 
         steps_taken += 1;
-        if (steps_taken >= uniforms.settings.max_steps) {
+        if (steps_taken >= 1) {//uniforms.settings.max_steps) {
             break;
         }
         if (is_saturated(color)) {

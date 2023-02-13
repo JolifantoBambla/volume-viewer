@@ -3,12 +3,14 @@ pub mod scene;
 
 use crate::app::renderer::dvr::common::GpuChannelSettings;
 use crate::app::renderer::MultiChannelVolumeRenderer;
+use crate::app::scene::volume::VolumeSceneObject;
 use crate::app::scene::MultiChannelVolumeScene;
 use crate::event::handler::register_default_js_event_handlers;
 use crate::event::{ChannelSettingsChange, Event, SettingsChange};
 use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
 use crate::resource::VolumeManager;
 use crate::util::vec::vec_equals;
+use crate::volume::octree::MultiChannelPageTableOctreeDescriptor;
 use crate::volume::HtmlEventTargetVolumeDataSource;
 use crate::wgsl::create_wgsl_preprocessor;
 use crate::{BrickedMultiResolutionMultiVolumeMeta, MultiChannelVolumeRendererSettings};
@@ -27,8 +29,6 @@ use winit::event::WindowEvent;
 use winit::event_loop::EventLoop;
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
-use crate::app::scene::volume::VolumeSceneObject;
-use crate::volume::octree::MultiChannelPageTableOctreeDescriptor;
 
 /// The `GLOBAL_EVENT_LOOP_PROXY` is a means to send data to the running application.
 /// It is initialized by `start_event_loop`.
@@ -124,12 +124,12 @@ impl App {
                 brick_size: UVec3::new(64, 64, 64),
                 max_num_channels: render_settings.create_options.max_visible_channels,
                 channel_settings: &vec![], // unused
-                visible_channels: vec![], // unused
-                interleaved_storage: true // unused
+                visible_channels: vec![],  // unused
+                interleaved_storage: true, // unused
             },
             volume_manager,
             &wgsl_preprocessor,
-            gpu
+            gpu,
         );
         // todo: make this configurable
         //let volume = VolumeSceneObject::new_page_table_volume(volume_manager);
@@ -326,20 +326,16 @@ impl OnCommandsSubmitted for App {
         // todo: both of these should go into volume_texture's post_render & add_channel_configuration should not be exposed
         if self.channel_selection_changed {
             self.channel_selection_changed = false;
-            let channel_mapping = self.scene
+            let channel_mapping = self
+                .scene
                 .volume_mut()
-                .update_channel_selection(
-                    &self.last_channel_selection,
-                    input.frame().number()
-                );
+                .update_channel_selection(&self.last_channel_selection, input.frame().number());
             self.channel_configuration = ChannelConfiguration {
                 visible_channel_indices: self.last_channel_selection.clone(),
                 channel_mapping,
             };
         }
-        self.scene
-            .volume_mut()
-            .update_cache(input);
+        self.scene.volume_mut().update_cache(input);
     }
 }
 
