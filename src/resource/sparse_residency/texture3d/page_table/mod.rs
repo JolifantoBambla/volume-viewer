@@ -1,6 +1,6 @@
 pub mod meta;
 
-use glam::{UVec3, UVec4, Vec3};
+use glam::{UVec2, UVec3, UVec4, Vec3};
 use std::collections::HashMap;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -125,15 +125,16 @@ impl PageTableDirectory {
         }
     }
 
-    /// Maps a given 1D `page_index` to a 5D brick address in the page table.
+    /// Maps a given `brick_id` to a 5D brick address in the page table.
+    /// A brick's id is its 5D address packed into a `u32`, not a linear index into the page directory.
     ///
     /// # Arguments
     ///
-    /// * `page_index`: the 1D index to map to a brick address
+    /// * `brick_id`: the brick's id to map to its address in the page table.
     ///
     /// returns: BrickAddress
-    pub fn page_index_to_brick_address(&self, page_index: u32) -> BrickAddress {
-        let bytes: [u8; 4] = page_index.to_be_bytes();
+    pub fn brick_id_to_brick_address(&self, brick_id: u32) -> BrickAddress {
+        let bytes: [u8; 4] = brick_id.to_be_bytes();
 
         let size = self.meta.get_page_table_directory_shape();
         let subscript = size.index_to_subscript(bytes[3] as u32);
@@ -204,7 +205,7 @@ impl PageTableDirectory {
         let unmapped_brick_address =
             if let Some(&unmapped_brick_id) = self.cache_addresses_in_use.get(cache_address) {
                 self.mark_as_unmapped(unmapped_brick_id);
-                Some(self.page_index_to_brick_address(unmapped_brick_id as u32))
+                Some(self.brick_id_to_brick_address(unmapped_brick_id as u32))
             } else {
                 None
             };
@@ -278,5 +279,9 @@ impl PageTableDirectory {
 
     pub fn channel_capacity(&self) -> usize {
         self.max_visible_channels as usize
+    }
+
+    pub fn shape(&self) -> UVec2 {
+        self.meta.get_page_table_directory_shape()
     }
 }

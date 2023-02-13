@@ -2,7 +2,7 @@ pub mod brick_cache_update;
 mod cache_management;
 mod page_table;
 
-use glam::{UVec3, Vec3};
+use glam::{UVec2, UVec3, Vec3};
 use std::cmp::min;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -28,6 +28,7 @@ use cache_management::{
 };
 use wgpu_framework::context::Gpu;
 use crate::BrickedMultiResolutionMultiVolumeMeta;
+use crate::util::extent::SubscriptToIndex;
 
 pub struct SparseResidencyTexture3DOptions {
     pub max_visible_channels: u32,
@@ -255,9 +256,21 @@ impl VolumeManager {
                 Vec::with_capacity(min(requested_ids.len(), self.brick_request_limit));
             for id in requested_ids {
                 let brick_address = self.map_from_page_table(
-                    self.page_table_directory.page_index_to_brick_address(id),
+                    self.page_table_directory.brick_id_to_brick_address(id),
                     timestamp,
                 );
+
+                // todo: remove(debug)
+                let local_brick_address = self.map_to_page_table(
+                    &brick_address,
+                    Some(timestamp)
+                ).unwrap();
+                let reconstructed_id = ((local_brick_address.index.x) << 24)
+                    + ((local_brick_address.index.y) << 16)
+                    + ((local_brick_address.index.z) << 8)
+                    + UVec2::new(local_brick_address.channel, local_brick_address.level).to_index(&self.page_table_directory.shape()) as u32;
+                log::info!("id {}, reconstructed: {}", id,reconstructed_id);
+
                 let brick_id = brick_address.into();
                 if !self.cached_bricks.contains(&brick_id) && self.requested_bricks.insert(brick_id)
                 {
