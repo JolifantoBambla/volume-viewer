@@ -199,6 +199,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let num_channels = uniforms.settings.num_visible_channels;
     let num_resolutions = page_directory_meta.max_resolutions;
+    let max_num_channels = page_directory_meta.max_channels;
 
     let cs = clone_channel_settings(0);
 
@@ -244,13 +245,13 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         // todo: make start level configurable (e.g., start at level 2 because 0 and 1 are unlikely to be empty anyway)
         let start_subdivision_index = target_culling_level;//0u;
         for (var subdivision_index = start_subdivision_index; subdivision_index <= target_culling_level; subdivision_index += 1) {
-            if (channel >= num_channels) {
+            if (channel >= 1) {//num_channels) {
                 break;
             }
             let single_channel_global_node_index = subdivision_idx_compute_node_index(subdivision_index, p);
             let multichannel_global_node_index = to_multichannel_node_index(
                 single_channel_global_node_index,
-                num_channels,
+                max_num_channels,
                 // todo: this might need to be translated to a channel_index w.r.t. to the page table
                 channel
             );

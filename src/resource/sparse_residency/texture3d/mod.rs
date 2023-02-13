@@ -43,8 +43,8 @@ pub struct SparseResidencyTexture3DOptions {
 impl Default for SparseResidencyTexture3DOptions {
     fn default() -> Self {
         Self {
-            max_visible_channels: 17,
-            max_resolutions: 15,
+            max_visible_channels: 16,
+            max_resolutions: 16,
             visible_channel_indices: vec![0],
             brick_request_limit: 32,
             cache_size: Extent3d {
@@ -468,6 +468,10 @@ impl VolumeManager {
 
     pub fn meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta {
         self.source.meta()
+    }
+
+    pub fn brick_transfer_limit(&self) -> usize {
+        self.brick_transfer_limit
     }
 }
 

@@ -75,11 +75,15 @@ impl OnMappedPasses {
             self.process_mapped_bricks_pass
                 .encode_1d(compute_pass, f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32);
 
-            /*
+            let mut num_processed = 0;
+            let limit = 20;
             for pass in self.dependent_passes.iter() {
-                pass.encode(compute_pass);
+                if num_processed < limit {
+                    pass.encode(compute_pass);
+                }
+                // todo: add new pass to collect parent indices
+                num_processed += 1;
             }
-            */
         }
     }
 }
@@ -195,6 +199,18 @@ pub struct OctreeUpdate {
 //  - read node and check if bitmask is different
 //  - if so, atomicOr in helper buffer b
 // 3. process helper buffers:
+//  - if helper buffer a non-zero: update node & collect parent node in helper buffer b
+//  - set helper buffer a to 255
+// 5. process parent node buffer:
+//  - if helper buffer b non-zero: atomicAdd index & add node index to helper buffer a
+//  - set helper buffer b 0
+// 4. process parent nodes:
+//  - check child nodes and update node
+//  - if changed, set parent node in helper buffer b to true
+//  - set helper buffer a to 255
+// repeat 5. and 6. until root node
+
+
 //  - if helper buffer b non-zero: update node & collect parent node in helper buffer a
 //  - set helper buffer b to 0
 // 4. process parent nodes:
@@ -288,7 +304,7 @@ impl OctreeUpdate {
         // todo: set up on unmapped passes
 
         let gpu = octree.gpu();
-        let max_bricks_per_update: usize = 32;
+        let max_bricks_per_update = volume_manager.brick_transfer_limit();
 
         let num_nodes_per_subdivision = octree.nodes_per_subdivision();
         let num_leaf_nodes = *num_nodes_per_subdivision.last().unwrap();
@@ -645,7 +661,7 @@ impl OctreeUpdate {
                 layout: process_mapped_bricks_pipeline.bind_group_layout(2),
                 entries: &[BindGroupEntry {
                     binding: 0,
-                    resource: helper_buffer_b.buffer().as_entire_binding(),
+                    resource: helper_buffer_a.buffer().as_entire_binding(),
                 }],
             });
             DynamicComputeEncodeDescriptor::new(
@@ -653,6 +669,7 @@ impl OctreeUpdate {
                 vec![bind_group_0, bind_group_1, bind_group_2],
             )
         };
+        /*
         let first_subdivision_index_buffer = Buffer::new_single_element(
             "subdivision_index",
             (num_nodes_per_subdivision.len() - 2) as u32,
@@ -671,6 +688,7 @@ impl OctreeUpdate {
             BufferUsages::STORAGE | BufferUsages::COPY_DST,
             gpu,
         );
+         */
         let update_leaf_nodes_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("update leaf nodes: bind group 0"),
@@ -693,7 +711,7 @@ impl OctreeUpdate {
                 layout: update_leaf_nodes_pipeline.bind_group_layout(1),
                 entries: &[BindGroupEntry {
                     binding: 0,
-                    resource: helper_buffer_b.buffer().as_entire_binding(),
+                    resource: helper_buffer_a.buffer().as_entire_binding(),
                 }],
             });
             let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
@@ -704,6 +722,7 @@ impl OctreeUpdate {
                         binding: 0,
                         resource: octree.octree_nodes_as_binding_resource(),
                     },
+                    /*
                     BindGroupEntry {
                         binding: 1,
                         resource: first_indirect_buffer.buffer().as_entire_binding(),
@@ -714,9 +733,10 @@ impl OctreeUpdate {
                             .buffer()
                             .as_entire_binding(),
                     },
+                    */
                     BindGroupEntry {
-                        binding: 3,
-                        resource: helper_buffer_a.buffer().as_entire_binding(),
+                        binding: 1,
+                        resource: helper_buffer_b.buffer().as_entire_binding(),
                     },
                 ],
             });
@@ -728,6 +748,7 @@ impl OctreeUpdate {
         };
         on_cache_update_compute_passes.push(update_leaf_nodes_pass);
 
+        /*
         let update_first_parent_level_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("update first parent level nodes: bind group 0"),
@@ -791,8 +812,9 @@ impl OctreeUpdate {
         subdivision_index_buffers.push(first_subdivision_index_buffer);
         indirect_buffers.push(first_indirect_buffer);
         num_nodes_to_update_buffers.push(first_num_nodes_to_update_buffer);
+        */
 
-        for i in (0..num_nodes_per_subdivision.len() - 2).rev() {
+        for i in (0..num_nodes_per_subdivision.len() - 1).rev() {
             let num_nodes = num_nodes_per_subdivision[i];
             let stream_compaction_pass_workgroup_size =
                 f32::ceil(num_nodes as f32 / WORKGROUP_SIZE as f32) as u32;

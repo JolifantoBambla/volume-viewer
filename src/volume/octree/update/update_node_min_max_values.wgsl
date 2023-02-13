@@ -47,9 +47,9 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     //let node_changed = multichannel_local_node_index;
     //let node_changed = u32(old_min > minimum || old_max < maximum);
     let node_changed = insertBits(0, u32(old_min > minimum || old_max < maximum), NODE_MIN_OFFSET, NODE_MIN_COUNT);
-    node_helper_buffer_b[multichannel_local_node_index] = node_changed;
+    node_helper_buffer_a[multichannel_local_node_index] = node_changed;
 
     // clean up for next passes
-    node_helper_buffer_a[multichannel_local_node_index] = 255;
-    //node_helper_buffer_a[multichannel_local_node_index] = global_node_index;
+    node_helper_buffer_b[multichannel_local_node_index] = 0;
+    //node_helper_buffer_b[multichannel_local_node_index] = global_node_index;
 }

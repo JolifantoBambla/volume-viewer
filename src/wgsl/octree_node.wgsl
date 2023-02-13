@@ -22,7 +22,8 @@ fn node_new(min_value: u32, max_value: u32, partially_mapped_bitmask: u32) -> u3
 
 fn node_has_no_data(node: u32) -> bool {
     // todo: enable other line, this is just for debugging
-    return node_get_min(node) == 255 && node_get_max(node) == 0 && node_get_partially_mapped_resolutions(node) == 0;
+    return node == 255;
+    //return node_get_min(node) == 255 && node_get_max(node) == 0 && node_get_partially_mapped_resolutions(node) == 0;
 //    return node_get_min(node) > node_get_max(node);
 }
 

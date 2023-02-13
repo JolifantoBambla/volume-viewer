@@ -33,5 +33,6 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
         let index = atomicAdd(&num_nodes_next_level, 1);
         atomicMax(&next_level_update_indirect.workgroup_count_x, max(index / 64, 1));
         node_helper_buffer_a[index] = multichannel_local_node_index;
+        node_helper_buffer_b[multichannel_local_node_index] = 0;
     }
 }

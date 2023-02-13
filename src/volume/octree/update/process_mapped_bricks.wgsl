@@ -20,7 +20,7 @@
 @group(1) @binding(1) var<storage> mapped_brick_ids: array<u32>;
 
 // (read-write) output resolution mapping
-@group(2) @binding(0) var<storage, read_write> node_helper_buffer_b: array<atomic<u32>>;
+@group(2) @binding(0) var<storage, read_write> node_helper_buffer_a: array<atomic<u32>>;
 
 // Maps bricks to octree leaf nodes and marks their local index in node_helper_buffer_a as updated with the updated
 // non-zero bitmask of partially mapped resolutions
@@ -75,7 +75,7 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
                 if ((partially_mapped_bitmask & resolution_mask) == 0u) {
                     //atomicAdd(&node_helper_buffer_b[multichannel_local_index], 1);
                     //atomicOr(&node_helper_buffer_b[multichannel_local_index], resolution_mask);
-                    atomicOr(&node_helper_buffer_b[multichannel_local_index], insertBits(0, resolution_mask, PARTIALLY_MAPPED_RESOLUTIONS_OFFSET, PARTIALLY_MAPPED_RESOLUTIONS_COUNT));
+                    atomicOr(&node_helper_buffer_a[multichannel_local_index], insertBits(0, resolution_mask, PARTIALLY_MAPPED_RESOLUTIONS_OFFSET, PARTIALLY_MAPPED_RESOLUTIONS_COUNT));
                 }
             }
         }
