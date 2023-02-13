@@ -53,7 +53,7 @@ impl OnFirstTimeMappedPasses {
                     num_new_bricks as f32 * self.processing_size as f32 / WORKGROUP_SIZE as f32,
                 ) as u32,
             );
-            //self.update_min_max_values_pass.encode(compute_pass);
+            self.update_min_max_values_pass.encode(compute_pass);
         }
     }
 }
