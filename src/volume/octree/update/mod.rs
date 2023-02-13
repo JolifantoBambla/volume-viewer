@@ -72,15 +72,14 @@ impl OnMappedPasses {
                 f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32,
                 num_mapped_bricks
             );
-            /*
             self.process_mapped_bricks_pass
                 .encode_1d(compute_pass, f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32);
 
-                        for pass in self.dependent_passes.iter() {
-                            pass.encode(compute_pass);
-                        }
-
-                         */
+            /*
+            for pass in self.dependent_passes.iter() {
+                pass.encode(compute_pass);
+            }
+            */
         }
     }
 }

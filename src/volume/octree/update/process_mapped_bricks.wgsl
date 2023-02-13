@@ -73,9 +73,9 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
                 let node = octree_nodes[multichannel_global_index];
                 let partially_mapped_bitmask = node_get_partially_mapped_resolutions(node);
                 if ((partially_mapped_bitmask & resolution_mask) == 0u) {
-                    atomicAdd(&node_helper_buffer_b[multichannel_local_index], 1);
+                    //atomicAdd(&node_helper_buffer_b[multichannel_local_index], 1);
                     //atomicOr(&node_helper_buffer_b[multichannel_local_index], resolution_mask);
-                    //atomicOr(&node_helper_buffer_b[multichannel_local_index], insertBits(0, resolution_mask, PARTIALLY_MAPPED_RESOLUTIONS_OFFSET, PARTIALLY_MAPPED_RESOLUTIONS_COUNT));
+                    atomicOr(&node_helper_buffer_b[multichannel_local_index], insertBits(0, resolution_mask, PARTIALLY_MAPPED_RESOLUTIONS_OFFSET, PARTIALLY_MAPPED_RESOLUTIONS_COUNT));
                 }
             }
         }
