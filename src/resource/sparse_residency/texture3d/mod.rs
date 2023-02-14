@@ -28,6 +28,8 @@ use cache_management::{
     Timestamp,
 };
 use wgpu_framework::context::Gpu;
+#[cfg(feature = "timestamp-query")]
+use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 
 pub struct SparseResidencyTexture3DOptions {
     pub max_visible_channels: u32,
@@ -224,23 +226,28 @@ impl VolumeManager {
         self.page_table_directory.normalized_volume_size()
     }
 
-    pub fn encode_cache_management(&self, command_encoder: &mut CommandEncoder, timestamp: u32) {
+    pub fn encode_cache_management(
+        &self, command_encoder: &mut CommandEncoder,
+        timestamp: u32,
+        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
+    ) {
         self.ctx.queue().write_buffer(
             &self.timestamp_uniform_buffer,
             0 as BufferAddress,
             bytemuck::bytes_of(&Timestamp::new(timestamp)),
         );
 
-        self.lru_cache.encode_lru_update(command_encoder, timestamp);
+        self.lru_cache.encode_lru_update(command_encoder, timestamp, #[cfg(feature = "timestamp-query")] timestamp_query_set);
 
         // find requested
         self.process_requests_pass.encode(
             command_encoder,
             &self.process_requests_bind_group,
             &self.request_buffer.extent,
+            #[cfg(feature = "timestamp-query")] timestamp_query_set
         );
         self.process_requests_pass
-            .encode_copy_result_to_readable(command_encoder);
+            .encode_copy_result_to_readable(command_encoder, #[cfg(feature = "timestamp-query")] timestamp_query_set);
     }
 
     fn process_requests(&mut self) {

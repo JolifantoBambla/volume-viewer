@@ -17,6 +17,8 @@ use crate::{BrickedMultiResolutionMultiVolumeMeta, MultiChannelVolumeRendererSet
 use glam::UVec2;
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
+#[cfg(feature = "timestamp-query")]
+use wgpu::MapMode;
 use wgpu::{SubmissionIndex, SurfaceConfiguration, TextureView};
 use wgpu_framework::app::{GpuApp, MapToWindowEvent};
 use wgpu_framework::context::{ContextDescriptor, Gpu, SurfaceContext};
@@ -207,12 +209,15 @@ impl GpuApp for App {
         }
         settings.channel_settings = c_settings;
 
+        // todo: read & store results
         #[cfg(feature = "timestamp-query")]
         let mut time_stamp_query_set = TimeStampQuerySet::new(
             format!("Timing frame {}", input.frame().number()).as_str(),
             0,
             &self.ctx,
         );
+        #[cfg(feature = "timestamp-query")]
+        let query_read_buffer = time_stamp_query_set.create_resolve_buffer(&self.ctx);
 
         self.renderer.render(
             view,
@@ -225,11 +230,29 @@ impl GpuApp for App {
             &mut time_stamp_query_set,
         );
 
+        // todo: pass timestamp queries to cache management
         self.scene
             .volume_manager_mut()
-            .encode_cache_management(&mut encoder, input.frame().number());
+            .encode_cache_management(
+                &mut encoder,
+                input.frame().number(),
+                #[cfg(feature = "timestamp-query")]
+                &mut time_stamp_query_set,
+            );
 
-        self.ctx.queue().submit(Some(encoder.finish()))
+        #[cfg(feature = "timestamp-query")]
+        time_stamp_query_set
+            .resolve(&mut encoder, &query_read_buffer)
+            .expect("Encountered incompatible buffer for timestamp query set");
+
+        let submission_index = self.ctx.queue().submit(Some(encoder.finish()));
+
+        #[cfg(feature = "timestamp-query")]
+        query_read_buffer
+            .map_async(MapMode::Read, ..)
+            .expect("Could not map buffer");
+
+        submission_index
     }
 
     #[cfg(feature = "timestamp-query")]
