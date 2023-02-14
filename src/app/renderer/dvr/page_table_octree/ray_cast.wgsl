@@ -245,37 +245,22 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         var channel = 0u;
         // todo: make start level configurable (e.g., start at level 2 because 0 and 1 are unlikely to be empty anyway)
         let start_subdivision_index = 0u;
-        for (var subdivision_index = start_subdivision_index; subdivision_index <= target_culling_level;) {
-            if (channel >= num_visible_channels) {
-                break;
-            }
+        var subdivision_index = start_subdivision_index;
+        var empty_channels = 0u;
+        while (subdivision_index <= target_culling_level && channel < num_visible_channels) {
             let single_channel_global_node_index = subdivision_idx_compute_node_index(subdivision_index, p);
             let multichannel_global_node_index = to_multichannel_node_index(
                 single_channel_global_node_index,
                 max_num_channels,
                 page_directory_meta_get_channel_index(channel_settings_list.channels[channel].page_table_index)
             );
-            // todo: make sure bricks are only requested if we didn't jump over missing data
             let node = node_idx_load_global(multichannel_global_node_index);
             if (node_has_no_data(node)) {
                 // todo: maybe request in other resolution
                 if (!requested_brick) {
                     pt_request_brick(p, channel_settings_list.channels[channel].min_lod, channel);
                     requested_brick = true;
-
-                    /*
-                    // todo: remove
-                    let subscript = float3(index_to_subscript(
-                        subdivision_idx_local_node_index(subdivision_index, single_channel_global_node_index),
-                        subdivision_idx_get_shape(subdivision_index)
-                    ));
-                    let node_color = subscript / float3(subdivision_idx_get_shape(subdivision_index));
-                    color = float4(node_color, 1);
-
-                    // todo: remove
-                    break;
-                    */
-                } //else {break;}
+                }
                 channel += 1;
                 continue;
             }
@@ -283,34 +268,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             let lower_threshold = min(u32(channel_settings_list.channels[channel].threshold_lower * 255.0), 255);
             let upper_threshold = min(u32(channel_settings_list.channels[channel].threshold_upper * 255.0), 255);
             if (node_is_empty(node, lower_threshold, upper_threshold)) {
-                //color = YELLOW;
-                //break;
-
-                // todo: advance skipping thing
                 channel += 1;
+                empty_channels += 1;
                 continue;
             }
-            /*
-            else {
-                // todo: remove
-                let brick = try_fetch_brick(p, 3, channel, true);
-                if (brick.is_mapped) {
-                    let value = sample_volume(brick.sample_address);
-                    if (value > 0.0) {
-                        let trans_sample = channel_settings_list.channels[channel].color;
-                        var val_color = float4(trans_sample.rgb, value * trans_sample.a);
-                        val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
-                        color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
-                        color.a += 1;
-                    }
-                    let value_u32 = min(u32(value * 255.0), 255);
-                    if (value_u32 > node_get_max(node) || value_u32 < node_get_min(node)) {
-                        color = RED;
-                    }
-                }
-                break;
-            }
-            */
             /*
             if (node_is_homogeneous(node, homogeneous_threshold)) {
                 let value = f32(node_get_min(node)) / 255.0;
@@ -329,35 +290,13 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             }
             */
             if (node_is_not_mapped(node)) {
-                // todo: maybe request in other resolution
                 if (!requested_brick) {
                     pt_request_brick(p, channel_settings_list.channels[channel].min_lod, channel);
                     requested_brick = true;
                 }
-
-                /*
-                color = RED;
-                let target_mask = node_make_mask_for_resolution(lod);
-                if (target_mask > 0) {
-                    let test_node = node_new(0,0,target_mask);
-                    if ((0 | target_mask) != 0u) {
-                        color = GREEN;
-                    }
-                }
-                break;
-                */
-
                 channel += 1;
                 continue;
             }
-            /*
-            else {
-                if (node_get_min(node) == 255 && node_get_max(node) == 255 && node_get_partially_mapped_resolutions(node) == 255) {
-                    color = MAGENTA;
-                    break;
-                }
-            }
-            */
             if (subdivision_index != target_culling_level) {
                 subdivision_index += 1;
                 continue;
@@ -406,6 +345,13 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
                 color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
                 color.a += (1.0 - color.a) * val_color.a;
+
+                // todo: remove (debug)
+                // sometimes a wrong brick is accessed at brick boundaries
+                let value_u32 = min(u32(floor(value * 255.0)), 255);
+                if (value_u32 > node_get_max(node) || value_u32 < node_get_min(node)) {
+                    color = RED;
+                }
             }
 
             channel += 1;
@@ -420,6 +366,11 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
 
         // todo: empty space skipping
+        if (empty_channels == num_visible_channels) {
+            // todo: compute distance to jump
+            color = YELLOW;
+            break;
+        }
         p += ray_os.direction * dt;
     }
 
@@ -443,6 +394,7 @@ fn pt_request_brick(ray_sample: float3, lod: u32, channel: u32) {
     request_brick(int3(page_address));
 }
 
+// todo: simplify Node
 fn try_fetch_brick(ray_sample: float3, lod: u32, channel: u32, request_bricks: bool) -> Node {
     let page_table_index = compute_page_table_index(
         channel_settings_list.channels[channel].page_table_index,

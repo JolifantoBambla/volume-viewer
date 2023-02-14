@@ -32,7 +32,11 @@ fn pt_compute_cache_address(page_table_index: u32, position: float3, page: PageT
     let page_table_meta = page_table_meta.metas[page_table_index];
     let brick_size = page_table_meta.brick_size;
     let volume_size = page_table_meta.volume_size;
-    return page.location + uint3(floor(position * float3(volume_size))) % brick_size;
+    let volume_position = min(
+        uint3(floor(position * float3(volume_size))),
+        volume_size - uint3(1u)
+    );
+    return page.location + volume_position % brick_size;
 }
 
 // todo: this could be a per-resolution constant
