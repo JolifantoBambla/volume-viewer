@@ -20,6 +20,7 @@ use wgpu::{
 use wgpu_framework::context::Gpu;
 use wgpu_framework::input::Input;
 use wgsl_preprocessor::WGSLPreprocessor;
+use crate::renderer::settings::RenderMode;
 
 #[derive(Debug)]
 pub struct MultiChannelVolumeRenderer {
@@ -143,7 +144,6 @@ impl MultiChannelVolumeRenderer {
         channel_settings: &Vec<GpuChannelSettings>,
         input: &Input,
         command_encoder: &mut CommandEncoder,
-        force_page_table_dvr: bool,
     ) {
         let uniforms = Uniforms::new(
             CameraUniform::from(scene.camera()),
@@ -163,19 +163,21 @@ impl MultiChannelVolumeRenderer {
             bytemuck::cast_slice(channel_settings.as_slice()),
         );
 
-        // todo: remove (debug)
-        if force_page_table_dvr {
-            self.page_table_render_pass.encode(
-                command_encoder,
-                &self.page_table_bind_group,
-                &self.volume_render_result_extent,
-            );
-        } else {
-            self.volume_render_pass.encode(
-                command_encoder,
-                &self.volume_render_bind_group,
-                &self.volume_render_result_extent,
-            );
+        match settings.render_mode {
+            RenderMode::Octree => {
+                self.volume_render_pass.encode(
+                    command_encoder,
+                    &self.volume_render_bind_group,
+                    &self.volume_render_result_extent,
+                );
+            }
+            RenderMode::PageTable => {
+                self.page_table_render_pass.encode(
+                    command_encoder,
+                    &self.page_table_bind_group,
+                    &self.volume_render_result_extent,
+                );
+            }
         }
 
         self.present_to_screen_pass.encode(

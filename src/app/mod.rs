@@ -57,8 +57,6 @@ pub struct App {
     settings: MultiChannelVolumeRendererSettings,
     last_channel_selection: Vec<u32>,
     channel_selection_changed: bool,
-
-    force_page_table_render_mode: bool,
 }
 
 impl App {
@@ -151,7 +149,6 @@ impl App {
             settings: render_settings,
             last_channel_selection,
             channel_selection_changed: false,
-            force_page_table_render_mode: false,
         }
     }
 
@@ -215,7 +212,6 @@ impl GpuApp for App {
             &channel_settings,
             input,
             &mut encoder,
-            self.force_page_table_render_mode,
         );
 
         self.scene
