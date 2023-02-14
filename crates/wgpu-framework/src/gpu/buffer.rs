@@ -1,6 +1,6 @@
+use crate::context::Gpu;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use crate::context::Gpu;
 use std::marker::PhantomData;
 use std::mem;
 use std::mem::size_of;
@@ -178,13 +178,18 @@ impl<T: bytemuck::Pod> MappableBuffer<T> {
 
     /// Maps a mappable buffer if it is not already mapped or being mapped.
     /// The buffer can be read
-    pub fn map_async<S: RangeBounds<BufferAddress>>(&self, mode: MapMode, bounds: S) -> Result<(), BufferMapError> {
+    pub fn map_async<S: RangeBounds<BufferAddress>>(
+        &self,
+        mode: MapMode,
+        bounds: S,
+    ) -> Result<(), BufferMapError> {
         let s = self.state.clone();
         if self.is_ready() {
             s.lock().unwrap().state = BufferState::Mapping;
-            Ok(self.buffer().slice(bounds).map_async(mode, move |_| {
+            self.buffer().slice(bounds).map_async(mode, move |_| {
                 s.lock().unwrap().state = BufferState::Mapped;
-            }))
+            });
+            Ok(())
         } else {
             Err(BufferMapError::NotReady)
         }
@@ -224,4 +229,3 @@ impl<T: bytemuck::Pod> MappableBuffer<T> {
         result
     }
 }
-

@@ -10,7 +10,7 @@ use crate::event::{ChannelSettingsChange, Event, SettingsChange};
 use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
 use crate::resource::VolumeManager;
 use crate::util::vec::vec_equals;
-use crate::volume::octree::MultiChannelPageTableOctreeDescriptor;
+use crate::volume::octree::OctreeDescriptor;
 use crate::volume::HtmlEventTargetVolumeDataSource;
 use crate::wgsl::create_wgsl_preprocessor;
 use crate::{BrickedMultiResolutionMultiVolumeMeta, MultiChannelVolumeRendererSettings};
@@ -119,13 +119,10 @@ impl App {
 
         let volume_meta2 = volume_manager.meta().clone();
         let volume = VolumeSceneObject::new_octree_volume(
-            MultiChannelPageTableOctreeDescriptor {
+            OctreeDescriptor {
                 volume: &volume_meta2,
-                brick_size: UVec3::new(64, 64, 64),
-                max_num_channels: render_settings.create_options.max_visible_channels,
-                channel_settings: &vec![], // unused
-                visible_channels: vec![],  // unused
-                interleaved_storage: true, // unused
+                leaf_node_size: UVec3::new(64, 64, 64),
+                max_num_channels: render_settings.create_options.max_visible_channels as usize,
             },
             volume_manager,
             &wgsl_preprocessor,

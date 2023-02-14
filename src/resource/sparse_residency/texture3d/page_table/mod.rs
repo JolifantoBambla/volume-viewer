@@ -150,8 +150,7 @@ impl PageTableDirectory {
         ((brick_address.index.x) << 24)
             + ((brick_address.index.y) << 16)
             + ((brick_address.index.z) << 8)
-            + UVec2::new(brick_address.channel, brick_address.level)
-                .to_index(&self.shape()) as u32
+            + UVec2::new(brick_address.channel, brick_address.level).to_index(&self.shape())
     }
 
     /// Maps a given 5D `brick_address` to a 1D index into the page table.

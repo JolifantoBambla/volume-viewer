@@ -1,7 +1,7 @@
 use crate::resource::VolumeManager;
 use crate::volume::octree::octree_manager::Octree;
 use crate::volume::octree::update::OctreeUpdate;
-use crate::volume::octree::MultiChannelPageTableOctreeDescriptor;
+use crate::volume::octree::OctreeDescriptor;
 use glam::Mat4;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -32,8 +32,8 @@ pub struct PageTableVolume {
 
 #[derive(Debug)]
 pub enum VolumeSceneObject {
-    TopDownOctreeVolume(OctreeVolume),
-    PageTableVolume(PageTableVolume),
+    TopDownOctreeVolume(Box<OctreeVolume>),
+    PageTableVolume(Box<PageTableVolume>),
 }
 
 impl VolumeSceneObject {
@@ -44,26 +44,26 @@ impl VolumeSceneObject {
     }
 
     pub fn new_page_table_volume(volume_manager: VolumeManager) -> Self {
-        Self::PageTableVolume(PageTableVolume {
+        Self::PageTableVolume(Box::new(PageTableVolume {
             object_to_world: Self::make_volume_transform(&volume_manager),
             volume_manager,
-        })
+        }))
     }
 
     pub fn new_octree_volume(
-        descriptor: MultiChannelPageTableOctreeDescriptor,
+        descriptor: OctreeDescriptor,
         volume_manager: VolumeManager,
         wgsl_preprocessor: &WGSLPreprocessor,
         gpu: &Arc<Gpu>,
     ) -> Self {
         let octree = Octree::new(descriptor, gpu);
         let octree_update = OctreeUpdate::new(&octree, &volume_manager, wgsl_preprocessor);
-        Self::TopDownOctreeVolume(OctreeVolume {
+        Self::TopDownOctreeVolume(Box::new(OctreeVolume {
             object_to_world: Self::make_volume_transform(&volume_manager),
             volume_manager,
             octree,
             octree_update,
-        })
+        }))
     }
 
     pub fn volume_transform(&self) -> Mat4 {

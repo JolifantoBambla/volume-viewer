@@ -62,7 +62,7 @@ impl RayGuidedDVR {
                     gpu,
                 ))
             }
-            VolumeSceneObject::PageTableVolume(pt) => Self::PageTable(PageTableDVR::new(
+            VolumeSceneObject::PageTableVolume(_) => Self::PageTable(PageTableDVR::new(
                 volume.volume_manager(),
                 wgsl_preprocessor,
                 gpu,

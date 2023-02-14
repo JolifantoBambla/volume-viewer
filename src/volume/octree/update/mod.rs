@@ -72,18 +72,25 @@ impl OnMappedPasses {
                 f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32,
                 num_mapped_bricks
             );
-            self.process_mapped_bricks_pass
-                .encode_1d(compute_pass, f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32);
+            self.process_mapped_bricks_pass.encode_1d(
+                compute_pass,
+                f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32,
+            );
 
+            for pass in self.dependent_passes.iter() {
+                pass.encode(compute_pass);
+            }
+
+            /* todo: remove (debug)
             let mut num_processed = 0;
             let limit = 20;
             for pass in self.dependent_passes.iter() {
                 if num_processed < limit {
                     pass.encode(compute_pass);
                 }
-                // todo: add new pass to collect parent indices
                 num_processed += 1;
             }
+             */
         }
     }
 }
@@ -209,7 +216,6 @@ pub struct OctreeUpdate {
 //  - if changed, set parent node in helper buffer b to true
 //  - set helper buffer a to 255
 // repeat 5. and 6. until root node
-
 
 //  - if helper buffer b non-zero: update node & collect parent node in helper buffer a
 //  - set helper buffer b to 0
@@ -669,26 +675,7 @@ impl OctreeUpdate {
                 vec![bind_group_0, bind_group_1, bind_group_2],
             )
         };
-        /*
-        let first_subdivision_index_buffer = Buffer::new_single_element(
-            "subdivision_index",
-            (num_nodes_per_subdivision.len() - 2) as u32,
-            BufferUsages::UNIFORM,
-            gpu,
-        );
-        let first_indirect_buffer = Rc::new(Buffer::from_data(
-            "indirect buffer",
-            indirect_initial_data.as_slice(),
-            BufferUsages::STORAGE | BufferUsages::INDIRECT | BufferUsages::COPY_DST,
-            gpu,
-        ));
-        let first_num_nodes_to_update_buffer = Buffer::new_single_element(
-            "num nodes next level",
-            0u32,
-            BufferUsages::STORAGE | BufferUsages::COPY_DST,
-            gpu,
-        );
-         */
+
         let update_leaf_nodes_pass = {
             let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
                 label: Label::from("update leaf nodes: bind group 0"),
@@ -722,18 +709,6 @@ impl OctreeUpdate {
                         binding: 0,
                         resource: octree.octree_nodes_as_binding_resource(),
                     },
-                    /*
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: first_indirect_buffer.buffer().as_entire_binding(),
-                    },
-                    BindGroupEntry {
-                        binding: 2,
-                        resource: first_num_nodes_to_update_buffer
-                            .buffer()
-                            .as_entire_binding(),
-                    },
-                    */
                     BindGroupEntry {
                         binding: 1,
                         resource: helper_buffer_b.buffer().as_entire_binding(),
@@ -747,72 +722,6 @@ impl OctreeUpdate {
             ))
         };
         on_cache_update_compute_passes.push(update_leaf_nodes_pass);
-
-        /*
-        let update_first_parent_level_pass = {
-            let bind_group_0 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("update first parent level nodes: bind group 0"),
-                layout: update_non_leaf_nodes_pipeline.bind_group_layout(0),
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: octree.volume_subdivisions_as_binding_resource(),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: volume_manager
-                            .page_table_directory()
-                            .page_directory_meta_as_binding_resource(),
-                    },
-                ],
-            });
-            let bind_group_1 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("update first parent level nodes: bind group 1"),
-                layout: update_non_leaf_nodes_pipeline.bind_group_layout(1),
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: first_subdivision_index_buffer.buffer().as_entire_binding(),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: first_num_nodes_to_update_buffer
-                            .buffer()
-                            .as_entire_binding(),
-                    },
-                    BindGroupEntry {
-                        binding: 2,
-                        resource: helper_buffer_a.buffer().as_entire_binding(),
-                    },
-                ],
-            });
-            let bind_group_2 = gpu.device().create_bind_group(&BindGroupDescriptor {
-                label: Label::from("update first parent level nodes: bind group 2"),
-                layout: update_non_leaf_nodes_pipeline.bind_group_layout(2),
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: octree.octree_nodes_as_binding_resource(),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: helper_buffer_b.buffer().as_entire_binding(),
-                    },
-                ],
-            });
-            ComputePassData::Indirect(ComputeEncodeIndirectDescriptor::with_indirect_buffer(
-                update_non_leaf_nodes_pipeline.pipeline(),
-                vec![bind_group_0, bind_group_1, bind_group_2],
-                &first_indirect_buffer,
-                0,
-            ))
-        };
-        on_cache_update_compute_passes.push(update_first_parent_level_pass);
-
-        subdivision_index_buffers.push(first_subdivision_index_buffer);
-        indirect_buffers.push(first_indirect_buffer);
-        num_nodes_to_update_buffers.push(first_num_nodes_to_update_buffer);
-        */
 
         for i in (0..num_nodes_per_subdivision.len() - 1).rev() {
             let num_nodes = num_nodes_per_subdivision[i];

@@ -2,7 +2,7 @@ use crate::app::renderer::dvr::Resources;
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use crate::resource::VolumeManager;
 use std::{borrow::Cow, sync::Arc};
-use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
+use wgpu::{BindGroup, BindGroupLayout};
 use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
 

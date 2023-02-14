@@ -2,7 +2,7 @@ pub mod brick_cache_update;
 mod cache_management;
 mod page_table;
 
-use glam::{UVec2, UVec3, Vec3};
+use glam::{UVec3, Vec3};
 use std::cmp::min;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -21,7 +21,6 @@ use wgpu_framework::input::Input;
 use crate::resource::sparse_residency::texture3d::brick_cache_update::CacheUpdateMeta;
 use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
 use crate::resource::sparse_residency::texture3d::page_table::PageTableDirectory;
-use crate::util::extent::SubscriptToIndex;
 use crate::BrickedMultiResolutionMultiVolumeMeta;
 use cache_management::{
     lru::LRUCache,
@@ -250,7 +249,6 @@ impl VolumeManager {
         let brick_requests = self.process_requests_pass.read();
         // request bricks from data source
         if let Some(request) = brick_requests {
-
             //log::info!("request {:?}", request);
 
             let (requested_ids, timestamp) = request.into();
