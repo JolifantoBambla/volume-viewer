@@ -198,7 +198,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let timestamp = uniforms.timestamp;
 
-    let num_channels = uniforms.settings.num_visible_channels;
+    let num_visible_channels = uniforms.settings.num_visible_channels;
     let num_resolutions = page_directory_meta.max_resolutions;
     let max_num_channels = page_directory_meta.max_channels;
 
@@ -244,9 +244,9 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
         var channel = 0u;
         // todo: make start level configurable (e.g., start at level 2 because 0 and 1 are unlikely to be empty anyway)
-        let start_subdivision_index = target_culling_level;//0u;
-        for (var subdivision_index = start_subdivision_index; subdivision_index <= target_culling_level; subdivision_index += 1) {
-            if (channel >= num_channels) {
+        let start_subdivision_index = 0u;
+        for (var subdivision_index = start_subdivision_index; subdivision_index <= target_culling_level;) {
+            if (channel >= num_visible_channels) {
                 break;
             }
             let single_channel_global_node_index = subdivision_idx_compute_node_index(subdivision_index, p);
@@ -260,27 +260,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             if (node_has_no_data(node)) {
                 // todo: maybe request in other resolution
                 if (!requested_brick) {
-
-                    // todo: remove
-                    /*
-                    let brick = try_fetch_brick(p, 3, channel, true);
-                    if (brick.is_mapped) {
-                        let value = sample_volume(brick.sample_address);
-                        if (value > 0.0) {
-                            let trans_sample = channel_settings_list.channels[channel].color;
-                            var val_color = float4(trans_sample.rgb, value * trans_sample.a);
-                            val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
-                            color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
-                            color.a += 1;
-                        }
-                        //color = GREEN;
-                        break;
-                    }
-                    */
-
                     pt_request_brick(p, channel_settings_list.channels[channel].min_lod, channel);
                     requested_brick = true;
 
+                    /*
                     // todo: remove
                     let subscript = float3(index_to_subscript(
                         subdivision_idx_local_node_index(subdivision_index, single_channel_global_node_index),
@@ -289,35 +272,26 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     let node_color = subscript / float3(subdivision_idx_get_shape(subdivision_index));
                     color = float4(node_color, 1);
 
-                    // todo: remvoe
+                    // todo: remove
                     break;
-                } else {break;}
+                    */
+                } //else {break;}
+                channel += 1;
+                continue;
+            }
+
+            let lower_threshold = min(u32(channel_settings_list.channels[channel].threshold_lower * 255.0), 255);
+            let upper_threshold = min(u32(channel_settings_list.channels[channel].threshold_upper * 255.0), 255);
+            if (node_is_empty(node, lower_threshold, upper_threshold)) {
+                //color = YELLOW;
+                //break;
+
+                // todo: advance skipping thing
                 channel += 1;
                 continue;
             }
             /*
             else {
-                let value = f32(node_get_max(node)) / 255.0;
-                if (value > 0.0) {
-                    let trans_sample = channel_settings_list.channels[channel].color;
-                    var val_color = float4(trans_sample.rgb, value * trans_sample.a);
-                    val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
-                    color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
-                    color.a += 1;
-                }
-                break;
-            }
-            */
-
-            let lower_threshold = min(u32(channel_settings_list.channels[channel].threshold_lower * 255.0), 255);
-            let upper_threshold = min(u32(channel_settings_list.channels[channel].threshold_upper * 255.0), 255);
-            if (node_is_empty(node, lower_threshold, upper_threshold)) {
-                // todo: advance skipping thing
-                color = YELLOW;
-                break;
-                //channel += 1;
-                //continue;
-            } else {
                 // todo: remove
                 let brick = try_fetch_brick(p, 3, channel, true);
                 if (brick.is_mapped) {
@@ -336,6 +310,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 }
                 break;
             }
+            */
             /*
             if (node_is_homogeneous(node, homogeneous_threshold)) {
                 let value = f32(node_get_min(node)) / 255.0;
@@ -359,8 +334,9 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     pt_request_brick(p, channel_settings_list.channels[channel].min_lod, channel);
                     requested_brick = true;
                 }
-                color = RED;
 
+                /*
+                color = RED;
                 let target_mask = node_make_mask_for_resolution(lod);
                 if (target_mask > 0) {
                     let test_node = node_new(0,0,target_mask);
@@ -369,8 +345,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     }
                 }
                 break;
-                //channel += 1;
-                //continue;
+                */
+
+                channel += 1;
+                continue;
             }
             /*
             else {
@@ -381,6 +359,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             }
             */
             if (subdivision_index != target_culling_level) {
+                subdivision_index += 1;
                 continue;
             }
 
@@ -390,15 +369,19 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             let target_partially_mapped = (target_mask & resolution_mapping) > 0;
             var value = -1.0;
             if (target_partially_mapped) {
-                let brick = try_fetch_brick(p, target_resolution, channel, requested_brick);
+                let brick = try_fetch_brick(p, target_resolution, channel, !requested_brick);
                 requested_brick = requested_brick || brick.requested_brick;
                 if (brick.is_mapped) {
                     value = sample_volume(brick.sample_address);
                 }
             } else {
-                // todo: check if these loops are correct
+                if (!requested_brick) {
+                    pt_request_brick(p, target_resolution, channel);
+                    requested_brick = true;
+                }
+
                 let channel_lowest_lod = channel_settings_list.channels[channel].min_lod;
-                for (var res = target_resolution + 1; res < channel_lowest_lod; res += 1) {
+                for (var res = target_resolution + 1; res <= channel_lowest_lod; res += 1) {
                     let brick = try_fetch_brick(p, res, channel, false);
                     if (brick.is_mapped) {
                         value = sample_volume(brick.sample_address);
@@ -407,7 +390,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 }
                 if (value < 0.0) {
                     let channel_highest_lod = channel_settings_list.channels[channel].max_lod;
-                    for (var res = target_resolution - 1; res > channel_highest_lod; res -= 1) {
+                    for (var res = target_resolution - 1; res >= channel_highest_lod; res -= 1) {
                         let brick = try_fetch_brick(p, res, channel, false);
                         if (brick.is_mapped) {
                             value = sample_volume(brick.sample_address);
@@ -423,30 +406,13 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
                 color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
                 color.a += (1.0 - color.a) * val_color.a;
-
-                if (is_saturated(color)) {
-                    break;
-                }
             }
-            /*
-            else {
-                let value = f32(node_get_max(node)) / 255.0;
-                if (value > 0.0) {
-                    let trans_sample = channel_settings_list.channels[channel].color;
-                    var val_color = float4(trans_sample.rgb, value * trans_sample.a);
-                    val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
-                    color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
-                    color.a += 1;
-                }
-                break;
-            }
-            */
 
             channel += 1;
         }
 
         steps_taken += 1;
-        if (steps_taken >= 1) {//uniforms.settings.max_steps) {
+        if (steps_taken >= uniforms.settings.max_steps) {
             break;
         }
         if (is_saturated(color)) {

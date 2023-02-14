@@ -247,15 +247,20 @@ impl VolumeManager {
         // read back requests from the GPU
         self.process_requests_pass.map_for_reading();
         let brick_requests = self.process_requests_pass.read();
+
         // request bricks from data source
         if let Some(request) = brick_requests {
-            //log::info!("request {:?}", request);
-
             let (requested_ids, timestamp) = request.into();
 
-            // todo: remove and investigate why frame 0 requests level 0 bricks
+            // the first frame, all bricks are requested because the request buffer is initialized to 0
+            // the same probably goes for the LRU cache
+            // todo: either start with frame number = 1 or initialize these buffers to u32::MAX
             if timestamp == 0 {
                 return;
+            }
+
+            if !requested_ids.is_empty() {
+                log::info!("requested ids {:?}", requested_ids);
             }
 
             let mut brick_addresses =
@@ -276,6 +281,11 @@ impl VolumeManager {
                     break;
                 }
             }
+
+            if !brick_addresses.is_empty() {
+                log::info!("requested {:?}", brick_addresses);
+            }
+
             self.request_bricks(brick_addresses);
         }
     }
