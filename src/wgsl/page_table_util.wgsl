@@ -1,3 +1,5 @@
+@include(util)
+
 fn pt_get_volume_size(page_table_index: u32) -> vec3<u32> {
     return page_table_meta.metas[page_table_index].volume_size;
 }
@@ -15,10 +17,7 @@ fn pt_to_global_page_address(page_table_index: u32, local_page_address: uint3) -
 /// The result is in range [0, page_table.extent[i] - 1], i = 0,1,2.
 fn pt_compute_local_page_address(page_table_index: u32, position: float3) -> uint3 {
     let page_table_meta = page_table_meta.metas[page_table_index];
-    return min(
-        uint3(floor(float3(page_table_meta.page_table_extent) * position)),
-        page_table_meta.page_table_extent - uint3(1u)
-    );
+    return normalized_address_to_subscript(position, page_table_meta.page_table_extent);
 }
 
 /// Computes the address of a page in a page directory for a given position in the unit cube ([0,1]^3).
@@ -32,11 +31,7 @@ fn pt_compute_cache_address(page_table_index: u32, position: float3, page: PageT
     let page_table_meta = page_table_meta.metas[page_table_index];
     let brick_size = page_table_meta.brick_size;
     let volume_size = page_table_meta.volume_size;
-    let volume_position = min(
-        uint3(floor(position * float3(volume_size))),
-        volume_size - uint3(1u)
-    );
-    return page.location + volume_position % brick_size;
+    return page.location + normalized_address_to_subscript(position, volume_size) % brick_size;
 }
 
 // todo: this could be a per-resolution constant
