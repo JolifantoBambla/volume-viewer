@@ -5,6 +5,8 @@ use wgpu::{
     SurfaceConfiguration, TextureView,
 };
 use wgpu_framework::context::Gpu;
+#[cfg(feature = "timestamp-query")]
+use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 
 pub struct Resources<'a> {
     pub sampler: &'a wgpu::Sampler,
@@ -79,28 +81,36 @@ impl PresentToScreen {
         command_encoder: &mut CommandEncoder,
         bind_group: &BindGroup,
         view: &TextureView,
+        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
     ) {
-        let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: None,
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 1.0,
-                    }),
-                    store: true,
-                },
-            })],
-            depth_stencil_attachment: None,
-        });
-        rpass.set_pipeline(&self.pipeline);
-        rpass.set_bind_group(0, bind_group, &[]);
-        rpass.insert_debug_marker(self.label());
-        rpass.draw(0..6, 0..1);
+        {
+            let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 1.0,
+                        }),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+            rpass.set_pipeline(&self.pipeline);
+            rpass.set_bind_group(0, bind_group, &[]);
+            rpass.insert_debug_marker(self.label());
+            rpass.draw(0..6, 0..1);
+        }
+
+        #[cfg(feature = "timestamp-query")]
+        timestamp_query_set
+            .write_timestamp(command_encoder)
+            .expect("time stamp query set out of capacity");
     }
 }
 

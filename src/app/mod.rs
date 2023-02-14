@@ -24,6 +24,8 @@ use wgpu_framework::event::lifecycle::{
     OnCommandsSubmitted, OnFrameBegin, OnFrameEnd, PrepareRender, Update,
 };
 use wgpu_framework::event::window::{OnResize, OnUserEvent, OnWindowEvent};
+#[cfg(feature = "timestamp-query")]
+use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 use wgpu_framework::input::Input;
 use winit::event::WindowEvent;
 use winit::event_loop::EventLoop;
@@ -205,6 +207,13 @@ impl GpuApp for App {
         }
         settings.channel_settings = c_settings;
 
+        #[cfg(feature = "timestamp-query")]
+        let mut time_stamp_query_set = TimeStampQuerySet::new(
+            format!("Timing frame {}", input.frame().number()).as_str(),
+            0,
+            &self.ctx,
+        );
+
         self.renderer.render(
             view,
             &self.scene,
@@ -212,6 +221,8 @@ impl GpuApp for App {
             &channel_settings,
             input,
             &mut encoder,
+            #[cfg(feature = "timestamp-query")]
+            &mut time_stamp_query_set,
         );
 
         self.scene
@@ -221,6 +232,16 @@ impl GpuApp for App {
         self.ctx.queue().submit(Some(encoder.finish()))
     }
 
+    #[cfg(feature = "timestamp-query")]
+    fn get_context_descriptor() -> ContextDescriptor<'static> {
+        log::info!("timestamp query!!");
+        ContextDescriptor {
+            required_features: wgpu::Features::TIMESTAMP_QUERY,
+            ..Default::default()
+        }
+    }
+
+    #[cfg(not(feature = "timestamp-query"))]
     fn get_context_descriptor() -> ContextDescriptor<'static> {
         ContextDescriptor::default()
     }

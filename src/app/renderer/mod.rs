@@ -19,6 +19,8 @@ use wgpu::{
     TextureView,
 };
 use wgpu_framework::context::Gpu;
+#[cfg(feature = "timestamp-query")]
+use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 use wgpu_framework::input::Input;
 use wgsl_preprocessor::WGSLPreprocessor;
 
@@ -144,6 +146,7 @@ impl MultiChannelVolumeRenderer {
         channel_settings: &Vec<GpuChannelSettings>,
         input: &Input,
         command_encoder: &mut CommandEncoder,
+        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
     ) {
         let uniforms = Uniforms::new(
             CameraUniform::from(scene.camera()),
@@ -169,6 +172,8 @@ impl MultiChannelVolumeRenderer {
                     command_encoder,
                     &self.volume_render_bind_group,
                     &self.volume_render_result_extent,
+                    #[cfg(feature = "timestamp-query")]
+                    timestamp_query_set,
                 );
             }
             RenderMode::PageTable => {
@@ -176,6 +181,8 @@ impl MultiChannelVolumeRenderer {
                     command_encoder,
                     &self.page_table_bind_group,
                     &self.volume_render_result_extent,
+                    #[cfg(feature = "timestamp-query")]
+                    timestamp_query_set,
                 );
             }
         }
@@ -184,6 +191,8 @@ impl MultiChannelVolumeRenderer {
             command_encoder,
             &self.present_to_screen_bind_group,
             render_target,
+            #[cfg(feature = "timestamp-query")]
+            timestamp_query_set,
         );
     }
 }

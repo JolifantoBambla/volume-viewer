@@ -5,6 +5,8 @@ use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use std::sync::Arc;
 use wgpu::{BindGroup, BindGroupEntry, CommandEncoder, Extent3d};
 use wgpu_framework::context::Gpu;
+#[cfg(feature = "timestamp-query")]
+use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 use wgsl_preprocessor::WGSLPreprocessor;
 
 pub mod common;
@@ -82,12 +84,23 @@ impl RayGuidedDVR {
         command_encoder: &mut CommandEncoder,
         bind_group: &BindGroup,
         output_extent: &Extent3d,
+        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
     ) {
         match self {
-            RayGuidedDVR::PageTable(p) => p.encode(command_encoder, bind_group, output_extent),
-            RayGuidedDVR::PageTableOctree(p) => {
-                p.encode(command_encoder, bind_group, output_extent)
-            }
+            RayGuidedDVR::PageTable(p) => p.encode(
+                command_encoder,
+                bind_group,
+                output_extent,
+                #[cfg(feature = "timestamp-query")]
+                timestamp_query_set,
+            ),
+            RayGuidedDVR::PageTableOctree(p) => p.encode(
+                command_encoder,
+                bind_group,
+                output_extent,
+                #[cfg(feature = "timestamp-query")]
+                timestamp_query_set,
+            ),
         }
     }
 }

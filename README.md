@@ -29,5 +29,13 @@ These are set from `.cargo/config.toml`.
 The nightly toolchain used to build this project is defined in `rust-toolchain.toml`.
 * `build-std=panic_abort,std`: rebuild std with the features (atomics, etc.) enabled by `RUSTFLAGS`
 
+### Timestamp Queries
+This crate provides a `timestamp-query` feature which enables timing GPU passes via WebGPU's timestamp query.
+To use this feature, Google Chrome has to be run with the following flag enabled:
+```
+--disable-dawn-features=disallow_unsafe_apis
+```
+Note that this flag is currently not supported on Linux (and probably MacOS).
+
 ## Demo
 Check out [the wiki](https://github.com/JolifantoBambla/volume-viewer/wiki/Demo) for more information on how to try out the demo.
