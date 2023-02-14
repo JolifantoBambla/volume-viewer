@@ -159,6 +159,20 @@ pub struct MappableBuffer<T: bytemuck::Pod> {
 }
 
 impl<T: bytemuck::Pod> MappableBuffer<T> {
+    pub fn new(label: &str, num_elements: usize, gpu: &Arc<Gpu>) -> Self {
+        Self {
+            buffer: Buffer::new_zeroed(
+                label,
+                num_elements,
+                BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+                gpu,
+            ),
+            state: Arc::new(Mutex::new(MappableBufferState {
+                state: BufferState::Ready,
+            })),
+        }
+    }
+
     pub fn from_buffer(buffer: &Buffer<T>) -> Self {
         Self {
             buffer: buffer.create_read_buffer(),
@@ -174,6 +188,10 @@ impl<T: bytemuck::Pod> MappableBuffer<T> {
 
     pub fn size(&self) -> BufferAddress {
         self.buffer.size()
+    }
+
+    pub fn num_elements(&self) -> usize {
+        self.buffer.num_elements()
     }
 
     /// Maps a mappable buffer if it is not already mapped or being mapped.

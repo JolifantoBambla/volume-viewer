@@ -1,9 +1,9 @@
 use crate::context::Gpu;
-use crate::gpu::buffer::Buffer;
+use crate::gpu::buffer::MappableBuffer;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
-use wgpu::{BufferUsages, CommandEncoder, Label, QuerySet, QuerySetDescriptor, QueryType};
+use wgpu::{CommandEncoder, Label, QuerySet, QuerySetDescriptor, QueryType};
 
 #[derive(Debug)]
 pub struct CapacityReachedError {
@@ -82,7 +82,7 @@ impl TimeStampQuerySet {
     pub fn resolve(
         &mut self,
         command_encoder: &mut CommandEncoder,
-        destination: &Buffer<u64>,
+        destination: &MappableBuffer<u64>,
     ) -> Result<(), IncompatibleBufferSizeError> {
         self.next_index = 0;
         if destination.num_elements() < self.next_index {
@@ -101,11 +101,10 @@ impl TimeStampQuerySet {
         }
     }
 
-    pub fn create_resolve_buffer(&self, gpu: &Arc<Gpu>) -> Buffer<u64> {
-        Buffer::new_zeroed(
+    pub fn create_resolve_buffer(&self, gpu: &Arc<Gpu>) -> MappableBuffer<u64> {
+        MappableBuffer::new(
             format!("TimeStampQuerySet resolve buffer [{}]", self.label).as_str(),
             self.capacity,
-            BufferUsages::COPY_DST | BufferUsages::MAP_READ,
             gpu,
         )
     }
