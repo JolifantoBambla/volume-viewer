@@ -18,6 +18,7 @@
 @include(multichannel_octree_util)
 @include(octree_node)
 @include(octree_node_util)
+@include(page_directory_meta_util)
 @include(volume_subdivision)
 @include(volume_subdivision_util)
 
@@ -245,15 +246,14 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         // todo: make start level configurable (e.g., start at level 2 because 0 and 1 are unlikely to be empty anyway)
         let start_subdivision_index = target_culling_level;//0u;
         for (var subdivision_index = start_subdivision_index; subdivision_index <= target_culling_level; subdivision_index += 1) {
-            if (channel >= 1) {//num_channels) {
+            if (channel >= num_channels) {
                 break;
             }
             let single_channel_global_node_index = subdivision_idx_compute_node_index(subdivision_index, p);
             let multichannel_global_node_index = to_multichannel_node_index(
                 single_channel_global_node_index,
                 max_num_channels,
-                // todo: this might need to be translated to a channel_index w.r.t. to the page table
-                channel
+                page_directory_meta_get_channel_index(channel_settings_list.channels[channel].page_table_index)
             );
             // todo: make sure bricks are only requested if we didn't jump over missing data
             let node = node_idx_load_global(multichannel_global_node_index);

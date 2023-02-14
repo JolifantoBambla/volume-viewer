@@ -296,8 +296,8 @@ impl OctreeUpdate {
     }
     pub fn maybe_print_break_point(&self) {
         if self.break_point.maybe_print() {
-            self.helper_buffer_a.buffer().destroy();
-            self.helper_buffer_b.buffer().destroy();
+            //self.helper_buffer_a.buffer().destroy();
+            //self.helper_buffer_b.buffer().destroy();
         }
     }
 
