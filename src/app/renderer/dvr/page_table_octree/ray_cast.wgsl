@@ -345,7 +345,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         // todo: empty space skipping
         if (empty_channels == num_visible_channels) {
             // todo: compute distance to jump
-            color = YELLOW;
+            color += YELLOW;
+            color = saturate(color);
             break;
         }
         p += ray_os.direction * dt;

@@ -45,8 +45,16 @@
     );
     const rendererCreateOptions = new VolumeRendererCreateOptions({
         maxVisibleChannels: 16,
-        maxResolutions: 16
+        maxResolutions: 16,
+        leafNodeSize: [32, 32, 32],
     });
+    const leafNodeConfig = {
+        size: {
+            x: rendererCreateOptions.leafNodeSize[0],
+            y: rendererCreateOptions.leafNodeSize[1],
+            z: rendererCreateOptions.leafNodeSize[2],
+        }
+    }
 
     async function start() {
         try {
@@ -115,6 +123,15 @@
         rendererCreateOptions.maxVisibleChannels = Math.floor(255 / e.value);
         maxChannelsInput.refresh();
     });
+    const leafNodeSizeInput = rendererUI.addInput(leafNodeConfig, 'size', {
+        label: 'Leaf node size',
+        x: {min: 4, max: 32, step: 4},
+        y: {min: 4, max: 32, step: 4},
+        z: {min: 4, max: 32, step: 4}
+    });
+    leafNodeSizeInput.on('change', (e) => {
+        rendererCreateOptions.leafNodeSize = [e.value.x, e.value.y, e.value.z];
+    })
 
     const createRendererButton = pane.addButton({
         title: 'Start Demo',

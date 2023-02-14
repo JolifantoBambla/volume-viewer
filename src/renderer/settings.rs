@@ -1,4 +1,4 @@
-use glam::Vec4;
+use glam::{UVec3, Vec4};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -8,6 +8,9 @@ pub struct CreateOptions {
 
     #[serde(rename = "maxResolutions")]
     pub max_resolutions: u32,
+
+    #[serde(rename = "leafNodeSize")]
+    pub leaf_node_size: UVec3,
 }
 
 #[repr(u32)]

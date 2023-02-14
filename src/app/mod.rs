@@ -119,7 +119,7 @@ impl App {
         let volume = VolumeSceneObject::new_octree_volume(
             OctreeDescriptor {
                 volume: &volume_meta2,
-                leaf_node_size: UVec3::new(64, 64, 64),
+                leaf_node_size: render_settings.create_options.leaf_node_size,
                 max_num_channels: render_settings.create_options.max_visible_channels as usize,
             },
             volume_manager,
