@@ -51,7 +51,7 @@ fn max_component(v: float3) -> f32 {
 }
 
 fn subscript_to_normalized_address(subscript: uint3, extent: uint3) -> float3 {
-    return float3(subscript) / float3(extent);
+    return saturate(float3(subscript) / float3(extent));
 }
 
 fn normalized_address_to_subscript(normalized_address: float3, extent: uint3) -> uint3 {

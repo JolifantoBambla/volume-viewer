@@ -148,12 +148,8 @@ fn clone_channel_settings(channel_index: u32) -> ChannelSettings {
 }
 
 fn normalize_cache_address(cache_address: uint3) -> float3 {
-    let cache_size = float3(textureDimensions(brick_cache));
-    return clamp(
-        float3(cache_address) / cache_size,
-        float3(),
-        float3(1.)
-    );
+    let cache_size = uint3(textureDimensions(brick_cache));
+    return subscript_to_normalized_address(cache_address, cache_size);
 }
 
 // todo: add mutliple virtualization levels
