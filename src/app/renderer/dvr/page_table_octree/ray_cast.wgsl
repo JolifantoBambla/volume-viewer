@@ -25,25 +25,6 @@
 fn debug(pixel: int2, color: float4) {
     textureStore(result, pixel, color);
 }
-fn red(pixel: int2) {
-    textureStore(result, pixel, RED);
-}
-fn green(pixel: int2) {
-    textureStore(result, pixel, GREEN);
-}
-fn blue(pixel: int2) {
-    textureStore(result, pixel, BLUE);
-}
-fn white(pixel: int2) {
-    textureStore(result, pixel, WHITE);
-}
-fn black(pixel: int2) {
-    textureStore(result, pixel, BLACK);
-}
-
-// RENDER MODES
-const GRID_TRAVERSAL = 0u;
-const DIRECT = 1u;
 
 struct GlobalSettings {
     render_mode: u32,

@@ -13,15 +13,14 @@ pub struct CreateOptions {
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub enum RenderMode {
-    /// Renders a bricked volume by stepping from brick to brick in a voxel line, and sampling the
-    /// fetched bricks.
-    #[serde(rename = "grid_traversal")]
-    GridTraversal,
+    /// Uses a hybrid Octree-Page-Table data structure.
+    /// An Octree is used for empty space skipping, while a page table is used for memory management.
+    #[serde(rename = "octree")]
+    Octree,
 
-    /// Renders a bricked volume by sampling a ray at regular intervals and fetching the
-    /// corresponding brick for each sample.
-    #[serde(rename = "direct")]
-    Direct,
+    /// Uses a page table for both memory management and empty space skipping.
+    #[serde(rename = "page_table")]
+    PageTable,
 }
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]

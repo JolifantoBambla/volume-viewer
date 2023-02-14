@@ -4,9 +4,11 @@ import init, {main, initThreadPool, dispatchChunkReceived} from '../../pkg/volum
 import { toWrappedEvent } from './event.js';
 import { BRICK_REQUEST_EVENT, BRICK_RESPONSE_EVENT } from './volume-data-source.js';
 
-export const RENDER_MODE_DIRECT = 'direct';
+export const RENDER_MODE_OCTREE = "octree";
+export const RENDER_MODE_PAGE_TABLE = "page_table";
 export const RENDER_MODES = [
-    RENDER_MODE_DIRECT,
+    RENDER_MODE_OCTREE,
+    RENDER_MODE_PAGE_TABLE
 ];
 
 export class Color {
@@ -72,7 +74,7 @@ export class VolumeRendererSettings {
     backgroundColor;
     channelSettings;
 
-    constructor({createOptions = new VolumeRendererCreateOptions({}), renderMode = RENDER_MODE_DIRECT, stepScale = 1.0, maxSteps = 300, backgroundColor = new Color({}),channelSettings = [new ChannelSettings({})]}) {
+    constructor({createOptions = new VolumeRendererCreateOptions({}), renderMode = RENDER_MODE_OCTREE, stepScale = 1.0, maxSteps = 300, backgroundColor = new Color({}),channelSettings = [new ChannelSettings({})]}) {
         // todo: validation
         this.createOptions = createOptions;
         this.renderMode = renderMode;

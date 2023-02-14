@@ -4,7 +4,8 @@ import { toWrappedEvent } from './event.js';
 import {
     ChannelSettings,
     VolumeRendererSettings,
-    RENDER_MODE_DIRECT
+    RENDER_MODE_OCTREE,
+    RENDER_MODE_PAGE_TABLE
 } from './volume-renderer.js';
 
 export class Config {
@@ -86,7 +87,8 @@ async function createUI(offscreenRenderer, config) {
         volumeRendererSettings, 'renderMode',
         {
             options: {
-                Direct: RENDER_MODE_DIRECT,
+                Octree: RENDER_MODE_OCTREE,
+                "Page Table": RENDER_MODE_PAGE_TABLE
             }
         }
     );
