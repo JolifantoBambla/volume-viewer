@@ -14,7 +14,7 @@ use crate::volume::octree::OctreeDescriptor;
 use crate::volume::HtmlEventTargetVolumeDataSource;
 use crate::wgsl::create_wgsl_preprocessor;
 use crate::{BrickedMultiResolutionMultiVolumeMeta, MultiChannelVolumeRendererSettings};
-use glam::{UVec2, UVec3};
+use glam::UVec2;
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
 use wgpu::{SubmissionIndex, SurfaceConfiguration, TextureView};

@@ -9,6 +9,7 @@ use crate::app::scene::volume::VolumeSceneObject;
 use crate::app::scene::MultiChannelVolumeScene;
 use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::{present_to_screen, GPUPass};
+use crate::renderer::settings::RenderMode;
 use crate::{resource, MultiChannelVolumeRendererSettings};
 use glam::UVec2;
 use std::sync::Arc;
@@ -20,7 +21,6 @@ use wgpu::{
 use wgpu_framework::context::Gpu;
 use wgpu_framework::input::Input;
 use wgsl_preprocessor::WGSLPreprocessor;
-use crate::renderer::settings::RenderMode;
 
 #[derive(Debug)]
 pub struct MultiChannelVolumeRenderer {
