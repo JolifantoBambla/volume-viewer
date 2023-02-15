@@ -29,6 +29,15 @@
     } from "./js/src/volume-data-source.js";
     import { VolumeRendererCreateOptions, } from './js/src/volume-renderer.js';
 
+    async function test() {
+        const adapter = await navigator.gpu.requestAdapter();
+        for (const f of adapter.features) {
+            console.log(f);
+        }
+        console.log(adapter.features.values());
+    }
+    test();
+
     const dataSourceConfig = new VolumeDataSourceConfig(
         new DataStoreConfig({
             store: 'http://localhost:8005/',

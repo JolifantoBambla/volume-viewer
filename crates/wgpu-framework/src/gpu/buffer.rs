@@ -159,12 +159,12 @@ pub struct MappableBuffer<T: bytemuck::Pod> {
 }
 
 impl<T: bytemuck::Pod> MappableBuffer<T> {
-    pub fn new(label: &str, num_elements: usize, gpu: &Arc<Gpu>) -> Self {
+    pub fn new(label: &str, num_elements: usize, usage: BufferUsages, gpu: &Arc<Gpu>) -> Self {
         Self {
             buffer: Buffer::new_zeroed(
                 label,
                 num_elements,
-                BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+                BufferUsages::COPY_DST | BufferUsages::MAP_READ | usage,
                 gpu,
             ),
             state: Arc::new(Mutex::new(MappableBufferState {

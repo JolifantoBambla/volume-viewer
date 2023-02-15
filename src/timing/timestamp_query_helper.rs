@@ -6,7 +6,6 @@ use wgpu_framework::gpu::buffer::MappableBuffer;
 use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 
 pub struct TimestampQueryHelper {
-    gpu: Arc<Gpu>,
     query_set: TimeStampQuerySet,
     labels: Vec<String>,
     timings: HashMap<String, Vec<u64>>,
@@ -26,7 +25,6 @@ impl TimestampQueryHelper {
         }
 
         Self {
-            gpu: gpu.clone(),
             query_set,
             labels: own_labels,
             timings,
@@ -49,10 +47,9 @@ impl TimestampQueryHelper {
         let buffer = self
             .resolve_buffer_pool
             .pop()
-            .unwrap_or_else(|| self.query_set.create_resolve_buffer(&self.gpu));
-        if let Err(error) = self.query_set.resolve(command_encoder, &buffer) {
-            log::error!("could not resolve timestamp query set: {}", error);
-        }
+            .unwrap_or_else(|| self.query_set.create_resolve_buffer());
+        self.query_set.resolve(command_encoder, &buffer)
+            .expect("Could not copy to readable");
         self.buffer_in_last_submit = Some(buffer);
     }
 

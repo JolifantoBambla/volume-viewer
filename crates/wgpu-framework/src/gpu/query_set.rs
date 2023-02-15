@@ -1,9 +1,9 @@
 use crate::context::Gpu;
-use crate::gpu::buffer::MappableBuffer;
+use crate::gpu::buffer::{Buffer, BufferMapError, MappableBuffer};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
-use wgpu::{CommandEncoder, Label, QuerySet, QuerySetDescriptor, QueryType};
+use wgpu::{BufferUsages, CommandEncoder, Label, QuerySet, QuerySetDescriptor, QueryType};
 
 #[derive(Debug)]
 pub struct CapacityReachedError {
@@ -23,26 +23,9 @@ impl Display for CapacityReachedError {
 
 impl Error for CapacityReachedError {}
 
-#[derive(Debug)]
-pub struct IncompatibleBufferSizeError {
-    capacity: usize,
-    buffer_size: usize,
-}
-
-impl Display for IncompatibleBufferSizeError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "TimestampQuerySet has capacity {} but destination buffer only has capacity {}",
-            self.capacity, self.buffer_size
-        )
-    }
-}
-
-impl Error for IncompatibleBufferSizeError {}
-
 pub struct TimeStampQuerySet {
     query_set: QuerySet,
+    resolve_buffer: Buffer<u64>,
     label: String,
     capacity: usize,
     next_index: usize,
@@ -56,6 +39,12 @@ impl TimeStampQuerySet {
                 ty: QueryType::Timestamp,
                 count: capacity as u32,
             }),
+            resolve_buffer: Buffer::new_zeroed(
+                label,
+                capacity,
+                BufferUsages::STORAGE | BufferUsages::QUERY_RESOLVE | BufferUsages::COPY_SRC,
+                gpu
+            ),
             label: String::from(label),
             capacity,
             next_index: 0,
@@ -83,34 +72,30 @@ impl TimeStampQuerySet {
         }
     }
 
-    pub fn resolve(
-        &mut self,
-        command_encoder: &mut CommandEncoder,
-        destination: &MappableBuffer<u64>,
-    ) -> Result<(), IncompatibleBufferSizeError> {
+    pub fn resolve(&mut self, command_encoder: &mut CommandEncoder, read_buffer: &MappableBuffer<u64>) -> Result<(), BufferMapError> {
+        command_encoder.resolve_query_set(
+            &self.query_set,
+            0..(self.next_index as u32),
+            self.resolve_buffer.buffer(),
+            0,
+        );
         self.next_index = 0;
-        if destination.num_elements() < self.next_index {
-            Err(IncompatibleBufferSizeError {
-                capacity: self.capacity,
-                buffer_size: destination.num_elements(),
-            })
-        } else {
-            command_encoder.resolve_query_set(
-                &self.query_set,
-                0..(self.next_index as u32),
-                destination.buffer(),
+        if read_buffer.is_ready() {
+            command_encoder.copy_buffer_to_buffer(
+                self.resolve_buffer.buffer(),
                 0,
+                read_buffer.buffer(),
+                0,
+                self.resolve_buffer.size()
             );
             Ok(())
+        } else {
+            Err(BufferMapError::NotReady)
         }
     }
 
-    pub fn create_resolve_buffer(&self, gpu: &Arc<Gpu>) -> MappableBuffer<u64> {
-        MappableBuffer::new(
-            format!("TimeStampQuerySet resolve buffer [{}]", self.label).as_str(),
-            self.capacity,
-            gpu,
-        )
+    pub fn create_resolve_buffer(&self) -> MappableBuffer<u64> {
+        MappableBuffer::from_buffer(&self.resolve_buffer)
     }
 }
 
