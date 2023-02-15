@@ -227,7 +227,8 @@ impl VolumeManager {
     }
 
     pub fn encode_cache_management(
-        &self, command_encoder: &mut CommandEncoder,
+        &self,
+        command_encoder: &mut CommandEncoder,
         timestamp: u32,
         #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
     ) {
@@ -237,17 +238,23 @@ impl VolumeManager {
             bytemuck::bytes_of(&Timestamp::new(timestamp)),
         );
 
-        self.lru_cache.encode_lru_update(command_encoder, timestamp, #[cfg(feature = "timestamp-query")] timestamp_query_set);
+        self.lru_cache.encode_lru_update(
+            command_encoder,
+            timestamp,
+            #[cfg(feature = "timestamp-query")]
+            timestamp_query_set,
+        );
 
         // find requested
         self.process_requests_pass.encode(
             command_encoder,
             &self.process_requests_bind_group,
             &self.request_buffer.extent,
-            #[cfg(feature = "timestamp-query")] timestamp_query_set
+            #[cfg(feature = "timestamp-query")]
+            timestamp_query_set,
         );
         self.process_requests_pass
-            .encode_copy_result_to_readable(command_encoder, #[cfg(feature = "timestamp-query")] timestamp_query_set);
+            .encode_copy_result_to_readable(command_encoder);
     }
 
     fn process_requests(&mut self) {

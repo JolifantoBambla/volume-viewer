@@ -4,6 +4,8 @@ use crate::resource::Texture;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Buffer, CommandEncoder};
 use wgpu_framework::context::Gpu;
+#[cfg(feature = "timestamp-query")]
+use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 use wgsl_preprocessor::WGSLPreprocessor;
 
 pub struct Resources<'a> {
@@ -86,21 +88,32 @@ impl ProcessRequests {
         command_encoder: &mut wgpu::CommandEncoder,
         bind_group: &BindGroup,
         output_extent: &wgpu::Extent3d,
+        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
     ) {
         self.request_list.clear();
 
-        let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("Process Requests"),
-        });
-        cpass.set_pipeline(&self.pipeline);
-        cpass.set_bind_group(0, bind_group, &[]);
-        cpass.set_bind_group(1, &self.internal_bind_group, &[]);
-        cpass.insert_debug_marker(self.label());
-        cpass.dispatch_workgroups(
-            (output_extent.width as f32 / 4.).ceil() as u32,
-            (output_extent.height as f32 / 4.).ceil() as u32,
-            (output_extent.depth_or_array_layers as f32 / 4.).ceil() as u32,
-        );
+        #[cfg(feature = "timestamp-query")]
+        timestamp_query_set
+            .write_timestamp(command_encoder)
+            .expect("time stamp query set capacity exceeded");
+        {
+            let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Process Requests"),
+            });
+            cpass.set_pipeline(&self.pipeline);
+            cpass.set_bind_group(0, bind_group, &[]);
+            cpass.set_bind_group(1, &self.internal_bind_group, &[]);
+            cpass.insert_debug_marker(self.label());
+            cpass.dispatch_workgroups(
+                (output_extent.width as f32 / 4.).ceil() as u32,
+                (output_extent.height as f32 / 4.).ceil() as u32,
+                (output_extent.depth_or_array_layers as f32 / 4.).ceil() as u32,
+            );
+        }
+        #[cfg(feature = "timestamp-query")]
+        timestamp_query_set
+            .write_timestamp(command_encoder)
+            .expect("time stamp query set capacity exceeded");
     }
 
     pub fn encode_copy_result_to_readable(&self, encoder: &mut CommandEncoder) {

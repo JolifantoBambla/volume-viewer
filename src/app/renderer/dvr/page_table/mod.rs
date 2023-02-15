@@ -71,6 +71,10 @@ impl PageTableDVR {
         output_extent: &wgpu::Extent3d,
         #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
     ) {
+        #[cfg(feature = "timestamp-query")]
+        timestamp_query_set
+            .write_timestamp(command_encoder)
+            .expect("time stamp query set capacity exceeded");
         {
             let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Ray Guided DVR"),
@@ -85,11 +89,10 @@ impl PageTableDVR {
                 1,
             );
         }
-
         #[cfg(feature = "timestamp-query")]
         timestamp_query_set
             .write_timestamp(command_encoder)
-            .expect("time stamp query set out of capacity");
+            .expect("time stamp query set capacity exceeded");
     }
 }
 

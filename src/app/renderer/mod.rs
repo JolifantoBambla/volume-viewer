@@ -138,6 +138,7 @@ impl MultiChannelVolumeRenderer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
         render_target: &TextureView,

@@ -62,6 +62,10 @@ impl TimeStampQuerySet {
         }
     }
 
+    pub fn from_labels(label: &str, timestamp_labels: &[&str], gpu: &Arc<Gpu>) -> Self {
+        Self::new(label, timestamp_labels.len(), gpu)
+    }
+
     pub fn write_timestamp(
         &mut self,
         command_encoder: &mut CommandEncoder,

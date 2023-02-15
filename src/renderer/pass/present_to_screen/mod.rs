@@ -83,6 +83,10 @@ impl PresentToScreen {
         view: &TextureView,
         #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
     ) {
+        #[cfg(feature = "timestamp-query")]
+        timestamp_query_set
+            .write_timestamp(command_encoder)
+            .expect("time stamp query set capacity exceeded");
         {
             let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
@@ -106,11 +110,10 @@ impl PresentToScreen {
             rpass.insert_debug_marker(self.label());
             rpass.draw(0..6, 0..1);
         }
-
         #[cfg(feature = "timestamp-query")]
         timestamp_query_set
             .write_timestamp(command_encoder)
-            .expect("time stamp query set out of capacity");
+            .expect("time stamp query set capacity exceeded");
     }
 }
 

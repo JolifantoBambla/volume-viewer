@@ -11,6 +11,8 @@ use wgpu::{
     ComputePassDescriptor, ComputePipelineDescriptor, Device, Label,
 };
 use wgpu_framework::context::Gpu;
+#[cfg(feature = "timestamp-query")]
+use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 use wgsl_preprocessor::WGSLPreprocessor;
 
 const WORKGROUP_SIZE: u32 = 256;
@@ -227,23 +229,45 @@ impl LRUUpdate {
         }
     }
 
-    pub fn encode(&self, command_encoder: &mut CommandEncoder) {
+    pub fn encode(
+        &self,
+        command_encoder: &mut CommandEncoder,
+        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
+    ) {
         self.ctx.queue().write_buffer(
             self.num_used_entries.buffer(),
             0,
             bytemuck::bytes_of(&NumUsedEntries { num: 0 }),
         );
-        self.encode_passes(command_encoder);
+        self.encode_passes(
+            command_encoder,
+            #[cfg(feature = "timestamp-query")]
+            timestamp_query_set,
+        );
         self.encode_copy(command_encoder);
     }
 
-    fn encode_passes(&self, command_encoder: &mut CommandEncoder) {
-        let mut compute_pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
-            label: Label::from("update lru"),
-        });
-        self.initialize_offsets_pass.encode(&mut compute_pass);
-        self.scan.encode_to_pass(&mut compute_pass);
-        self.update_lru_pass.encode(&mut compute_pass);
+    fn encode_passes(
+        &self,
+        command_encoder: &mut CommandEncoder,
+        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
+    ) {
+        #[cfg(feature = "timestamp-query")]
+        timestamp_query_set
+            .write_timestamp(command_encoder)
+            .expect("time stamp query set capacity exceeded");
+        {
+            let mut compute_pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Label::from("update lru"),
+            });
+            self.initialize_offsets_pass.encode(&mut compute_pass);
+            self.scan.encode_to_pass(&mut compute_pass);
+            self.update_lru_pass.encode(&mut compute_pass);
+        }
+        #[cfg(feature = "timestamp-query")]
+        timestamp_query_set
+            .write_timestamp(command_encoder)
+            .expect("time stamp query set capacity exceeded");
     }
 
     fn encode_copy(&self, command_encoder: &mut CommandEncoder) {
