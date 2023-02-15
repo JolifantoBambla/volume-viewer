@@ -189,7 +189,9 @@ impl WgpuContext {
             .await
             .expect("No suitable GPU adapters found on the system!");
 
-        let adapter_features = adapter.features();
+        // todo: as soon as there is a newer (working) version of wgpu, use the actual available features
+        let adapter_features = wgpu::Features::all(); // adapter.features();
+        log::warn!("wgpu 0.14.2 does not query available features. We assume that everything we need is available - might break!");
         assert!(
             adapter_features.contains(context_descriptor.required_features),
             "Adapter does not support required features: {:?}",

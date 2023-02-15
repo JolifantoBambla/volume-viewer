@@ -43,8 +43,8 @@ wasm-bindgen = { version = "0.2.63", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4.30"
 wasm-bindgen-rayon = { version = "1.0.3", features = ["no-bundler"] }
 wasm-logger = "0.2.0"
-web-sys = { version = "=0.3.60", features = ["Document", "HtmlCanvasElement", "HtmlInputElement", "Gpu", "GpuDevice", "OffscreenCanvas", "Performance", "Window", "Event", "EventInit", "CustomEvent", "CustomEventInit","EventTarget", "WorkerNavigator"] }
-wgpu = "0.14.0"
+web-sys = { version = "=0.3.61", features = ["Document", "HtmlCanvasElement", "HtmlInputElement", "Gpu", "GpuDevice", "OffscreenCanvas", "Performance", "Window", "Event", "EventInit", "CustomEvent", "CustomEventInit","EventTarget", "WorkerNavigator"] }
+wgpu = "0.14.2"
 winit = "0.27.5"
 
 ome-zarr = { path = "crates/ome-zarr" }
