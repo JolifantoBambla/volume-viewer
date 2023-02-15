@@ -113,6 +113,7 @@ fn request_brick(page_address: int3) {
     textureStore(request_buffer, page_address, uint4(uniforms.timestamp));
 }
 
+// todo: do I really need this?
 fn clone_channel_settings(channel_index: u32) -> ChannelSettings {
     let channel_settings = channel_settings_list.channels[channel_index];
     return ChannelSettings(
@@ -133,11 +134,12 @@ fn normalize_cache_address(cache_address: uint3) -> float3 {
     return subscript_to_normalized_address(cache_address, cache_size);
 }
 
-// todo: add mutliple virtualization levels
+// todo: add multiple virtualization levels
 fn get_page(page_address: uint3) -> PageTableEntry {
     return to_page_table_entry(textureLoad(page_directory, int3(page_address), 0));
 }
 
+// todo: I'm pretty sure there is a util function in some other file for this
 fn compute_page_table_index(channel: u32, lod: u32) -> u32 {
     return channel + lod * page_directory_meta.max_channels;
 }
@@ -203,6 +205,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let first_channel_index = channel_settings_list.channels[0].page_table_index;
 
+    // todo: increase t by jumped distance
     for (var t = t_min; t < t_max; t += dt) {
         let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
         let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res, lod_factor);
@@ -225,9 +228,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         var subdivision_index = start_subdivision_index;
         var empty_channels = 0u;
         while (subdivision_index <= target_culling_level && channel < num_visible_channels) {
-            let single_channel_global_node_index = subdivision_idx_compute_node_index(subdivision_index, p);
             let multichannel_global_node_index = to_multichannel_node_index(
-                single_channel_global_node_index,
+                subdivision_idx_compute_node_index(subdivision_index, p),
                 max_num_channels,
                 page_directory_meta_get_channel_index(channel_settings_list.channels[channel].page_table_index)
             );
@@ -324,7 +326,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 color.a += (1.0 - color.a) * val_color.a;
 
                 // todo: remove (debug)
-                // sometimes a wrong brick is accessed at brick boundaries
+                // sometimes a wrong brick was accessed - fixed now
                 let value_u32 = min(u32(floor(value * 255.0)), 255);
                 if (value_u32 > node_get_max(node) || value_u32 < node_get_min(node)) {
                     color = RED;
@@ -345,14 +347,47 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         // todo: empty space skipping
         if (empty_channels == num_visible_channels) {
             // todo: compute distance to jump
-            color += YELLOW;
-            color = saturate(color);
-            break;
+            // todo: increase t by jumped distance
+
+            /*
+            find size of node in subdivision level
+            compute distance to jump dj via ray-node-intersection
+            num empty samples = floor(dj / dt);
+            p += ray_os.direction * (dt * (num empty samples + 1))
+            t += dt * num_empty_samples (because its adapted at the end of the loop - but maybe that should also just be moved here)
+            */
+
+            let subdivision_shape = vec3<f32>(subdivision_idx_get_shape(subdivision_index));
+            let inverse_node_scale = 1. / subdivision_shape; // todo: this is a runtime constant
+            let node_step = vec3<i32>(sign(ray_os.direction)); // todo: this is constant per invocation
+            let node_delta = inverse_node_scale / abs(ray_os.direction);
+            let node_subscript = subdivision_idx_compute_subscript(subdivision_index, p);
+            let next_node_subscript = vec3<i32>(node_subscript) + node_step;
+            // note: we don't use `subscript_to_normalized_address` here because we might need values outside the unit cube
+            let next_node_normalized = vec3<f32>(next_node_subscript) / subdivision_shape;
+            var t_jump = POSITIVE_INFINITY;
+            for (var i: u32 = 0u; i < 3u; i += 1u) {
+                if (node_step[i] != 0) {
+                    t_jump = min(t_jump, (next_node_normalized[i] - ray_os.origin[i]) / ray_os.direction[i]);
+                }
+            }
+            let num_empty_samples = floor(t_jump / dt);
+            p += ray_os.direction * (dt * num_empty_samples);
+            t += dt * num_empty_samples;
+
+            if (any(p > float3(1))) {
+                color += MAGENTA;
+                break;
+            }
+            if (any(p < float3())) {
+                color += YELLOW;
+                break;
+            }
         }
         p += ray_os.direction * dt;
     }
 
-    debug(pixel, color);
+    debug(pixel, saturate(color));
 }
 
 fn is_saturated(color: float4) -> bool {
@@ -372,7 +407,7 @@ fn pt_request_brick(ray_sample: float3, lod: u32, channel: u32) {
     request_brick(int3(page_address));
 }
 
-// todo: simplify Node
+// todo: simplify Node / Brick
 fn try_fetch_brick(ray_sample: float3, lod: u32, channel: u32, request_bricks: bool) -> Node {
     let page_table_index = compute_page_table_index(
         channel_settings_list.channels[channel].page_table_index,

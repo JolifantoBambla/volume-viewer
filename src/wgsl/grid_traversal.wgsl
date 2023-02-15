@@ -90,6 +90,7 @@ fn create_grid_traversal(ray: Ray, t_entry: f32, t_exit: f32, page_table: PageTa
 
     // compute step size to next axis crossing per dimension
     let current_local_voxel_index = current_voxel - int3(grid_min);
+    // todo: this clamp seems fishy -> doesn't this invalidate all negative values?
     let next_axis_crossing_index = current_local_voxel_index + clamp(voxel_step, int3(), int3(1));
     let next_axis_crossing = float3(next_axis_crossing_index) * inverse_voxel_scale;
     var t_next_crossing = float3(r.tmax);
