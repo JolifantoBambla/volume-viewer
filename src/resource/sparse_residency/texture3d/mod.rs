@@ -21,6 +21,8 @@ use wgpu_framework::input::Input;
 use crate::resource::sparse_residency::texture3d::brick_cache_update::CacheUpdateMeta;
 use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
 use crate::resource::sparse_residency::texture3d::page_table::PageTableDirectory;
+#[cfg(feature = "timestamp-query")]
+use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use crate::BrickedMultiResolutionMultiVolumeMeta;
 use cache_management::{
     lru::LRUCache,
@@ -28,8 +30,6 @@ use cache_management::{
     Timestamp,
 };
 use wgpu_framework::context::Gpu;
-#[cfg(feature = "timestamp-query")]
-use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 
 pub struct SparseResidencyTexture3DOptions {
     pub max_visible_channels: u32,
@@ -230,7 +230,7 @@ impl VolumeManager {
         &self,
         command_encoder: &mut CommandEncoder,
         timestamp: u32,
-        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
+        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
         self.ctx.queue().write_buffer(
             &self.timestamp_uniform_buffer,
@@ -242,7 +242,7 @@ impl VolumeManager {
             command_encoder,
             timestamp,
             #[cfg(feature = "timestamp-query")]
-            timestamp_query_set,
+            timestamp_query_helper,
         );
 
         // find requested
@@ -251,7 +251,7 @@ impl VolumeManager {
             &self.process_requests_bind_group,
             &self.request_buffer.extent,
             #[cfg(feature = "timestamp-query")]
-            timestamp_query_set,
+            timestamp_query_helper,
         );
         self.process_requests_pass
             .encode_copy_result_to_readable(command_encoder);

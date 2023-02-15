@@ -10,6 +10,8 @@ use crate::app::scene::MultiChannelVolumeScene;
 use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::{present_to_screen, GPUPass};
 use crate::renderer::settings::RenderMode;
+#[cfg(feature = "timestamp-query")]
+use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use crate::{resource, MultiChannelVolumeRendererSettings};
 use glam::UVec2;
 use std::sync::Arc;
@@ -19,8 +21,6 @@ use wgpu::{
     TextureView,
 };
 use wgpu_framework::context::Gpu;
-#[cfg(feature = "timestamp-query")]
-use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 use wgpu_framework::input::Input;
 use wgsl_preprocessor::WGSLPreprocessor;
 
@@ -147,7 +147,7 @@ impl MultiChannelVolumeRenderer {
         channel_settings: &Vec<GpuChannelSettings>,
         input: &Input,
         command_encoder: &mut CommandEncoder,
-        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
+        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
         let uniforms = Uniforms::new(
             CameraUniform::from(scene.camera()),
@@ -174,7 +174,7 @@ impl MultiChannelVolumeRenderer {
                     &self.volume_render_bind_group,
                     &self.volume_render_result_extent,
                     #[cfg(feature = "timestamp-query")]
-                    timestamp_query_set,
+                    timestamp_query_helper,
                 );
             }
             RenderMode::PageTable => {
@@ -183,7 +183,7 @@ impl MultiChannelVolumeRenderer {
                     &self.page_table_bind_group,
                     &self.volume_render_result_extent,
                     #[cfg(feature = "timestamp-query")]
-                    timestamp_query_set,
+                    timestamp_query_helper,
                 );
             }
         }
@@ -193,7 +193,7 @@ impl MultiChannelVolumeRenderer {
             &self.present_to_screen_bind_group,
             render_target,
             #[cfg(feature = "timestamp-query")]
-            timestamp_query_set,
+            timestamp_query_helper,
         );
     }
 }

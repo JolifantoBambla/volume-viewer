@@ -2,11 +2,11 @@ use crate::app::renderer::dvr::page_table::PageTableDVR;
 use crate::app::renderer::dvr::page_table_octree::PageTableOctreeDVR;
 use crate::app::scene::volume::VolumeSceneObject;
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
+#[cfg(feature = "timestamp-query")]
+use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use std::sync::Arc;
 use wgpu::{BindGroup, BindGroupEntry, CommandEncoder, Extent3d};
 use wgpu_framework::context::Gpu;
-#[cfg(feature = "timestamp-query")]
-use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 use wgsl_preprocessor::WGSLPreprocessor;
 
 pub mod common;
@@ -84,7 +84,7 @@ impl RayGuidedDVR {
         command_encoder: &mut CommandEncoder,
         bind_group: &BindGroup,
         output_extent: &Extent3d,
-        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
+        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
         match self {
             RayGuidedDVR::PageTable(p) => p.encode(
@@ -92,14 +92,14 @@ impl RayGuidedDVR {
                 bind_group,
                 output_extent,
                 #[cfg(feature = "timestamp-query")]
-                timestamp_query_set,
+                timestamp_query_helper,
             ),
             RayGuidedDVR::PageTableOctree(p) => p.encode(
                 command_encoder,
                 bind_group,
                 output_extent,
                 #[cfg(feature = "timestamp-query")]
-                timestamp_query_set,
+                timestamp_query_helper,
             ),
         }
     }

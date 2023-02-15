@@ -1,11 +1,11 @@
 use crate::gpu_list::{GpuList, GpuListReadResult};
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use crate::resource::Texture;
+#[cfg(feature = "timestamp-query")]
+use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Buffer, CommandEncoder};
 use wgpu_framework::context::Gpu;
-#[cfg(feature = "timestamp-query")]
-use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 use wgsl_preprocessor::WGSLPreprocessor;
 
 pub struct Resources<'a> {
@@ -88,14 +88,12 @@ impl ProcessRequests {
         command_encoder: &mut wgpu::CommandEncoder,
         bind_group: &BindGroup,
         output_extent: &wgpu::Extent3d,
-        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
+        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
         self.request_list.clear();
 
         #[cfg(feature = "timestamp-query")]
-        timestamp_query_set
-            .write_timestamp(command_encoder)
-            .expect("time stamp query set capacity exceeded");
+        timestamp_query_helper.write_timestamp(command_encoder);
         {
             let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Process Requests"),
@@ -111,9 +109,7 @@ impl ProcessRequests {
             );
         }
         #[cfg(feature = "timestamp-query")]
-        timestamp_query_set
-            .write_timestamp(command_encoder)
-            .expect("time stamp query set capacity exceeded");
+        timestamp_query_helper.write_timestamp(command_encoder);
     }
 
     pub fn encode_copy_result_to_readable(&self, encoder: &mut CommandEncoder) {

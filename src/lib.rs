@@ -15,6 +15,7 @@ pub mod gpu_list;
 pub mod preprocessing;
 pub mod renderer;
 pub mod resource;
+pub mod timing;
 pub mod util;
 pub mod volume;
 pub mod wgsl;

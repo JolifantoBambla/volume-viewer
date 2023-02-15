@@ -12,10 +12,10 @@ use crate::util::extent::{
 use crate::util::multi_buffer::MultiBuffered;
 use wgpu_framework::input::Input;
 
+#[cfg(feature = "timestamp-query")]
+use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use lru_update::{LRUUpdate, LRUUpdateResources};
 use wgpu_framework::context::Gpu;
-#[cfg(feature = "timestamp-query")]
-use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -44,12 +44,12 @@ impl LRUCacheGpuOps {
         &self,
         command_encoder: &mut CommandEncoder,
         frame_number: u32,
-        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
+        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
         self.lru_update_pass.encode(
             command_encoder,
             #[cfg(feature = "timestamp-query")]
-            timestamp_query_set,
+            timestamp_query_helper,
         );
 
         if self.lru.copy_to_readable(command_encoder).is_err() {
@@ -204,13 +204,13 @@ impl LRUCache {
         &self,
         encoder: &mut CommandEncoder,
         timestamp: u32,
-        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimeStampQuerySet,
+        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
         self.lru_stuff.get(timestamp as usize).encode(
             encoder,
             timestamp,
             #[cfg(feature = "timestamp-query")]
-            timestamp_query_set,
+            timestamp_query_helper,
         );
     }
 

@@ -1,7 +1,6 @@
 pub mod renderer;
 pub mod scene;
 
-use std::collections::{HashMap, VecDeque};
 use crate::app::renderer::dvr::common::GpuChannelSettings;
 use crate::app::renderer::MultiChannelVolumeRenderer;
 use crate::app::scene::volume::VolumeSceneObject;
@@ -10,6 +9,8 @@ use crate::event::handler::register_default_js_event_handlers;
 use crate::event::{ChannelSettingsChange, Event, SettingsChange};
 use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
 use crate::resource::VolumeManager;
+#[cfg(feature = "timestamp-query")]
+use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use crate::util::vec::vec_equals;
 use crate::volume::octree::OctreeDescriptor;
 use crate::volume::HtmlEventTargetVolumeDataSource;
@@ -18,23 +19,18 @@ use crate::{BrickedMultiResolutionMultiVolumeMeta, MultiChannelVolumeRendererSet
 use glam::UVec2;
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
-#[cfg(feature = "timestamp-query")]
-use wgpu::MapMode;
-use wgpu::{CommandEncoder, SubmissionIndex, SurfaceConfiguration, TextureView};
+use wgpu::{SubmissionIndex, SurfaceConfiguration, TextureView};
 use wgpu_framework::app::{GpuApp, MapToWindowEvent};
 use wgpu_framework::context::{ContextDescriptor, Gpu, SurfaceContext};
 use wgpu_framework::event::lifecycle::{
     OnCommandsSubmitted, OnFrameBegin, OnFrameEnd, PrepareRender, Update,
 };
 use wgpu_framework::event::window::{OnResize, OnUserEvent, OnWindowEvent};
-#[cfg(feature = "timestamp-query")]
-use wgpu_framework::gpu::query_set::TimeStampQuerySet;
 use wgpu_framework::input::Input;
 use winit::event::WindowEvent;
 use winit::event_loop::EventLoop;
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
-use wgpu_framework::gpu::buffer::MappableBuffer;
 
 /// The `GLOBAL_EVENT_LOOP_PROXY` is a means to send data to the running application.
 /// It is initialized by `start_event_loop`.
@@ -52,80 +48,6 @@ impl ChannelConfiguration {
     }
 }
 
-#[cfg(feature = "timestamp-query")]
-pub struct TimestampQueryHelper {
-    gpu: Arc<Gpu>,
-    query_set: TimeStampQuerySet,
-    labels: Vec<String>,
-    timings: HashMap<String, Vec<u64>>,
-    resolve_buffer_pool: Vec<MappableBuffer<u64>>,
-    mapped_buffer_queue: VecDeque<MappableBuffer<u64>>,
-    buffer_in_last_submit: Option<MappableBuffer<u64>>,
-}
-
-#[cfg(feature = "timestamp-query")]
-impl TimestampQueryHelper {
-    pub fn new(label: &str, labels: &[&str], gpu: &Arc<Gpu>) -> Self {
-        let query_set = TimeStampQuerySet::from_labels(label, labels, gpu);
-        let mut own_labels = Vec::new();
-        let mut timings = HashMap::new();
-        for l in labels {
-            own_labels.push(l.to_string());
-            timings.insert(l.to_string(), Vec::new());
-        }
-
-        Self {
-            gpu: gpu.clone(),
-            query_set,
-            labels: own_labels,
-            timings,
-            resolve_buffer_pool: Vec::new(),
-            mapped_buffer_queue: VecDeque::new(),
-            buffer_in_last_submit: None,
-        }
-    }
-
-    pub fn write_timestamp(&mut self, command_encoder: &mut CommandEncoder) {
-        if let Err(error) = self.query_set.write_timestamp(command_encoder) {
-            log::error!("could not write timestamp: {}", error);
-        };
-    }
-
-    pub fn resolve(&mut self, command_encoder: &mut CommandEncoder) {
-        if self.buffer_in_last_submit.is_some() {
-            panic!("last submit's buffer not processed!");
-        }
-        let buffer = self.resolve_buffer_pool.pop().unwrap_or_else(|| self.query_set.create_resolve_buffer(&self.gpu));
-        if let Err(error) = self.query_set.resolve(command_encoder, &buffer) {
-            log::error!("could not resolve timestamp query set: {}", error);
-        }
-        self.buffer_in_last_submit = Some(buffer);
-    }
-
-    pub fn map_buffer(&mut self) {
-        if let Some(buffer) = self.buffer_in_last_submit.take() {
-            buffer.map_async(MapMode::Read, ..).expect("Could not map resolve buffer");
-            self.mapped_buffer_queue.push_front(buffer);
-        }
-    }
-
-    pub fn read_buffer(&mut self) {
-        let has_mapped_buffer = if let Some(buffer) = self.mapped_buffer_queue.back() {
-            buffer.is_mapped()
-        } else {
-            false
-        };
-        if has_mapped_buffer {
-            let buffer = self.mapped_buffer_queue.pop_back().unwrap();
-            let timestamps = buffer.read_all().expect("Could not read mapped buffer");
-            for (i, label) in self.labels.iter().enumerate() {
-                self.timings.get_mut(label).unwrap().push(*timestamps.get(i).unwrap());
-            }
-            self.resolve_buffer_pool.push(buffer);
-        }
-    }
-}
-
 pub struct App {
     ctx: Arc<Gpu>,
 
@@ -140,7 +62,6 @@ pub struct App {
 
     #[cfg(feature = "timestamp-query")]
     render_timestamp_query_set: TimestampQueryHelper,
-
     //#[cfg(feature = "timestamp-query")]
     //octree_update_timestamp_query_set: TimeStampQuerySet,
 }
@@ -227,23 +148,20 @@ impl App {
 
         let last_channel_selection = render_settings.get_sorted_visible_channel_indices();
 
-        let labels = vec![
-            "DVR [begin]",
-            "DVR [end]",
-            "present [begin]",
-            "present [end]",
-            "LRU update [begin]",
-            "LRU update [end]",
-            "process requests [begin]",
-            "process requests [end]",
-        ];
-
         #[cfg(feature = "timestamp-query")]
-        let render_timestamp_query_set = TimestampQueryHelper::new(
-        "render",
-        labels.as_slice(),
-        gpu,
-        );
+        let render_timestamp_query_set = {
+            let labels = vec![
+                "DVR [begin]",
+                "DVR [end]",
+                "present [begin]",
+                "present [end]",
+                "LRU update [begin]",
+                "LRU update [end]",
+                "process requests [begin]",
+                "process requests [end]",
+            ];
+            TimestampQueryHelper::new("render", labels.as_slice(), gpu)
+        };
 
         Self {
             ctx: gpu.clone(),
@@ -294,6 +212,10 @@ impl GpuApp for App {
     }
 
     fn render(&mut self, view: &TextureView, input: &Input) -> SubmissionIndex {
+        // try reading last frame's buffer
+        #[cfg(feature = "timestamp-query")]
+        self.render_timestamp_query_set.read_buffer();
+
         let mut encoder = self
             .ctx
             .device()
@@ -311,28 +233,6 @@ impl GpuApp for App {
         }
         settings.channel_settings = c_settings;
 
-        let labels = vec![
-            "DVR [begin]",
-            "DVR [end]",
-            "present [begin]",
-            "present [end]",
-            "LRU update [begin]",
-            "LRU update [end]",
-            "process requests [begin]",
-            "process requests [end]",
-        ];
-
-        // todo: read & store results
-        #[cfg(feature = "timestamp-query")]
-        let mut time_stamp_query_set = TimeStampQuerySet::from_labels(
-            "render",
-            labels.as_slice(),
-            &self.ctx,
-        );
-
-        #[cfg(feature = "timestamp-query")]
-        let query_read_buffer = time_stamp_query_set.create_resolve_buffer(&self.ctx);
-
         self.renderer.render(
             view,
             &self.scene,
@@ -341,27 +241,23 @@ impl GpuApp for App {
             input,
             &mut encoder,
             #[cfg(feature = "timestamp-query")]
-            &mut time_stamp_query_set,
+            &mut self.render_timestamp_query_set,
         );
 
         self.scene.volume_manager_mut().encode_cache_management(
             &mut encoder,
             input.frame().number(),
             #[cfg(feature = "timestamp-query")]
-            &mut time_stamp_query_set,
+            &mut self.render_timestamp_query_set,
         );
 
-        #[cfg(feature = "timestamp-query")]
-        time_stamp_query_set
-            .resolve(&mut encoder, &query_read_buffer)
-            .expect("Encountered incompatible buffer for timestamp query set");
+        self.render_timestamp_query_set.resolve(&mut encoder);
 
         let submission_index = self.ctx.queue().submit(Some(encoder.finish()));
 
+        // map this frame's buffer and prepare next frame
         #[cfg(feature = "timestamp-query")]
-        query_read_buffer
-            .map_async(MapMode::Read, ..)
-            .expect("Could not map buffer");
+        self.render_timestamp_query_set.map_buffer();
 
         submission_index
     }
