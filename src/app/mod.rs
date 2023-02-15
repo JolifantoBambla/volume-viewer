@@ -62,8 +62,8 @@ pub struct App {
 
     #[cfg(feature = "timestamp-query")]
     render_timestamp_query_set: TimestampQueryHelper,
-    //#[cfg(feature = "timestamp-query")]
-    //octree_update_timestamp_query_set: TimeStampQuerySet,
+    #[cfg(feature = "timestamp-query")]
+    octree_update_timestamp_query_set: TimestampQueryHelper,
 }
 
 impl App {
@@ -163,6 +163,12 @@ impl App {
             TimestampQueryHelper::new("render", labels.as_slice(), gpu)
         };
 
+        #[cfg(feature = "timestamp-query")]
+        let octree_update_timestamp_query_set = {
+            let labels = vec!["octree update [begin]", "octree update [end]"];
+            TimestampQueryHelper::new("render", labels.as_slice(), gpu)
+        };
+
         Self {
             ctx: gpu.clone(),
             renderer,
@@ -173,6 +179,8 @@ impl App {
             channel_selection_changed: false,
             #[cfg(feature = "timestamp-query")]
             render_timestamp_query_set,
+            #[cfg(feature = "timestamp-query")]
+            octree_update_timestamp_query_set,
         }
     }
 
@@ -251,6 +259,7 @@ impl GpuApp for App {
             &mut self.render_timestamp_query_set,
         );
 
+        #[cfg(feature = "timestamp-query")]
         self.render_timestamp_query_set.resolve(&mut encoder);
 
         let submission_index = self.ctx.queue().submit(Some(encoder.finish()));
@@ -379,7 +388,11 @@ impl OnCommandsSubmitted for App {
                 channel_mapping,
             };
         }
-        self.scene.volume_mut().update_cache(input);
+        self.scene.volume_mut().update_cache(
+            input,
+            #[cfg(feature = "timestamp-query")]
+            &mut self.octree_update_timestamp_query_set,
+        );
     }
 }
 

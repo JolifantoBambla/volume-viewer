@@ -1,4 +1,6 @@
 use crate::resource::VolumeManager;
+#[cfg(feature = "timestamp-query")]
+use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use crate::volume::octree::octree_manager::Octree;
 use crate::volume::octree::update::OctreeUpdate;
 use crate::volume::octree::OctreeDescriptor;
@@ -107,9 +109,17 @@ impl VolumeSceneObject {
         channel_mapping
     }
 
-    pub fn update_cache(&mut self, input: &Input) {
+    pub fn update_cache(
+        &mut self,
+        input: &Input,
+        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
+    ) {
         let cache_update = self.volume_manager_mut().update_cache(input);
         if let VolumeSceneObject::TopDownOctreeVolume(v) = self {
+            // try reading update's frame's buffer
+            #[cfg(feature = "timestamp-query")]
+            timestamp_query_helper.read_buffer();
+
             if !cache_update.is_empty() {
                 let gpu = v.octree.gpu();
                 let mut command_encoder =
@@ -118,12 +128,23 @@ impl VolumeSceneObject {
                             label: Label::from("octree update"),
                         });
 
-                v.octree_update
-                    .on_brick_cache_updated(&mut command_encoder, &cache_update);
+                v.octree_update.on_brick_cache_updated(
+                    &mut command_encoder,
+                    &cache_update,
+                    #[cfg(feature = "timestamp-query")]
+                    timestamp_query_helper,
+                );
 
                 v.octree_update.copy_to_readable(&mut command_encoder);
 
+                #[cfg(feature = "timestamp-query")]
+                timestamp_query_helper.resolve(&mut command_encoder);
+
                 gpu.queue().submit(Some(command_encoder.finish()));
+
+                // map this update's buffer and prepare next update
+                #[cfg(feature = "timestamp-query")]
+                timestamp_query_helper.map_buffer();
 
                 if cache_update.mapped_local_brick_ids().len() >= 1 {
                     v.octree_update.map_break_point();
