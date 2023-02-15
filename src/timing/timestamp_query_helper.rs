@@ -48,7 +48,8 @@ impl TimestampQueryHelper {
             .resolve_buffer_pool
             .pop()
             .unwrap_or_else(|| self.query_set.create_resolve_buffer());
-        self.query_set.resolve(command_encoder, &buffer)
+        self.query_set
+            .resolve(command_encoder, &buffer)
             .expect("Could not copy to readable");
         self.buffer_in_last_submit = Some(buffer);
     }

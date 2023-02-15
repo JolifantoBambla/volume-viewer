@@ -43,7 +43,7 @@ impl TimeStampQuerySet {
                 label,
                 capacity,
                 BufferUsages::STORAGE | BufferUsages::QUERY_RESOLVE | BufferUsages::COPY_SRC,
-                gpu
+                gpu,
             ),
             label: String::from(label),
             capacity,
@@ -72,7 +72,11 @@ impl TimeStampQuerySet {
         }
     }
 
-    pub fn resolve(&mut self, command_encoder: &mut CommandEncoder, read_buffer: &MappableBuffer<u64>) -> Result<(), BufferMapError> {
+    pub fn resolve(
+        &mut self,
+        command_encoder: &mut CommandEncoder,
+        read_buffer: &MappableBuffer<u64>,
+    ) -> Result<(), BufferMapError> {
         command_encoder.resolve_query_set(
             &self.query_set,
             0..(self.next_index as u32),
@@ -86,7 +90,7 @@ impl TimeStampQuerySet {
                 0,
                 read_buffer.buffer(),
                 0,
-                self.resolve_buffer.size()
+                self.resolve_buffer.size(),
             );
             Ok(())
         } else {

@@ -29,14 +29,16 @@
     } from "./js/src/volume-data-source.js";
     import { VolumeRendererCreateOptions, } from './js/src/volume-renderer.js';
 
-    async function test() {
+    async function listAvailableFeatures() {
         const adapter = await navigator.gpu.requestAdapter();
+        const supportedFeatures = [];
         for (const f of adapter.features) {
-            console.log(f);
+            supportedFeatures.push(f);
         }
-        console.log(adapter.features.values());
+        console.info('Supported features:', supportedFeatures);
+        console.info(`Timestamp query feature is ${supportedFeatures.includes('timestamp-query') ? '' : 'NOT ' }supported.`);
     }
-    test();
+    listAvailableFeatures();
 
     const dataSourceConfig = new VolumeDataSourceConfig(
         new DataStoreConfig({

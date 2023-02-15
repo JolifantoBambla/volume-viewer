@@ -271,18 +271,12 @@ impl GpuApp for App {
         submission_index
     }
 
-    #[cfg(feature = "timestamp-query")]
     fn get_context_descriptor() -> ContextDescriptor<'static> {
-        log::info!("timestamp query!!");
         ContextDescriptor {
+            #[cfg(feature = "timestamp-query")]
             required_features: wgpu::Features::TIMESTAMP_QUERY,
             ..Default::default()
         }
-    }
-
-    #[cfg(not(feature = "timestamp-query"))]
-    fn get_context_descriptor() -> ContextDescriptor<'static> {
-        ContextDescriptor::default()
     }
 }
 
