@@ -39,6 +39,7 @@ impl Texture {
             dimension: TextureDimension::D2,
             format,
             usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
+            view_formats: &[format],
         });
         let view = texture.create_view(&TextureViewDescriptor::default());
         Self {
@@ -66,6 +67,7 @@ impl Texture {
                 dimension: TextureDimension::D3,
                 format,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+                view_formats: &[format],
             },
             bytemuck::cast_slice(data.as_slice()),
         );
@@ -99,6 +101,7 @@ impl Texture {
             dimension: TextureDimension::D3,
             format,
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+            view_formats: &[format],
         });
         //device.pop_error_scope();
         let view = texture.create_view(&TextureViewDescriptor::default());
@@ -129,6 +132,7 @@ impl Texture {
                 usage: TextureUsages::TEXTURE_BINDING
                     | TextureUsages::COPY_DST
                     | TextureUsages::STORAGE_BINDING,
+                view_formats: &[format],
             },
             vec![0u8; (extent_volume(&extent) * 4) as usize].as_slice(),
         );
@@ -158,6 +162,7 @@ impl Texture {
                 dimension: TextureDimension::D3,
                 format,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+                view_formats: &[format],
             },
             bytemuck::cast_slice(data),
         );

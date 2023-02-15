@@ -64,7 +64,7 @@ pub enum SurfaceTarget<'a> {
 }
 
 impl<'a> SurfaceTarget<'a> {
-    pub fn create_surface(&self, instance: &Instance) -> Surface {
+    pub fn create_surface(&self, instance: &Instance) -> Result<Surface, wgpu::CreateSurfaceError> {
         match self {
             SurfaceTarget::Window(w) => unsafe { instance.create_surface(w) },
             #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))]
@@ -170,11 +170,14 @@ impl WgpuContext {
         surface_target: Option<SurfaceTarget<'a>>,
     ) -> Self {
         // Instantiates instance of WebGPU
-        let instance = wgpu::Instance::new(context_descriptor.backends);
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: context_descriptor.backends,
+            ..Default::default()
+        });
 
         let surface = surface_target
             .as_ref()
-            .map(|surface_target| surface_target.create_surface(&instance));
+            .map(|surface_target| surface_target.create_surface(&instance).expect("Could not obtain WebGPU or WebGL 2 context"));
 
         let mut request_adapter_options = context_descriptor.request_adapter_options.clone();
         request_adapter_options.compatible_surface = if let Some(surface) = surface.as_ref() {
@@ -190,6 +193,7 @@ impl WgpuContext {
             .expect("No suitable GPU adapters found on the system!");
 
         let adapter_features = adapter.features();
+        log::info!("adapter features {:?}", adapter_features);
         assert!(
             adapter_features.contains(context_descriptor.required_features),
             "Adapter does not support required features: {:?}",
@@ -237,9 +241,10 @@ impl WgpuContext {
         let gpu = Arc::new(Gpu { device, queue });
         if let Some(surface) = surface {
             let surface_target = surface_target.unwrap();
-            let format = surface.get_supported_formats(&adapter)[0];
-            let present_mode = surface.get_supported_present_modes(&adapter)[0];
-            let alpha_mode = surface.get_supported_alpha_modes(&adapter)[0];
+            let surface_capabilities = surface.get_capabilities(&adapter);
+            let format = surface_capabilities.formats[0];
+            let present_mode = surface_capabilities.present_modes[0];
+            let alpha_mode = surface_capabilities.alpha_modes[0];
             let surface_configuration = SurfaceConfiguration {
                 usage: TextureUsages::RENDER_ATTACHMENT,
                 format,
@@ -247,6 +252,7 @@ impl WgpuContext {
                 height: surface_target.height(),
                 present_mode,
                 alpha_mode,
+                view_formats: vec![format],
             };
             surface.configure(gpu.device(), &surface_configuration);
 
