@@ -344,50 +344,42 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             break;
         }
 
-        // todo: empty space skipping
         if (empty_channels == num_visible_channels) {
-            // todo: compute distance to jump
-            // todo: increase t by jumped distance
+            let subdivision_shape = vec3<f32>(subdivision_idx_get_shape(subdivision_index));
+            let node_step = vec3<i32>(sign(ray_os.direction)); // todo: this is constant per invocation
+            let node_subscript = subdivision_idx_compute_subscript(subdivision_index, p);
 
             /*
-            find size of node in subdivision level
-            compute distance to jump dj via ray-node-intersection
-            num empty samples = floor(dj / dt);
-            p += ray_os.direction * (dt * (num empty samples + 1))
-            t += dt * num_empty_samples (because its adapted at the end of the loop - but maybe that should also just be moved here)
+            let min_corner = subscript_to_normalized_address(node_subscript, subdivision_idx_get_shape(subdivision_index));
+            let inverse_node_scale = 1. / subdivision_shape; // this is a runtime constant
+            let max_corner = min_corner + inverse_node_scale;
+            let corners: array<vec3<f32>, 2> = array(min_corner, max_corner);
+            let inv_ray_d = 1. / ray_os.direction;
+            let side = vec3<i32>(saturate(sign(inv_ray_d)));
+            let t_intersect = (vec3<f32>(corners[side.x].x, corners[side.y].y, corners[side.z].z) - p) * inv_ray_d;
+            let t_jump = t_intersect[min_dimension(t_intersect)];
             */
 
-            let subdivision_shape = vec3<f32>(subdivision_idx_get_shape(subdivision_index));
-            let inverse_node_scale = 1. / subdivision_shape; // todo: this is a runtime constant
-            let node_step = vec3<i32>(sign(ray_os.direction)); // todo: this is constant per invocation
-            let node_delta = inverse_node_scale / abs(ray_os.direction);
-            let node_subscript = subdivision_idx_compute_subscript(subdivision_index, p);
-            let next_node_subscript = vec3<i32>(node_subscript) + node_step;
+            let next_axis_indices = vec3<i32>(node_subscript) + vec3<i32>(saturate(sign(ray_os.direction)));
             // note: we don't use `subscript_to_normalized_address` here because we might need values outside the unit cube
-            let next_node_normalized = vec3<f32>(next_node_subscript) / subdivision_shape;
+            let next_axis_coords = vec3<f32>(next_axis_indices) / subdivision_shape;
             var t_jump = POSITIVE_INFINITY;
             for (var i: u32 = 0u; i < 3u; i += 1u) {
                 if (node_step[i] != 0) {
-                    t_jump = min(t_jump, (next_node_normalized[i] - ray_os.origin[i]) / ray_os.direction[i]);
+                    t_jump = min(t_jump, (next_axis_coords[i] - p[i]) / ray_os.direction[i]);
                 }
             }
-            let num_empty_samples = floor(t_jump / dt);
-            p += ray_os.direction * (dt * num_empty_samples);
-            t += dt * num_empty_samples;
 
-            if (any(p > float3(1))) {
-                color += MAGENTA;
-                break;
-            }
-            if (any(p < float3())) {
-                color += YELLOW;
-                break;
-            }
+            let num_empty_samples = floor(max(0, t_jump) / dt);
+            let dt_jump = dt * num_empty_samples;
+            p += ray_os.direction * dt_jump;
+            t += dt_jump;
         }
         p += ray_os.direction * dt;
     }
 
     debug(pixel, saturate(color));
+    //debug(pixel, saturate(vec4(vec3(f32(steps_taken / uniforms.settings.max_steps)), 1.0)));
 }
 
 fn is_saturated(color: float4) -> bool {
