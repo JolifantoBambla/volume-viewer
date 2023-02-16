@@ -106,7 +106,7 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
                     }
 
                     let chache_position = offset + position;
-                    let value = u32(textureLoad(brick_cache, int3(chache_position), 0).x * 255.0);
+                    let value = min(u32(textureLoad(brick_cache, int3(chache_position), 0).x * 255.0), 255);
                     current_min = min(current_min, value);
                     current_max = max(current_max, value);
                 }

@@ -17,6 +17,10 @@ fn subdivision_idx_get_shape(subdivision_index: u32) -> vec3<u32> {
     return volume_subdivisions[subdivision_index].shape;
 }
 
+fn subdivision_idx_get_node_shape(subdivision_index: u32) -> vec3<u32> {
+    return volume_subdivisions[subdivision_index].children_shape;
+}
+
 fn subdivision_idx_get_node_offset(subdivision_index: u32) -> u32 {
     return volume_subdivisions[subdivision_index].node_offset;
 }

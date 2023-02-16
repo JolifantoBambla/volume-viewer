@@ -48,6 +48,48 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     var minimum: u32 = 255;
     var maximum: u32 = 0;
     var partially_mapped_resolutions: u32 = 0;
+
+    let single_channel_local_subscript = index_to_subscript(
+        single_channel_local_index,
+        subdivision_idx_get_shape(subdivision_index)
+    );
+    let single_channel_first_child_subscript = single_channel_local_subscript * subdivision_idx_get_node_shape(subdivision_index);
+
+    /*
+    index_to_subscript(
+        // todo: maybe this is wrong?
+        // todo: if so, computing the parent index might also be wrong?
+        // use subscript * node_shape instead?
+        subdivision_idx_first_child_index_from_local(subdivision_index, single_channel_local_index),
+        subdivision_idx_get_shape(subdivision_index + 1)
+    );
+    */
+    // todo: check if correct!
+    let node_shape = subdivision_idx_get_node_shape(subdivision_index);
+    for (var x: u32 = 0; x < node_shape.x; x += 1) {
+        for (var y: u32 = 0; y < node_shape.y; y += 1) {
+            for (var z: u32 = 0; z < node_shape.z; z += 1) {
+                let child_node_index = to_multichannel_node_index(
+                    subdivision_idx_global_node_index(
+                        subdivision_index,
+                        subdivision_idx_subscript_to_local_index(
+                            subdivision_index,
+                            vec3<u32>(single_channel_first_child_subscript + vec3(x, y, z))
+                        )
+                    ),
+                    num_channels,
+                    channel_index
+                );
+
+                let child_node = node_idx_load_global(child_node_index);
+                minimum = min(minimum, node_get_min(child_node));
+                maximum = max(maximum, node_get_max(child_node));
+                partially_mapped_resolutions |= node_get_partially_mapped_resolutions(child_node);
+            }
+        }
+    }
+
+    /*
     for (var i: u32 = 0; i < num_child_nodes; i += 1) {
         let child_node = node_idx_load_global(child_index);
 
@@ -57,6 +99,7 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
 
         child_index += num_channels;
     }
+    */
 
     let old_node = octree_nodes[global_node_index];
     let new_node = node_new(minimum, maximum, partially_mapped_resolutions);
@@ -64,11 +107,22 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     if (changed) {
         octree_nodes[global_node_index] = new_node;
         if (subdivision_index > 0) {
-            let parent_node_index = to_multichannel_node_index(
+            // todo: check parent node index!
+            let single_channel_parent_node_subscript = single_channel_local_subscript / subdivision_idx_get_node_shape(subdivision_index - 1);
+            let parent_node_index =  to_multichannel_node_index(
+                subdivision_idx_subscript_to_local_index(subdivision_index - 1, single_channel_parent_node_subscript),
+                num_channels,
+                channel_index
+            );
+
+            /*
+            to_multichannel_node_index(
                 subdivision_idx_local_parent_node_index_from_local(subdivision_index, single_channel_local_index),
                 num_channels,
                 channel_index
             );
+            */
+
             node_helper_buffer_b[parent_node_index] = u32(true);
         }
     }

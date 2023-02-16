@@ -46,6 +46,8 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
         octree_nodes[global_node_index] = node;
 
         let channel_index = multi_local_to_channel_index(multichannel_local_node_index, num_channels);
+        // todo: check parent node index!
+        /*
         let multichannel_local_parent_node_index = to_multichannel_node_index(
             subdivision_idx_local_parent_node_index_from_local(
                 subdivision_index,
@@ -54,6 +56,19 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
             num_channels,
             channel_index
         );
+        */
+
+        let single_channel_local_subscript = index_to_subscript(
+            multi_local_to_single_channel_local_index(multichannel_local_node_index, num_channels),
+            subdivision_idx_get_shape(subdivision_index)
+        );
+        let single_channel_parent_node_subscript = single_channel_local_subscript / subdivision_idx_get_node_shape(subdivision_index - 1);
+        let multichannel_local_parent_node_index = to_multichannel_node_index(
+           subdivision_idx_subscript_to_local_index(subdivision_index - 1, single_channel_parent_node_subscript),
+           num_channels,
+           channel_index
+        );
+
         // todo: this can't work -> mark in buffer and process instead instead
         // i.e.
         //let index = atomicAdd(&num_nodes_next_level, 1);

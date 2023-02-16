@@ -240,13 +240,32 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     pt_request_brick(p, channel_settings_list.channels[channel].min_lod, channel);
                     requested_brick = true;
                 }
+                color = BLUE;
                 channel += 1;
                 continue;
             }
 
-            let lower_threshold = min(u32(channel_settings_list.channels[channel].threshold_lower * 255.0), 255);
-            let upper_threshold = min(u32(channel_settings_list.channels[channel].threshold_upper * 255.0), 255);
+            let lower_threshold = u32(floor((channel_settings_list.channels[channel].threshold_lower - EPSILON) * 255.0));
+            let upper_threshold = u32(floor((channel_settings_list.channels[channel].threshold_upper + EPSILON) * 255.0));
             if (node_is_empty(node, lower_threshold, upper_threshold)) {
+                if (node_get_min(node) > upper_threshold) {
+                    color = RED;
+                    break;
+                }
+                if (node_get_max(node) < lower_threshold) {
+                    color = YELLOW;
+                    let node_max = f32(node_get_max(node)) / 255.0;
+                    if (node_get_max(node) == 0) {
+                        //color = RED;
+                    }
+                    if (node_get_min(node) == 0 && node_get_max(node) == 0) {
+                        //color = GREEN;
+                    }
+                }
+                if (node_get_min(node) > upper_threshold && node_get_max(node) < lower_threshold) {
+                    color = CYAN;
+                    break;
+                }
                 channel += 1;
                 empty_channels += 1;
                 continue;
@@ -318,7 +337,17 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 }
             }
 
-            if (value > 0.0) {
+            if (node_is_empty(node, lower_threshold, upper_threshold)) {
+                let value_u32 = min(u32(floor(value * 255.0)), 255);
+                if (value_u32 > node_get_max(node) || value_u32 < node_get_min(node)) {
+                    color = RED;
+                    break;
+                } else {
+                    color = GREEN;
+                    break;
+                }
+            }
+            if (value >= channel_settings_list.channels[channel].threshold_lower && value <= channel_settings_list.channels[channel].threshold_upper) {
                 let trans_sample = channel_settings_list.channels[channel].color;
                 var val_color = float4(trans_sample.rgb, value * trans_sample.a);
                 val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
@@ -327,6 +356,11 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
                 // todo: remove (debug)
                 // sometimes a wrong brick was accessed - fixed now
+                let value_u32 = min(u32(floor(value * 255.0)), 255);
+                if (value_u32 > node_get_max(node) || value_u32 < node_get_min(node)) {
+                    color = RED;
+                }
+            } else {
                 let value_u32 = min(u32(floor(value * 255.0)), 255);
                 if (value_u32 > node_get_max(node) || value_u32 < node_get_min(node)) {
                     color = RED;
