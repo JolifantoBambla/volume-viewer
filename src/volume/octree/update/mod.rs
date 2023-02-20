@@ -83,16 +83,17 @@ impl OnMappedPasses {
                 pass.encode(compute_pass);
             }
 
-            /* todo: remove (debug)
+            /*
+            // todo: remove (debug)
             let mut num_processed = 0;
-            let limit = 20;
+            let limit = 3;
             for pass in self.dependent_passes.iter() {
                 if num_processed < limit {
                     pass.encode(compute_pass);
                 }
                 num_processed += 1;
             }
-             */
+            */
         }
     }
 }

@@ -64,6 +64,10 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
         subdivision_idx_get_shape(subdivision_index + 1)
     );
     */
+
+    //let norm_addr = subscript_to_normalized_address(single_channel_local_subscript, subdivision_idx_get_shape(subdivision_index));
+    //let single_channel_first_child_subscript = subdivision_idx_compute_subscript(subdivision_index + 1, )
+
     // todo: check if correct!
     let node_shape = subdivision_idx_get_node_shape(subdivision_index);
     for (var x: u32 = 0; x < node_shape.x; x += 1) {
@@ -71,9 +75,9 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
             for (var z: u32 = 0; z < node_shape.z; z += 1) {
                 let child_node_index = to_multichannel_node_index(
                     subdivision_idx_global_node_index(
-                        subdivision_index,
+                        subdivision_index + 1,
                         subdivision_idx_subscript_to_local_index(
-                            subdivision_index,
+                            subdivision_index + 1,
                             vec3<u32>(single_channel_first_child_subscript + vec3(x, y, z))
                         )
                     ),

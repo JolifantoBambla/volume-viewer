@@ -205,7 +205,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let first_channel_index = channel_settings_list.channels[0].page_table_index;
 
-    // todo: increase t by jumped distance
     for (var t = t_min; t < t_max; t += dt) {
         let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
         let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res, lod_factor);
@@ -227,6 +226,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         let start_subdivision_index = 0u;
         var subdivision_index = start_subdivision_index;
         var empty_channels = 0u;
+
+        var last_min = 256u;
+        var last_max = 256u;
+
         while (subdivision_index <= target_culling_level && channel < num_visible_channels) {
             let multichannel_global_node_index = to_multichannel_node_index(
                 subdivision_idx_compute_node_index(subdivision_index, p),
@@ -248,6 +251,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             let lower_threshold = u32(floor((channel_settings_list.channels[channel].threshold_lower - EPSILON) * 255.0));
             let upper_threshold = u32(floor((channel_settings_list.channels[channel].threshold_upper + EPSILON) * 255.0));
             if (node_is_empty(node, lower_threshold, upper_threshold)) {
+                /*
                 if (node_get_min(node) > upper_threshold) {
                     color = RED;
                     break;
@@ -266,6 +270,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     color = CYAN;
                     break;
                 }
+                */
                 channel += 1;
                 empty_channels += 1;
                 continue;
@@ -296,6 +301,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 continue;
             }
             if (subdivision_index != target_culling_level) {
+
+                last_min = node_get_min(node);
+                last_max = node_get_max(node);
+
                 subdivision_index += 1;
                 continue;
             }
@@ -337,6 +346,24 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 }
             }
 
+            /*
+            let cur_min = node_get_min(node);
+            let cur_max = node_get_max(node);
+            if (cur_min < last_min || cur_max > last_max) {
+                let value_u32 = min(u32(floor(value * 255.0)), 255);
+                if (value_u32 > node_get_max(node) || value_u32 < node_get_min(node)) {
+                    color = RED;
+                } else {
+                    color = CYAN;
+                }
+                break;
+            } else {
+                color = GREEN;
+                break;
+            }
+            */
+
+            // todo: remove (debug)
             if (node_is_empty(node, lower_threshold, upper_threshold)) {
                 let value_u32 = min(u32(floor(value * 255.0)), 255);
                 if (value_u32 > node_get_max(node) || value_u32 < node_get_min(node)) {
