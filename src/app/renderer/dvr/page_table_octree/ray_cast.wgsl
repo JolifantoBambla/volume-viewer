@@ -238,7 +238,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             );
             let node = node_idx_load_global(multichannel_global_node_index);
             if (node_has_no_data(node)) {
-                // todo: maybe request in other resolution
                 if (!requested_brick) {
                     pt_request_brick(p, channel_settings_list.channels[channel].min_lod, channel);
                     requested_brick = true;
@@ -251,26 +250,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             let lower_threshold = u32(floor((channel_settings_list.channels[channel].threshold_lower - EPSILON) * 255.0));
             let upper_threshold = u32(floor((channel_settings_list.channels[channel].threshold_upper + EPSILON) * 255.0));
             if (node_is_empty(node, lower_threshold, upper_threshold)) {
-                /*
-                if (node_get_min(node) > upper_threshold) {
-                    color = RED;
-                    break;
-                }
-                if (node_get_max(node) < lower_threshold) {
-                    color = YELLOW;
-                    let node_max = f32(node_get_max(node)) / 255.0;
-                    if (node_get_max(node) == 0) {
-                        //color = RED;
-                    }
-                    if (node_get_min(node) == 0 && node_get_max(node) == 0) {
-                        //color = GREEN;
-                    }
-                }
-                if (node_get_min(node) > upper_threshold && node_get_max(node) < lower_threshold) {
-                    color = CYAN;
-                    break;
-                }
-                */
                 channel += 1;
                 empty_channels += 1;
                 continue;
@@ -346,52 +325,12 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 }
             }
 
-            /*
-            let cur_min = node_get_min(node);
-            let cur_max = node_get_max(node);
-            if (cur_min < last_min || cur_max > last_max) {
-                let value_u32 = min(u32(floor(value * 255.0)), 255);
-                if (value_u32 > node_get_max(node) || value_u32 < node_get_min(node)) {
-                    color = RED;
-                } else {
-                    color = CYAN;
-                }
-                break;
-            } else {
-                color = GREEN;
-                break;
-            }
-            */
-
-            // todo: remove (debug)
-            if (node_is_empty(node, lower_threshold, upper_threshold)) {
-                let value_u32 = min(u32(floor(value * 255.0)), 255);
-                if (value_u32 > node_get_max(node) || value_u32 < node_get_min(node)) {
-                    color = RED;
-                    break;
-                } else {
-                    color = GREEN;
-                    break;
-                }
-            }
             if (value >= channel_settings_list.channels[channel].threshold_lower && value <= channel_settings_list.channels[channel].threshold_upper) {
                 let trans_sample = channel_settings_list.channels[channel].color;
                 var val_color = float4(trans_sample.rgb, value * trans_sample.a);
                 val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
                 color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
                 color.a += (1.0 - color.a) * val_color.a;
-
-                // todo: remove (debug)
-                // sometimes a wrong brick was accessed - fixed now
-                let value_u32 = min(u32(floor(value * 255.0)), 255);
-                if (value_u32 > node_get_max(node) || value_u32 < node_get_min(node)) {
-                    color = RED;
-                }
-            } else {
-                let value_u32 = min(u32(floor(value * 255.0)), 255);
-                if (value_u32 > node_get_max(node) || value_u32 < node_get_min(node)) {
-                    color = RED;
-                }
             }
 
             channel += 1;
@@ -409,17 +348,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             let subdivision_shape = vec3<f32>(subdivision_idx_get_shape(subdivision_index));
             let node_step = vec3<i32>(sign(ray_os.direction)); // todo: this is constant per invocation
             let node_subscript = subdivision_idx_compute_subscript(subdivision_index, p);
-
-            /*
-            let min_corner = subscript_to_normalized_address(node_subscript, subdivision_idx_get_shape(subdivision_index));
-            let inverse_node_scale = 1. / subdivision_shape; // this is a runtime constant
-            let max_corner = min_corner + inverse_node_scale;
-            let corners: array<vec3<f32>, 2> = array(min_corner, max_corner);
-            let inv_ray_d = 1. / ray_os.direction;
-            let side = vec3<i32>(saturate(sign(inv_ray_d)));
-            let t_intersect = (vec3<f32>(corners[side.x].x, corners[side.y].y, corners[side.z].z) - p) * inv_ray_d;
-            let t_jump = t_intersect[min_dimension(t_intersect)];
-            */
 
             let next_axis_indices = vec3<i32>(node_subscript) + vec3<i32>(saturate(sign(ray_os.direction)));
             // note: we don't use `subscript_to_normalized_address` here because we might need values outside the unit cube
