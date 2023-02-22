@@ -153,6 +153,84 @@ async function createUI(offscreenRenderer, config) {
             .forEach(i => i.on('change', e => dispatchChannelSettingsChange(e, c.channelIndex)));
     });
 
+    const monitoringParams = {
+        dvr: 0.0,
+        present: 0.0,
+        lruUpdate: 0.0,
+        processRequests: 0.0,
+        octree_update: 0.0,
+    };
+    const monitoringFolder = pane.addFolder({
+        title: 'Monitoring'
+    });
+    const dvrFpsGraph = monitoringFolder.addBlade({
+        view: 'fpsgraph',
+        label: 'DVR (FPS)',
+    });
+    monitoringFolder.addMonitor(monitoringParams, 'dvr', {
+        label: 'DVR (ms [0,32])',
+        view: 'graph',
+        max: 32,
+    });
+    const presentFpsGraph = monitoringFolder.addBlade({
+        view: 'fpsgraph',
+        label: 'Present (FPS)',
+    });
+    monitoringFolder.addMonitor(monitoringParams, 'present', {
+        label: 'Present (ms [0,5])',
+        view: 'graph',
+        max: 5,
+    });
+    const lruUpdateFpsGraph = monitoringFolder.addBlade({
+        view: 'fpsgraph',
+        label: 'LRU update (FPS)',
+    });
+    monitoringFolder.addMonitor(monitoringParams, 'lruUpdate', {
+        label: 'LRU update (ms [0, 0.2])',
+        view: 'graph',
+        max: 0.2,
+    });
+    const processRequestsFpsGraph = monitoringFolder.addBlade({
+        view: 'fpsgraph',
+        label: 'Process requests (FPS)',
+    });
+    monitoringFolder.addMonitor(monitoringParams, 'processRequests', {
+        label: 'Process requests (ms [0, 0.2])',
+        view: 'graph',
+        max: 0.2,
+    });
+    const octreeUpdateFpsGraph = monitoringFolder.addBlade({
+        view: 'fpsgraph',
+        label: 'Octree update (FPS)',
+    });
+    monitoringFolder.addMonitor(monitoringParams, 'octree_update', {
+        label: 'Octree update (ms [0, 0.1])',
+        view: 'graph',
+        max: 0.1,
+    });
+
+    const onMonitoringDataFrame = (monitoring) => {
+        monitoringParams.dvr = monitoring.dvr;
+        monitoringParams.present = monitoring.present;
+        monitoringParams.lruUpdate = monitoring.lruUpdate;
+        monitoringParams.processRequests = monitoring.processRequests;
+        monitoringParams.octree_update = monitoring.octree_update;
+
+        dvrFpsGraph.controller_.valueController.stopwatch_.begin({getTime: () => monitoring.dvrBegin});
+        dvrFpsGraph.controller_.valueController.stopwatch_.end({getTime: () => monitoring.dvrEnd});
+        presentFpsGraph.controller_.valueController.stopwatch_.begin({getTime: () => monitoring.presentBegin});
+        presentFpsGraph.controller_.valueController.stopwatch_.end({getTime: () => monitoring.presentEnd});
+        lruUpdateFpsGraph.controller_.valueController.stopwatch_.begin({getTime: () => monitoring.lruUpdateBegin});
+        lruUpdateFpsGraph.controller_.valueController.stopwatch_.end({getTime: () => monitoring.lruUpdateEnd});
+        processRequestsFpsGraph.controller_.valueController.stopwatch_.begin({getTime: () => monitoring.processRequestsBegin});
+        processRequestsFpsGraph.controller_.valueController.stopwatch_.end({getTime: () => monitoring.processRequestsEnd});
+        if (monitoring.octree_update > 0.0) {
+            octreeUpdateFpsGraph.controller_.valueController.stopwatch_.begin({getTime: () => monitoring.octreeUpdateBegin});
+            octreeUpdateFpsGraph.controller_.valueController.stopwatch_.end({getTime: () => monitoring.octreeUpdateEnd});
+        }
+    };
+
+    /*
     const exportSettingsButton = pane.addButton({
         title: 'Export Settings',
     });
@@ -161,7 +239,9 @@ async function createUI(offscreenRenderer, config) {
         console.log(preset);
     });
 
-    return volumeRendererSettings;
+     */
+
+    return [volumeRendererSettings, onMonitoringDataFrame];
 }
 
 export async function createOffscreenRenderer(config) {
@@ -191,7 +271,13 @@ export async function createOffscreenRenderer(config) {
         window.onkeyup = dispatchToWorker;
         window.onkeypress = dispatchToWorker;
 
-        const volumeRendererSettings = await createUI(offscreenRenderer, config);
+        const [volumeRendererSettings, onMonitoringDataFrame] = await createUI(offscreenRenderer, config);
+
+        worker.addEventListener('message', e => {
+            if (e.data.type === 'monitoring') {
+                onMonitoringDataFrame(e.data.data);
+            }
+        })
 
         return {
             offscreenRenderer,

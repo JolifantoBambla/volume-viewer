@@ -432,8 +432,8 @@ export class OmeZarrDataSource extends VolumeDataSource {
             } else {
                 return {
                     data,
-                    min: minU8(data),
-                    max: maxU8(data),
+                    min: 0,  //minU8(data),
+                    max: 255 //maxU8(data),
                 };
             }
         }

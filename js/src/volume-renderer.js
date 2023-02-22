@@ -91,10 +91,12 @@ export class VolumeRenderer {
     #canvas;
     #initialized;
     #loader;
+    #postMessage;
 
-    constructor() {
+    constructor(postMessage) {
         this.#initialized = false;
         this.#canvas = null;
+        this.#postMessage = postMessage;
     }
 
     async initialize(offscreenCanvas, config) {
@@ -160,6 +162,12 @@ export class VolumeRenderer {
                 );
             }
         });
+        this.#canvas.addEventListener('monitoring', e => {
+            this.#postMessage({
+                type: e.type,
+                data: e.detail.get('monitoring'),
+            });
+        })
 
         // start event loop
         main(this.#canvas, this.#loader.volumeMeta, renderSettings);

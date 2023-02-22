@@ -150,4 +150,12 @@ impl TimestampQueryHelper {
             }
         }
     }
+
+    pub fn get_last(&self, label: &str) -> Option<&u64> {
+        if let Some(timestamps) = self.timings.get(label) {
+            timestamps.last()
+        } else {
+            None
+        }
+    }
 }

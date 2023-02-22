@@ -1,6 +1,7 @@
 pub mod renderer;
 pub mod scene;
 
+use std::collections::HashMap;
 use crate::app::renderer::dvr::common::GpuChannelSettings;
 use crate::app::renderer::MultiChannelVolumeRenderer;
 use crate::app::scene::volume::VolumeSceneObject;
@@ -19,6 +20,7 @@ use crate::{BrickedMultiResolutionMultiVolumeMeta, MultiChannelVolumeRendererSet
 use glam::UVec2;
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
+use web_sys::EventTarget;
 use wgpu::{SubmissionIndex, SurfaceConfiguration, TextureView};
 use wgpu_framework::app::{GpuApp, MapToWindowEvent};
 use wgpu_framework::context::{ContextDescriptor, Gpu, SurfaceContext};
@@ -31,6 +33,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::EventLoop;
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
+use crate::timing::monitoring::MonitoringDataFrame;
 
 /// The `GLOBAL_EVENT_LOOP_PROXY` is a means to send data to the running application.
 /// It is initialized by `start_event_loop`.
@@ -64,6 +67,9 @@ pub struct App {
     render_timestamp_query_set: TimestampQueryHelper,
     #[cfg(feature = "timestamp-query")]
     octree_update_timestamp_query_set: TimestampQueryHelper,
+
+    #[cfg(target_arch = "wasm32")]
+    event_target: EventTarget,
 }
 
 impl App {
@@ -76,10 +82,11 @@ impl App {
         render_settings: MultiChannelVolumeRendererSettings,
     ) -> Self {
         let canvas = window.canvas();
+        let event_target = canvas.clone().unchecked_into::<EventTarget>();
 
         let volume_source = Box::new(HtmlEventTargetVolumeDataSource::new(
             volume_meta,
-            canvas.unchecked_into::<web_sys::EventTarget>(),
+            event_target.clone(),
         ));
 
         let window_size = {
@@ -181,6 +188,7 @@ impl App {
             render_timestamp_query_set,
             #[cfg(feature = "timestamp-query")]
             octree_update_timestamp_query_set,
+            event_target,
         }
     }
 
@@ -395,9 +403,74 @@ impl OnFrameEnd for App {
         // todo: dispatch frame end canvas event
 
         #[cfg(feature = "timestamp-query")]
-        if let Some(diff) = self.render_timestamp_query_set.get_last_diff("DVR [begin]", "DVR [end]") {
-            let duration = diff as f64 / 1_000_000.0;
-            log::info!("Rendering took {duration} milliseconds");
+        {
+            let mut monitoring = MonitoringDataFrame::default();
+            if let Some(diff) = self.render_timestamp_query_set.get_last_diff("DVR [begin]", "DVR [end]") {
+                let duration = diff as f64 / 1_000_000.0;
+                monitoring.dvr = duration;
+            }
+            if let Some(&timestamp) = self.render_timestamp_query_set.get_last("DVR [begin]") {
+                monitoring.dvr_begin = timestamp as f64 / 1_000_000.0;
+            }
+            if let Some(&timestamp) = self.render_timestamp_query_set.get_last("DVR [end]") {
+                monitoring.dvr_end = timestamp as f64 / 1_000_000.0;
+            }
+            if let Some(diff) = self.render_timestamp_query_set.get_last_diff("present [begin]", "present [end]") {
+                let duration = diff as f64 / 1_000_000.0;
+                monitoring.present = duration;
+            }
+            if let Some(&timestamp) = self.render_timestamp_query_set.get_last("present [begin]") {
+                monitoring.present_begin = timestamp as f64 / 1_000_000.0;
+            }
+            if let Some(&timestamp) = self.render_timestamp_query_set.get_last("present [end]") {
+                monitoring.present_end = timestamp as f64 / 1_000_000.0;
+            }
+            if let Some(diff) = self.render_timestamp_query_set.get_last_diff("LRU update [begin]", "LRU update [end]") {
+                let duration = diff as f64 / 1_000_000.0;
+                monitoring.lru_update = duration;
+            }
+            if let Some(&timestamp) = self.render_timestamp_query_set.get_last("LRU update [begin]") {
+                monitoring.lru_update_begin = timestamp as f64 / 1_000_000.0;
+            }
+            if let Some(&timestamp) = self.render_timestamp_query_set.get_last("LRU update [end]") {
+                monitoring.lru_update_end = timestamp as f64 / 1_000_000.0;
+            }
+            if let Some(diff) = self.render_timestamp_query_set.get_last_diff("process requests [begin]", "process requests [end]") {
+                let duration = diff as f64 / 1_000_000.0;
+                monitoring.process_requests = duration;
+            }
+            if let Some(&timestamp) = self.render_timestamp_query_set.get_last("process requests [begin]") {
+                monitoring.process_requests_begin = timestamp as f64 / 1_000_000.0;
+            }
+            if let Some(&timestamp) = self.render_timestamp_query_set.get_last("process requests [end]") {
+                monitoring.process_requests_end = timestamp as f64 / 1_000_000.0;
+            }
+            if let Some(diff) = self.octree_update_timestamp_query_set.get_last_diff("octree update [begin]", "octree update [end]") {
+                let duration = diff as f64 / 1_000_000.0;
+                monitoring.octree_update = duration;
+
+                if let Some(&timestamp) = self.octree_update_timestamp_query_set.get_last("octree update [begin]") {
+                    monitoring.octree_update_begin = timestamp as f64 / 1_000_000.0;
+                }
+                if let Some(&timestamp) = self.octree_update_timestamp_query_set.get_last("octree update [end]") {
+                    monitoring.octree_update_end = timestamp as f64 / 1_000_000.0;
+                }
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                let mut event_data: HashMap<&str, MonitoringDataFrame> = HashMap::new();
+                event_data.insert("monitoring", monitoring);
+                let monitoring_event = web_sys::CustomEvent::new("monitoring").ok().unwrap();
+                monitoring_event.init_custom_event_with_can_bubble_and_cancelable_and_detail(
+                    "monitoring",
+                    false,
+                    false,
+                    &serde_wasm_bindgen::to_value(&event_data).expect("Could not serialize monitoring event data"),
+                );
+                self.event_target.dispatch_event(&monitoring_event).ok();
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            log::info!("Monitoring: {:?}", monitoring);
         }
     }
 }
