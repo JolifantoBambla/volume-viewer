@@ -199,10 +199,12 @@ async function createUI(offscreenRenderer, config) {
         view: 'graph',
         max: 0.2,
     });
+    /*
     const octreeUpdateFpsGraph = monitoringFolder.addBlade({
         view: 'fpsgraph',
         label: 'Octree update (FPS)',
     });
+    */
     monitoringFolder.addMonitor(monitoringParams, 'octree_update', {
         label: 'Octree update (ms [0, 0.1])',
         view: 'graph',
@@ -224,10 +226,12 @@ async function createUI(offscreenRenderer, config) {
         lruUpdateFpsGraph.controller_.valueController.stopwatch_.end({getTime: () => monitoring.lruUpdateEnd});
         processRequestsFpsGraph.controller_.valueController.stopwatch_.begin({getTime: () => monitoring.processRequestsBegin});
         processRequestsFpsGraph.controller_.valueController.stopwatch_.end({getTime: () => monitoring.processRequestsEnd});
+        /*
         if (monitoring.octree_update > 0.0) {
             octreeUpdateFpsGraph.controller_.valueController.stopwatch_.begin({getTime: () => monitoring.octreeUpdateBegin});
             octreeUpdateFpsGraph.controller_.valueController.stopwatch_.end({getTime: () => monitoring.octreeUpdateEnd});
         }
+         */
     };
 
     /*
