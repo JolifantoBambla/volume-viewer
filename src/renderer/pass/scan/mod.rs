@@ -154,6 +154,7 @@ impl Scan {
         let mut compute_pass: ComputePass =
             command_encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Label::from("Scan"),
+                ..Default::default()
             });
         self.encode_to_pass(&mut compute_pass);
     }

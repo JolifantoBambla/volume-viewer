@@ -24,7 +24,7 @@ impl Display for CapacityReachedError {
 impl Error for CapacityReachedError {}
 
 pub struct TimeStampQuerySet {
-    query_set: QuerySet,
+    query_set: Arc<QuerySet>,
     resolve_buffer: Buffer<u64>,
     label: String,
     capacity: usize,
@@ -34,11 +34,11 @@ pub struct TimeStampQuerySet {
 impl TimeStampQuerySet {
     pub fn new(label: &str, capacity: usize, gpu: &Arc<Gpu>) -> Self {
         Self {
-            query_set: gpu.device().create_query_set(&QuerySetDescriptor {
+            query_set: Arc::new(gpu.device().create_query_set(&QuerySetDescriptor {
                 label: Label::from(label),
                 ty: QueryType::Timestamp,
                 count: capacity as u32,
-            }),
+            })),
             resolve_buffer: Buffer::new_zeroed(
                 label,
                 capacity,
@@ -72,6 +72,38 @@ impl TimeStampQuerySet {
         }
     }
 
+    pub fn make_compute_pass_timestamp_write(&mut self, location: wgpu::ComputePassTimestampLocation) -> Result<wgpu::ComputePassTimestampWrite, CapacityReachedError> {
+        if self.next_index >= self.capacity {
+            self.next_index += 1;
+            Err(CapacityReachedError {
+                capacity: self.capacity,
+                index: self.next_index,
+            })
+        } else {
+            let timestamp_write = wgpu::ComputePassTimestampWrite {
+                query_set: &self.query_set,
+                query_index: self.next_index as u32,
+                location,
+            };
+            self.next_index += 1;
+            Ok(timestamp_write)
+        }
+    }
+
+    pub fn next_index(&mut self) -> Result<u32, CapacityReachedError> {
+        if self.next_index >= self.capacity {
+            self.next_index += 1;
+            Err(CapacityReachedError {
+                capacity: self.capacity,
+                index: self.next_index,
+            })
+        } else {
+            let index = self.next_index as u32;
+            self.next_index += 1;
+            Ok(index)
+        }
+    }
+
     pub fn resolve(
         &mut self,
         command_encoder: &mut CommandEncoder,
@@ -100,6 +132,11 @@ impl TimeStampQuerySet {
 
     pub fn create_resolve_buffer(&self) -> MappableBuffer<u64> {
         MappableBuffer::from_buffer(&self.resolve_buffer)
+    }
+
+
+    pub fn query_set(&self) -> &QuerySet {
+        &self.query_set
     }
 }
 

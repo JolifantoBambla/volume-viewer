@@ -192,7 +192,7 @@ pub struct OctreeUpdate {
     on_mapped_passes: OnMappedPasses,
 
     // todo: remove (debug)
-    break_point: BreakPointBuffers,
+    break_point: Option<BreakPointBuffers>,
 }
 
 // with min max:
@@ -274,39 +274,45 @@ impl OctreeUpdate {
 
         // todo: split up into multiple passes for finer timestamp query granularity
         #[cfg(feature = "timestamp-query")]
-        timestamp_query_helper.write_timestamp(command_encoder);
+        let timestamp_writes = timestamp_query_helper.make_compute_pass_timestamp_write_pair();
+        #[cfg(not(feature = "timestamp-query"))]
+        let timestamp_writes = Vec::new();
+
         // todo: encode on unmapped passes
-        {
-            let mut update_octree_pass =
-                command_encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Label::from("update octree"),
-                });
-            self.on_mapped_first_time_passes.encode(
-                &mut update_octree_pass,
-                cache_update_meta.mapped_first_time_local_brick_ids().len() as u32,
-            );
-            self.on_mapped_passes.encode(
-                &mut update_octree_pass,
-                cache_update_meta.mapped_local_brick_ids().len() as u32,
-            );
-        }
-        #[cfg(feature = "timestamp-query")]
-        timestamp_query_helper.write_timestamp(command_encoder);
-    }
-    pub fn copy_to_readable(&self, command_encoder: &mut CommandEncoder) {
-        self.break_point.copy_to_read_buffer(
-            command_encoder,
-            &self.helper_buffer_a,
-            &self.helper_buffer_b,
+        let mut update_octree_pass =
+            command_encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Label::from("update octree"),
+                timestamp_writes: timestamp_writes.as_slice(),
+            });
+        self.on_mapped_first_time_passes.encode(
+            &mut update_octree_pass,
+            cache_update_meta.mapped_first_time_local_brick_ids().len() as u32,
+        );
+        self.on_mapped_passes.encode(
+            &mut update_octree_pass,
+            cache_update_meta.mapped_local_brick_ids().len() as u32,
         );
     }
+    pub fn copy_to_readable(&self, command_encoder: &mut CommandEncoder) {
+        if let Some(break_point) = self.break_point.as_ref() {
+            break_point.copy_to_read_buffer(
+                command_encoder,
+                &self.helper_buffer_a,
+                &self.helper_buffer_b,
+            );
+        }
+    }
     pub fn map_break_point(&self) {
-        self.break_point.map();
+        if let Some(break_point) = self.break_point.as_ref() {
+            break_point.map();
+        }
     }
     pub fn maybe_print_break_point(&self) {
-        if self.break_point.maybe_print() {
-            //self.helper_buffer_a.buffer().destroy();
-            //self.helper_buffer_b.buffer().destroy();
+        if let Some(break_point) = self.break_point.as_ref() {
+            if break_point.maybe_print() {
+                //self.helper_buffer_a.buffer().destroy();
+                //self.helper_buffer_b.buffer().destroy();
+            }
         }
     }
 
@@ -882,7 +888,7 @@ impl OctreeUpdate {
             dependent_passes: on_cache_update_compute_passes,
         };
 
-        let break_point = BreakPointBuffers::new(&helper_buffer_a, &helper_buffer_b);
+        let break_point = None; //Some(BreakPointBuffers::new(&helper_buffer_a, &helper_buffer_b));
         Self {
             gpu: gpu.clone(),
             cache_update_meta_buffer,

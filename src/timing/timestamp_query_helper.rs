@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use wgpu::{CommandEncoder, MapMode};
+use wgpu::{CommandEncoder, MapMode, QuerySet};
 use wgpu_framework::context::Gpu;
 use wgpu_framework::gpu::buffer::MappableBuffer;
 use wgpu_framework::gpu::query_set::TimeStampQuerySet;
@@ -38,6 +38,38 @@ impl TimestampQueryHelper {
         if let Err(error) = self.query_set.write_timestamp(command_encoder) {
             log::error!("could not write timestamp: {}", error);
         };
+    }
+
+    pub fn make_compute_pass_timestamp_write(&mut self, location: wgpu::ComputePassTimestampLocation) -> Option<wgpu::ComputePassTimestampWrite> {
+        match self.query_set.make_compute_pass_timestamp_write(location) {
+            Ok(timestamp_write) => Some(timestamp_write),
+            Err(err) => {
+                log::error!("could not make compute pass beginning timestamp: {}", err);
+                None
+            },
+        }
+    }
+
+    pub fn make_compute_pass_timestamp_write_pair(&mut self) -> Vec<wgpu::ComputePassTimestampWrite> {
+        let beginning_index = self.query_set.next_index();
+        let end_index = self.query_set.next_index();
+
+        let mut timestamp_writes = Vec::new();
+        if let Ok(query_index) = beginning_index {
+            timestamp_writes.push(wgpu::ComputePassTimestampWrite {
+                query_set: self.query_set(),
+                query_index,
+               location:  wgpu::ComputePassTimestampLocation::Beginning,
+            });
+        }
+        if let Ok(query_index) = end_index {
+            timestamp_writes.push(wgpu::ComputePassTimestampWrite {
+                query_set: self.query_set(),
+                query_index,
+                location:  wgpu::ComputePassTimestampLocation::End,
+            });
+        }
+        timestamp_writes
     }
 
     pub fn resolve(&mut self, command_encoder: &mut CommandEncoder) {
@@ -79,6 +111,43 @@ impl TimestampQueryHelper {
                     .push(*timestamps.get(i).unwrap());
             }
             self.resolve_buffer_pool.push(buffer);
+        }
+    }
+
+
+    pub fn query_set(&self) -> &QuerySet {
+        self.query_set.query_set()
+    }
+
+    pub fn get_diffs(&self, start: &str, end: &str) -> Option<Vec<u64>> {
+        if !self.timings.contains_key(start) || !self.timings.contains_key(end) {
+            None
+        } else {
+            let start_timestamps = self.timings.get(start).unwrap();
+            let end_timestamps = self.timings.get(end).unwrap();
+            if start_timestamps.len() == end_timestamps.len() && !start_timestamps.is_empty() {
+                let diffs = (0..start_timestamps.len())
+                    .map(|i| end_timestamps.get(i).unwrap() - start_timestamps.get(i).unwrap())
+                    .collect();
+                Some(diffs)
+            } else {
+                None
+            }
+        }
+    }
+
+    pub fn get_last_diff(&self, start: &str, end: &str) -> Option<u64> {
+        if !self.timings.contains_key(start) || !self.timings.contains_key(end) {
+            None
+        } else {
+            let start_timestamps = self.timings.get(start).unwrap();
+            let end_timestamps = self.timings.get(end).unwrap();
+            if start_timestamps.len() == end_timestamps.len() && !start_timestamps.is_empty() {
+                let diffs = end_timestamps.last().unwrap() - start_timestamps.last().unwrap();
+                Some(diffs)
+            } else {
+                None
+            }
         }
     }
 }

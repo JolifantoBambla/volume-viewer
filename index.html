@@ -47,7 +47,7 @@
         }),
         new PreprocessConfig({
             preprocessingMethod: PREPROCESS_METHOD_CAST,
-            isZeroThreshold: 0.01,
+            isZeroThreshold: 0.00,
         }),
         new BrickConfig({
             minSize: [32, 32, 32],
@@ -69,6 +69,7 @@
 
     async function start() {
         try {
+            document.title = `Volume Viewer - ${dataSourceConfig.dataStore.path.substring(dataSourceConfig.dataStore.path.lastIndexOf('/'), dataSourceConfig.dataStore.path.lastIndexOf('.'))}`;
             const {offscreenRenderer, volumeRendererSettings} = await createOffscreenRenderer(new Config({
                 canvas: {
                     canvasId: 'canvas'

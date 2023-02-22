@@ -109,7 +109,10 @@ impl DVR {
         output_extent: &wgpu::Extent3d,
     ) {
         let mut cpass =
-            command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: None,
+                ..Default::default()
+            });
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, bind_group, &[]);
         cpass.insert_debug_marker(self.label());

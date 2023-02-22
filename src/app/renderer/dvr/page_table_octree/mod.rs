@@ -83,26 +83,26 @@ impl PageTableOctreeDVR {
         command_encoder: &mut wgpu::CommandEncoder,
         bind_group: &BindGroup,
         output_extent: &wgpu::Extent3d,
-        #[cfg(feature = "timestamp-query")] timestamp_query_set: &mut TimestampQueryHelper,
+        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
         #[cfg(feature = "timestamp-query")]
-        timestamp_query_set.write_timestamp(command_encoder);
-        {
-            let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Ray Guided DVR"),
-            });
-            cpass.set_pipeline(&self.pipeline);
-            cpass.set_bind_group(0, bind_group, &[]);
-            cpass.set_bind_group(1, &self.internal_bind_group, &[]);
-            cpass.insert_debug_marker(self.label());
-            cpass.dispatch_workgroups(
-                (output_extent.width as f32 / 16.).ceil() as u32,
-                (output_extent.height as f32 / 16.).ceil() as u32,
-                1,
-            );
-        }
-        #[cfg(feature = "timestamp-query")]
-        timestamp_query_set.write_timestamp(command_encoder);
+        let timestamp_writes = timestamp_query_helper.make_compute_pass_timestamp_write_pair();
+        #[cfg(not(feature = "timestamp-query"))]
+        let timestamp_writes = Vec::new();
+
+        let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Ray Guided DVR"),
+            timestamp_writes: timestamp_writes.as_slice(),
+        });
+        cpass.set_pipeline(&self.pipeline);
+        cpass.set_bind_group(0, bind_group, &[]);
+        cpass.set_bind_group(1, &self.internal_bind_group, &[]);
+        cpass.insert_debug_marker(self.label());
+        cpass.dispatch_workgroups(
+            (output_extent.width as f32 / 16.).ceil() as u32,
+            (output_extent.height as f32 / 16.).ceil() as u32,
+            1,
+        );
     }
 }
 

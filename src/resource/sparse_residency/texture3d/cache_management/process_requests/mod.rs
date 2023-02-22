@@ -93,23 +93,23 @@ impl ProcessRequests {
         self.request_list.clear();
 
         #[cfg(feature = "timestamp-query")]
-        timestamp_query_helper.write_timestamp(command_encoder);
-        {
-            let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Process Requests"),
-            });
-            cpass.set_pipeline(&self.pipeline);
-            cpass.set_bind_group(0, bind_group, &[]);
-            cpass.set_bind_group(1, &self.internal_bind_group, &[]);
-            cpass.insert_debug_marker(self.label());
-            cpass.dispatch_workgroups(
-                (output_extent.width as f32 / 4.).ceil() as u32,
-                (output_extent.height as f32 / 4.).ceil() as u32,
-                (output_extent.depth_or_array_layers as f32 / 4.).ceil() as u32,
-            );
-        }
-        #[cfg(feature = "timestamp-query")]
-        timestamp_query_helper.write_timestamp(command_encoder);
+        let timestamp_writes = timestamp_query_helper.make_compute_pass_timestamp_write_pair();
+        #[cfg(not(feature = "timestamp-query"))]
+        let timestamp_writes = Vec::new();
+
+        let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Process Requests"),
+            timestamp_writes: timestamp_writes.as_slice(),
+        });
+        cpass.set_pipeline(&self.pipeline);
+        cpass.set_bind_group(0, bind_group, &[]);
+        cpass.set_bind_group(1, &self.internal_bind_group, &[]);
+        cpass.insert_debug_marker(self.label());
+        cpass.dispatch_workgroups(
+            (output_extent.width as f32 / 4.).ceil() as u32,
+            (output_extent.height as f32 / 4.).ceil() as u32,
+            (output_extent.depth_or_array_layers as f32 / 4.).ceil() as u32,
+        );
     }
 
     pub fn encode_copy_result_to_readable(&self, encoder: &mut CommandEncoder) {

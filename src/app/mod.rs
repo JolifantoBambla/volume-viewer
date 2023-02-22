@@ -393,6 +393,12 @@ impl OnCommandsSubmitted for App {
 impl OnFrameEnd for App {
     fn on_frame_end(&mut self, _input: &Input) {
         // todo: dispatch frame end canvas event
+
+        #[cfg(feature = "timestamp-query")]
+        if let Some(diff) = self.render_timestamp_query_set.get_last_diff("DVR [begin]", "DVR [end]") {
+            let duration = diff as f64 / 1_000_000.0;
+            log::info!("Rendering took {duration} milliseconds");
+        }
     }
 }
 
