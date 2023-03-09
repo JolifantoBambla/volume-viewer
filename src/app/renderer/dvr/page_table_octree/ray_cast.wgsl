@@ -288,7 +288,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 continue;
             }
 
-            let target_resolution = va_compute_lod(distance_to_camera, channel, lod_factor);
+            let target_resolution = va_compute_lod(distance_to_camera, channel, channel_settings_list.channels[channel].lod_factor);
             let target_mask = node_make_mask_for_resolution(target_resolution);
             let resolution_mapping = node_get_partially_mapped_resolutions(node);
             let target_partially_mapped = (target_mask & resolution_mapping) > 0;

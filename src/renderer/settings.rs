@@ -9,6 +9,9 @@ pub struct CreateOptions {
     #[serde(rename = "maxResolutions")]
     pub max_resolutions: u32,
 
+    #[serde(rename = "cacheSize")]
+    pub cache_size: UVec3,
+
     #[serde(rename = "leafNodeSize")]
     pub leaf_node_size: UVec3,
 }

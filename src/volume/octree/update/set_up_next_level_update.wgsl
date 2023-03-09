@@ -18,7 +18,7 @@
 @group(2) @binding(2) var<storage, read_write> node_helper_buffer_a: array<u32>;
 
 @compute
-@workgroup_size(64, 1, 1)
+@workgroup_size(256, 1, 1)
 fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     let num_channels = page_directory_meta.max_channels;
 

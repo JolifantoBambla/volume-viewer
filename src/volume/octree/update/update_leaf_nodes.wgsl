@@ -19,7 +19,7 @@
 @group(2) @binding(1) var<storage, read_write> node_helper_buffer_b: array<u32>;
 
 @compute
-@workgroup_size(64, 1, 1)
+@workgroup_size(256, 1, 1)
 fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     let subdivision_index = subdivision_get_leaf_node_level_index();
     let num_channels = page_directory_meta.max_channels;

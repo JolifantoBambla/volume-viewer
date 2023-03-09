@@ -27,7 +27,7 @@
 const THREAD_BLOCK_SIZE: vec3<u32> = vec3<u32>(2, 2, 2);
 
 @compute
-@workgroup_size(64, 1, 1)
+@workgroup_size(256, 1, 1)
 fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     let brick_size = page_directory_meta.brick_size;
     let processing_size = brick_size / THREAD_BLOCK_SIZE;

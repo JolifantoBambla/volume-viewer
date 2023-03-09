@@ -59,11 +59,13 @@ export class ChannelSettings {
 export class VolumeRendererCreateOptions {
     maxVisibleChannels;
     maxResolutions;
+    cacheSize;
     leafNodeSize;
 
-    constructor({maxVisibleChannels = 17, maxResolutions = 15, leafNodeSize = [32, 32, 32]}) {
+    constructor({maxVisibleChannels = 17, maxResolutions = 15, cacheSize = [1024, 1024, 1024], leafNodeSize = [32, 32, 32]}) {
         this.maxVisibleChannels = maxVisibleChannels;
         this.maxResolutions = maxResolutions;
+        this.cacheSize = cacheSize;
         this.leafNodeSize = leafNodeSize;
     }
 }

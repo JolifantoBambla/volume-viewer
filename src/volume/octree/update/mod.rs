@@ -19,7 +19,7 @@ use wgpu_framework::context::Gpu;
 use wgpu_framework::gpu::buffer::{Buffer, MappableBuffer};
 use wgsl_preprocessor::WGSLPreprocessor;
 
-const WORKGROUP_SIZE: u32 = 64;
+const WORKGROUP_SIZE: u32 = 256;
 const MIN_MAX_THREAD_BLOCK_SIZE: UVec3 = UVec3::new(2, 2, 2);
 
 #[repr(C)]
@@ -608,8 +608,9 @@ impl OctreeUpdate {
                 }],
             });
             log::info!(
-                "workgroup size = {}",
-                f32::ceil(num_leaf_nodes as f32 / WORKGROUP_SIZE as f32) as u32
+                "workgroup size = {}, num leaf nodes 0 {}",
+                f32::ceil(num_leaf_nodes as f32 / WORKGROUP_SIZE as f32) as u32,
+                num_leaf_nodes
             );
             StaticComputeEncodeDescriptor::new_1d(
                 update_node_min_max_values_pipeline.pipeline(),

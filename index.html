@@ -20,7 +20,7 @@
     import {
         VolumeDataSourceConfig,
         DataStoreConfig,
-        BrickConfig,
+        PageTableConfig,
         PreprocessConfig,
         PREPROCESS_METHOD_CAST,
         PREPROCESS_METHOD_SCALE_TO_MAX,
@@ -43,29 +43,45 @@
     const dataSourceConfig = new VolumeDataSourceConfig(
         new DataStoreConfig({
             store: 'http://localhost:8005/',
-            path: 'bonsai.zarr', //'stag_beetle.zarr',//'ome-zarr/m-128x128.ome.zarr/0',
+            path: '3_01_r3d.zarr', //'bonsai.zarr', //'stag_beetle.zarr',//'ome-zarr/m-128x128.ome.zarr/0',
         }),
         new PreprocessConfig({
             preprocessingMethod: PREPROCESS_METHOD_CAST,
             isZeroThreshold: 0.00,
         }),
-        new BrickConfig({
+        new PageTableConfig({
             minSize: [32, 32, 32],
-            maxSize: [256, 256, 256],
+            maxSize: [32, 32, 32],
+            //maxSize: [256, 256, 256],
         }),
     );
     const rendererCreateOptions = new VolumeRendererCreateOptions({
         maxVisibleChannels: 16,
         maxResolutions: 16,
+        cacheSize: [2048, 2048, 1024],
         leafNodeSize: [32, 32, 32],
     });
+    const cacheSizeConfig = {
+        cacheSize: {
+            x: rendererCreateOptions.cacheSize[0],
+            y: rendererCreateOptions.cacheSize[1],
+            z: rendererCreateOptions.cacheSize[2],
+        }
+    };
+    const brickSizeConfig = {
+        brickSize: {
+            x: dataSourceConfig.bricks.minimumSize[0],
+            y: dataSourceConfig.bricks.minimumSize[1],
+            z: dataSourceConfig.bricks.minimumSize[2],
+        }
+    };
     const leafNodeConfig = {
         size: {
             x: rendererCreateOptions.leafNodeSize[0],
             y: rendererCreateOptions.leafNodeSize[1],
             z: rendererCreateOptions.leafNodeSize[2],
         }
-    }
+    };
 
     async function start() {
         try {
@@ -113,6 +129,30 @@
     preprocessingUI.addInput(dataSourceConfig.preprocessing, 'isZeroThreshold', {
         label: 'Zero threshold',
         min: 0.0, max: 1.0, step: 0.0001,
+    });
+
+    const pageTableUI = pane.addFolder({
+        title: 'Page Table Settings',
+        expanded: true,
+    });
+    const brickSizeInput = pageTableUI.addInput(brickSizeConfig, 'brickSize', {
+        label: 'Brick size',
+        x: {min: 16, max: 256, step: 16},
+        y: {min: 16, max: 256, step: 16},
+        z: {min: 16, max: 256, step: 16}
+    });
+    brickSizeInput.on('change', (e) => {
+        dataSourceConfig.bricks.minimumSize = [e.value.x, e.value.y, e.value.z];
+        dataSourceConfig.bricks.maximumSize = [e.value.x, e.value.y, e.value.z];
+    });
+    const cacheSizeInput = pageTableUI.addInput(cacheSizeConfig, 'cacheSize', {
+        label: 'Cache size',
+        x: {min: 256, max: 4096, step: 256},
+        y: {min: 256, max: 4096, step: 256},
+        z: {min: 256, max: 4096, step: 256}
+    });
+    cacheSizeInput.on('change', (e) => {
+        rendererCreateOptions.cacheSize = [e.value.x, e.value.y, e.value.z];
     });
 
     const rendererUI = pane.addFolder({

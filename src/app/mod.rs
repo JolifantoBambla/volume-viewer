@@ -34,6 +34,7 @@ use winit::event_loop::EventLoop;
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
 use crate::timing::monitoring::MonitoringDataFrame;
+use crate::util::extent::uvec_to_extent;
 
 /// The `GLOBAL_EVENT_LOOP_PROXY` is a means to send data to the running application.
 /// It is initialized by `start_event_loop`.
@@ -112,6 +113,7 @@ impl App {
                 max_visible_channels: render_settings.create_options.max_visible_channels,
                 max_resolutions: render_settings.create_options.max_resolutions,
                 visible_channel_indices: visible_channel_indices.clone(),
+                cache_size: uvec_to_extent(&render_settings.create_options.cache_size),
                 ..Default::default()
             },
             &wgsl_preprocessor,

@@ -25,7 +25,7 @@
 // Maps bricks to octree leaf nodes and marks their local index in node_helper_buffer_a as updated with the updated
 // non-zero bitmask of partially mapped resolutions
 @compute
-@workgroup_size(64, 1, 1)
+@workgroup_size(256, 1, 1)
 fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     let brick_id_index = global_invocation_id.x;
     if (brick_id_index >= cache_update_meta.num_mapped) {

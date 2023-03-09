@@ -488,7 +488,7 @@ export class PreprocessConfig {
     }
 }
 
-export class BrickConfig {
+export class PageTableConfig {
     minimumSize;
     maximumSize;
 
