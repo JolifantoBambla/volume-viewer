@@ -88,7 +88,7 @@ async function createUI(offscreenRenderer, config) {
         {
             options: {
                 Octree: RENDER_MODE_OCTREE,
-                "Page Table": RENDER_MODE_PAGE_TABLE
+                "Page Table": RENDER_MODE_PAGE_TABLE,
             }
         }
     );

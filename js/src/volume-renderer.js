@@ -78,7 +78,7 @@ export class VolumeRendererSettings {
     backgroundColor;
     channelSettings;
 
-    constructor({createOptions = new VolumeRendererCreateOptions({}), renderMode = RENDER_MODE_OCTREE, stepScale = 1.0, maxSteps = 300, backgroundColor = new Color({}),channelSettings = [new ChannelSettings({})]}) {
+    constructor({createOptions = new VolumeRendererCreateOptions({}), renderMode = RENDER_MODE_PAGE_TABLE, stepScale = 1.0, maxSteps = 300, backgroundColor = new Color({}),channelSettings = [new ChannelSettings({})]}) {
         // todo: validation
         this.createOptions = createOptions;
         this.renderMode = renderMode;

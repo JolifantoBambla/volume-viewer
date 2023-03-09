@@ -227,7 +227,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
 
         for (var channel = 0u; channel < num_channels; channel += 1u) {
-            let channel_lod = va_compute_lod(distance_to_camera, channel, channel_settings_list.channels[channel].lod_factor);
+            let channel_lod = va_compute_lod(distance_to_camera, channel, channel_settings_list.channels[channel].lod_factor * max_component(inv_high_res_size));
             let node = va_get_node(p, channel_lod, channel, !requested_brick);
             requested_brick = requested_brick || node.requested_brick;
             if (node.is_mapped) {
