@@ -3,6 +3,7 @@
 @include(aabb)
 @include(camera)
 @include(constant)
+@include(grid_leap)
 @include(page_table)
 @include(ray)
 @include(timestamp)
@@ -205,6 +206,11 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let first_channel_index = channel_settings_list.channels[0].page_table_index;
 
+    // todo: remove (debug)
+    var last_node_index = 4294967295u;
+
+    let grid_ray = make_grid_ray(ray_os, t_max);
+
     for (var t = t_min; t < t_max; t += dt) {
         let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
         let lod = select_level_of_detail(distance_to_camera, highest_res, lowest_res, lod_factor);
@@ -223,32 +229,44 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
         var channel = 0u;
         // todo: make start level configurable (e.g., start at level 2 because 0 and 1 are unlikely to be empty anyway)
-        let start_subdivision_index = 0u;
+        let start_subdivision_index = 2u;
         var subdivision_index = start_subdivision_index;
         var empty_channels = 0u;
+        var homogeneous_channels = 0u;
 
-        var last_min = 256u;
-        var last_max = 256u;
+        // todo: remove (debug)
+        var terminated_at_index = 0u;
+
+        var last_channel = channel;
+        var lower_threshold = u32(floor((channel_settings_list.channels[channel].threshold_lower - EPSILON) * 255.0));
+        var upper_threshold = u32(floor((channel_settings_list.channels[channel].threshold_upper + EPSILON) * 255.0));
+        var channel_lod_factor = channel_settings_list.channels[channel].lod_factor * max_component(inv_high_res_size);
 
         while (subdivision_index <= target_culling_level && channel < num_visible_channels) {
+            if (last_channel != channel) {
+                lower_threshold = u32(floor((channel_settings_list.channels[channel].threshold_lower - EPSILON) * 255.0));
+                upper_threshold = u32(floor((channel_settings_list.channels[channel].threshold_upper + EPSILON) * 255.0));
+                channel_lod_factor = channel_settings_list.channels[channel].lod_factor * max_component(inv_high_res_size);
+            }
+
             let multichannel_global_node_index = to_multichannel_node_index(
                 subdivision_idx_compute_node_index(subdivision_index, p),
                 max_num_channels,
                 page_directory_meta_get_channel_index(channel_settings_list.channels[channel].page_table_index)
             );
+
+            terminated_at_index = multichannel_global_node_index;
+
             let node = node_idx_load_global(multichannel_global_node_index);
             if (node_has_no_data(node)) {
                 if (!requested_brick) {
                     pt_request_brick(p, channel_settings_list.channels[channel].min_lod, channel);
                     requested_brick = true;
                 }
-                color = BLUE;
                 channel += 1;
                 continue;
             }
 
-            let lower_threshold = u32(floor((channel_settings_list.channels[channel].threshold_lower - EPSILON) * 255.0));
-            let upper_threshold = u32(floor((channel_settings_list.channels[channel].threshold_upper + EPSILON) * 255.0));
             if (node_is_empty(node, lower_threshold, upper_threshold)) {
                 channel += 1;
                 empty_channels += 1;
@@ -256,18 +274,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             }
             /*
             if (node_is_homogeneous(node, homogeneous_threshold)) {
-                let value = f32(node_get_min(node)) / 255.0;
-                let trans_sample = channel_settings_list.channels[channel].color;
-                var val_color = float4(trans_sample.rgb, value * trans_sample.a);
-                val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
-                color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
-                color.a += (1.0 - color.a) * val_color.a;
-
-                if (is_saturated(color)) {
-                    break;
-                }
-
+                let node_value = f32(node_get_min(node)) / 255.0;
+                color += compute_lighting(node_value, channel, dt_scale, color);
                 channel += 1;
+                homogeneous_channels += 1;
                 continue;
             }
             */
@@ -280,15 +290,11 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 continue;
             }
             if (subdivision_index != target_culling_level) {
-
-                last_min = node_get_min(node);
-                last_max = node_get_max(node);
-
                 subdivision_index += 1;
                 continue;
             }
 
-            let target_resolution = va_compute_lod(distance_to_camera, channel, channel_settings_list.channels[channel].lod_factor * max_component(inv_high_res_size));
+            let target_resolution = va_compute_lod(distance_to_camera, channel, channel_lod_factor);
             let target_mask = node_make_mask_for_resolution(target_resolution);
             let resolution_mapping = node_get_partially_mapped_resolutions(node);
             let target_partially_mapped = (target_mask & resolution_mapping) > 0;
@@ -304,7 +310,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     pt_request_brick(p, target_resolution, channel);
                     requested_brick = true;
                 }
-
+                /*
                 let channel_lowest_lod = channel_settings_list.channels[channel].min_lod;
                 for (var res = target_resolution + 1; res <= channel_lowest_lod; res += 1) {
                     let brick = try_fetch_brick(p, res, channel, false);
@@ -323,15 +329,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                         }
                     }
                 }
+                */
             }
 
-            if (value >= channel_settings_list.channels[channel].threshold_lower && value <= channel_settings_list.channels[channel].threshold_upper) {
-                let trans_sample = channel_settings_list.channels[channel].color;
-                var val_color = float4(trans_sample.rgb, value * trans_sample.a);
-                val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
-                color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
-                color.a += (1.0 - color.a) * val_color.a;
-            }
+            compute_lighting(value, channel, dt_scale, &color);
 
             channel += 1;
         }
@@ -345,26 +346,96 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
 
         if (empty_channels == num_visible_channels) {
+
+            /*
+            if (terminated_at_index == last_node_index) {
+                //color = RED;
+                //break;
+            }
+            */
+
+            let p_test = p;// + ray_os.direction * 0.0001;
             let subdivision_shape = vec3<f32>(subdivision_idx_get_shape(subdivision_index));
             let node_step = vec3<i32>(sign(ray_os.direction)); // todo: this is constant per invocation
-            let node_subscript = subdivision_idx_compute_subscript(subdivision_index, p);
+            let node_subscript = subdivision_idx_compute_subscript(subdivision_index, p_test);
 
+            /*
+            let node_aabb = AABB(
+                vec3<f32>(node_subscript) / subdivision_shape,
+                vec3<f32>(node_subscript + vec3<u32>(1)) / subdivision_shape
+            );
+            let node_intersection = intersect_aabb(ray_os, node_aabb);
+            if (node_intersection.hit == false) {
+                color = RED;
+                break;
+            }
+            let t_jump = node_intersection.t_max - t;
+            */
+
+            // when going the positive direction, we want to check the node bound's max. axis, otherwise we'll use the
+            // node bound's min. axis, i.e., the axis we already have in the subscript
             let next_axis_indices = vec3<i32>(node_subscript) + vec3<i32>(saturate(sign(ray_os.direction)));
+
+            // to compute the distance we can jump over, we first compute the normalized floating point coordinates of
+            // the next axes.
             // note: we don't use `subscript_to_normalized_address` here because we might need values outside the unit cube
             let next_axis_coords = vec3<f32>(next_axis_indices) / subdivision_shape;
-            var t_jump = POSITIVE_INFINITY;
+
+            // for each axis, we compute the distance to the next axis intersection
+            var t_jump = t_max;
             for (var i: u32 = 0u; i < 3u; i += 1u) {
                 if (node_step[i] != 0) {
-                    t_jump = min(t_jump, (next_axis_coords[i] - p[i]) / ray_os.direction[i]);
+                    let jump = (next_axis_coords[i] - p_test[i]) / ray_os.direction[i];
+                    if (jump > 0) {
+                        t_jump = min(t_jump, jump);
+                    }
                 }
             }
 
+            // we need to make sure that we jump to a sample, so we jump over (t_jump / dt) + 1 samples (+1 is in the
+            // continuing block of the loop
             let num_empty_samples = floor(max(0, t_jump) / dt);
+
+            /*
+            if (t_jump < 0) {
+                color = MAGENTA;
+                break;
+            }
+            if (u32(num_empty_samples) < 1u) {
+                color = BLUE;
+                break;
+            }
+            */
+
+
+            // we compute the actual jump distance and advance the ray
             let dt_jump = dt * num_empty_samples;
+
+
+            //let dt_jump = compute_node_jump_distance(p, subdivision_index, dt, grid_ray);
             p += ray_os.direction * dt_jump;
             t += dt_jump;
+
+            /*
+            if (t >= t_max) {
+                color = GREEN;
+                break;
+            }
+            if (any(p > float3(1.0)) || any(p < float3())) {
+                color = CYAN;
+                break;
+            }
+            */
         }
+
         p += ray_os.direction * dt;
+
+        // todo: remove(debug)
+        last_node_index = terminated_at_index;
+    }
+
+    if (steps_taken <= 3u) {
+        //color = YELLOW;
     }
 
     debug(pixel, saturate(color));
@@ -428,4 +499,34 @@ fn try_fetch_brick(ray_sample: float3, lod: u32, channel: u32, request_bricks: b
         float3(),
         requested_brick
     );
+}
+
+fn compute_lighting(voxel_value: f32, channel: u32, sampling_frequency_factor: f32, color: ptr<function, vec4<f32>>) {
+    let lower_bound = channel_settings_list.channels[channel].threshold_lower;
+    let upper_bound = channel_settings_list.channels[channel].threshold_upper;
+    if (voxel_value >= lower_bound && voxel_value <= upper_bound) {
+        // todo: transfer functions
+        let transfer_function_sample = channel_settings_list.channels[channel].color;
+        var voxel_color = float4(transfer_function_sample.rgb, voxel_value * transfer_function_sample.a);
+        voxel_color.a = 1.0 - pow(1.0 - voxel_color.a, sampling_frequency_factor);
+
+        let transparency = (1.0 - (*color).a) * voxel_color.a;
+        *color += vec4<f32>(transparency * voxel_color.rgb, transparency);
+    }
+}
+
+fn compute_node_jump_distance(position: vec3<f32>, subdivision_index: u32, dt: f32, grid_ray: GridRay) -> f32 {
+    let subdivision_shape = vec3<f32>(subdivision_idx_get_shape(subdivision_index));
+    let node_subscript = subdivision_idx_compute_subscript(subdivision_index, position);
+
+    // when going the positive direction, we want to check the node bound's max. axis, otherwise we'll use the
+    // node bound's min. axis, i.e., the axis we already have in the subscript
+    let next_axis_indices = vec3<i32>(node_subscript) + grid_ray.grid_step;
+
+    // to compute the distance we can jump over, we first compute the normalized floating point coordinates of
+    // the next axes.
+    // note: we don't use `subscript_to_normalized_address` here because we might need values outside the unit cube
+    let next_axis_coords = vec3<f32>(next_axis_indices) / subdivision_shape;
+
+    return compute_jump_distance(position, next_axis_coords, dt, grid_ray);
 }

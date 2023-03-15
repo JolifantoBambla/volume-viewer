@@ -61,6 +61,8 @@ pub fn main(canvas: JsValue, volume_meta: JsValue, render_settings: JsValue) {
         serde_wasm_bindgen::from_value(volume_meta)
             .expect("Received invalid volume meta. Shutting down.");
 
+    log::info!("volume meta: {:?}", volume_meta);
+
     let render_settings: MultiChannelVolumeRendererSettings =
         serde_wasm_bindgen::from_value(render_settings)
             .expect("Received invalid render settings. Shutting down.");

@@ -35,6 +35,15 @@ fn node_is_empty(node: u32, minimum: u32, maximum: u32) -> bool {
     return (minimum > node_get_max(node)) || (maximum < node_get_min(node));
 }
 
+/*
+todo: @include(constant)
+fn node_is_empty_f32(node: u32, lower_threshold: f32, upper_threshold: f32) -> bool {
+    let lower_bound = u32(floor((lower_threshold - EPSILON) * 255.0));
+    let upper_bound = u32(floor((upper_threshold + EPSILON) * 255.0));
+    return node_is_empty(node, lower_bound, upper_bound);
+}
+*/
+
 fn node_is_homogeneous(node: u32, threshold: f32) -> bool {
     return distance(f32(node_get_max(node)), f32(node_get_min(node))) < threshold;
 }

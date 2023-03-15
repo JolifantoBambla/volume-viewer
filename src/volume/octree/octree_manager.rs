@@ -30,6 +30,8 @@ impl Octree {
             descriptor.leaf_node_size,
         );
 
+        log::info!("octree subdivisions: {:?}", subdivisions);
+
         let gpu_subdivisions = Buffer::from_data(
             "subdivisions",
             subdivisions.as_slice(),

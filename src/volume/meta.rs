@@ -70,10 +70,14 @@ impl BrickedMultiResolutionMultiVolumeMeta {
         box_volume(&self.bricks_per_dimension(level))
     }
 
+    pub fn normalized_scale(&self) -> Vec3 {
+        self.scale / self.scale.max_element()
+    }
+
     pub fn top_level_normalized_size(&self) -> Vec3 {
         self.resolutions
             .first()
-            .map(|r| r.normalized_volume_size())
+            .map(|r| r.normalized_volume_size() * self.normalized_scale())
             .unwrap_or(Vec3::ONE)
     }
 }

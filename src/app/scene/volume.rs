@@ -40,6 +40,7 @@ pub enum VolumeSceneObject {
 
 impl VolumeSceneObject {
     fn make_volume_transform(volume_manager: &VolumeManager) -> Mat4 {
+        log::info!("normalized volume size: {:?}", volume_manager.normalized_volume_size());
         Mat4::from_scale(volume_manager.normalized_volume_size()).mul_mat4(
             &glam::Mat4::from_translation(glam::Vec3::new(-0.5, -0.5, -0.5)),
         )

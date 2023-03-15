@@ -12,6 +12,7 @@ pub fn create_wgsl_preprocessor() -> WGSLPreprocessor {
         .include("dispatch_indirect", include_str!("dispatch_indirect.wgsl"))
         .include("gpu_list", include_str!("gpu_list.wgsl"))
         .include("grid_traversal", include_str!("grid_traversal.wgsl"))
+        .include("grid_leap", include_str!("grid_leap.wgsl"))
         .include(
             "multichannel_octree_util",
             include_str!("multichannel_octree_util.wgsl"),
