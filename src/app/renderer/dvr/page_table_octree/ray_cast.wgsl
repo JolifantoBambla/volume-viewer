@@ -2,8 +2,10 @@
 
 @include(aabb)
 @include(camera)
+@include(channel_settings)
 @include(constant)
 @include(grid_leap)
+@include(lighting)
 @include(page_table)
 @include(ray)
 @include(timestamp)
@@ -45,29 +47,13 @@ struct Uniforms {
     settings: GlobalSettings,
 }
 
-struct ChannelSettings {
-    color: float4,
-    channel_index: u32,
-    max_lod: u32,
-    min_lod: u32,
-    threshold_lower: f32,
-    threshold_upper: f32,
-    visible: u32,
-    page_table_index: u32,
-    lod_factor: f32,
-}
-
-struct ChannelSettingsList {
-    channels: array<ChannelSettings>,
-}
-
 // Bindings
 
 // The bindings in group 0 should never change (except maybe the result image for double buffering?)
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var volume_sampler: sampler;
 @group(0) @binding(2) var result: texture_storage_2d<rgba8unorm, write>;
-@group(0) @binding(3) var<storage> channel_settings_list: ChannelSettingsList;
+@group(0) @binding(3) var<storage> channel_settings: array<ChannelSettings>;
 
 // Each channel in the multiresolution, multichannel volume is represented by its own bind group of the following structure:
 // 1) page_directory: holds page entries for accessing the brick cache
@@ -116,17 +102,17 @@ fn request_brick(page_address: int3) {
 
 // todo: do I really need this?
 fn clone_channel_settings(channel_index: u32) -> ChannelSettings {
-    let channel_settings = channel_settings_list.channels[channel_index];
+    let cs = channel_settings[channel_index];
     return ChannelSettings(
-        channel_settings.color,
-        channel_settings.channel_index,
-        channel_settings.max_lod,
-        channel_settings.min_lod,
-        channel_settings.threshold_lower,
-        channel_settings.threshold_upper,
-        channel_settings.visible,
-        channel_settings.page_table_index,
-        channel_settings.lod_factor
+        cs.color,
+        cs.channel_index,
+        cs.max_lod,
+        cs.min_lod,
+        cs.threshold_lower,
+        cs.threshold_upper,
+        cs.visible,
+        cs.page_table_index,
+        cs.lod_factor
      );
 }
 
@@ -204,7 +190,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var dt = dt_scale * min_component(dt_vec);
     var p = ray_at(ray_os, t_min + offset * dt);
 
-    let first_channel_index = channel_settings_list.channels[0].page_table_index;
+    let first_channel_index = channel_settings[0].page_table_index;
 
     // todo: remove (debug)
     var last_node_index = 4294967295u;
@@ -238,21 +224,21 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         var terminated_at_index = 0u;
 
         var last_channel = channel;
-        var lower_threshold = u32(floor((channel_settings_list.channels[channel].threshold_lower - EPSILON) * 255.0));
-        var upper_threshold = u32(floor((channel_settings_list.channels[channel].threshold_upper + EPSILON) * 255.0));
-        var channel_lod_factor = channel_settings_list.channels[channel].lod_factor * max_component(inv_high_res_size);
+        var lower_threshold = u32(floor((channel_settings[channel].threshold_lower - EPSILON) * 255.0));
+        var upper_threshold = u32(floor((channel_settings[channel].threshold_upper + EPSILON) * 255.0));
+        var channel_lod_factor = channel_settings[channel].lod_factor * max_component(inv_high_res_size);
 
         while (subdivision_index <= target_culling_level && channel < num_visible_channels) {
             if (last_channel != channel) {
-                lower_threshold = u32(floor((channel_settings_list.channels[channel].threshold_lower - EPSILON) * 255.0));
-                upper_threshold = u32(floor((channel_settings_list.channels[channel].threshold_upper + EPSILON) * 255.0));
-                channel_lod_factor = channel_settings_list.channels[channel].lod_factor * max_component(inv_high_res_size);
+                lower_threshold = u32(floor((channel_settings[channel].threshold_lower - EPSILON) * 255.0));
+                upper_threshold = u32(floor((channel_settings[channel].threshold_upper + EPSILON) * 255.0));
+                channel_lod_factor = channel_settings[channel].lod_factor * max_component(inv_high_res_size);
             }
 
             let multichannel_global_node_index = to_multichannel_node_index(
                 subdivision_idx_compute_node_index(subdivision_index, p),
                 max_num_channels,
-                page_directory_meta_get_channel_index(channel_settings_list.channels[channel].page_table_index)
+                page_directory_meta_get_channel_index(channel_settings[channel].page_table_index)
             );
 
             terminated_at_index = multichannel_global_node_index;
@@ -260,7 +246,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             let node = node_idx_load_global(multichannel_global_node_index);
             if (node_has_no_data(node)) {
                 if (!requested_brick) {
-                    pt_request_brick(p, channel_settings_list.channels[channel].min_lod, channel);
+                    pt_request_brick(p, channel_settings[channel].min_lod, channel);
                     requested_brick = true;
                 }
                 channel += 1;
@@ -283,7 +269,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             */
             if (node_is_not_mapped(node)) {
                 if (!requested_brick) {
-                    pt_request_brick(p, channel_settings_list.channels[channel].min_lod, channel);
+                    pt_request_brick(p, channel_settings[channel].min_lod, channel);
                     requested_brick = true;
                 }
                 channel += 1;
@@ -310,8 +296,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     pt_request_brick(p, target_resolution, channel);
                     requested_brick = true;
                 }
-                /*
-                let channel_lowest_lod = channel_settings_list.channels[channel].min_lod;
+                // todo: use countLeadingZeros & countTrailingZeros here
+                let channel_lowest_lod = channel_settings[channel].min_lod;
                 for (var res = target_resolution + 1; res <= channel_lowest_lod; res += 1) {
                     let brick = try_fetch_brick(p, res, channel, false);
                     if (brick.is_mapped) {
@@ -320,7 +306,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     }
                 }
                 if (value < 0.0) {
-                    let channel_highest_lod = channel_settings_list.channels[channel].max_lod;
+                    let channel_highest_lod = channel_settings[channel].max_lod;
                     for (var res = target_resolution - 1; res >= channel_highest_lod; res -= 1) {
                         let brick = try_fetch_brick(p, res, channel, false);
                         if (brick.is_mapped) {
@@ -329,7 +315,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                         }
                     }
                 }
-                */
             }
 
             compute_lighting(value, channel, dt_scale, &color);
@@ -346,7 +331,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
 
         if (empty_channels == num_visible_channels) {
-
             /*
             if (terminated_at_index == last_node_index) {
                 //color = RED;
@@ -354,78 +338,9 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             }
             */
 
-            let p_test = p;// + ray_os.direction * 0.0001;
-            let subdivision_shape = vec3<f32>(subdivision_idx_get_shape(subdivision_index));
-            let node_step = vec3<i32>(sign(ray_os.direction)); // todo: this is constant per invocation
-            let node_subscript = subdivision_idx_compute_subscript(subdivision_index, p_test);
-
-            /*
-            let node_aabb = AABB(
-                vec3<f32>(node_subscript) / subdivision_shape,
-                vec3<f32>(node_subscript + vec3<u32>(1)) / subdivision_shape
-            );
-            let node_intersection = intersect_aabb(ray_os, node_aabb);
-            if (node_intersection.hit == false) {
-                color = RED;
-                break;
-            }
-            let t_jump = node_intersection.t_max - t;
-            */
-
-            // when going the positive direction, we want to check the node bound's max. axis, otherwise we'll use the
-            // node bound's min. axis, i.e., the axis we already have in the subscript
-            let next_axis_indices = vec3<i32>(node_subscript) + vec3<i32>(saturate(sign(ray_os.direction)));
-
-            // to compute the distance we can jump over, we first compute the normalized floating point coordinates of
-            // the next axes.
-            // note: we don't use `subscript_to_normalized_address` here because we might need values outside the unit cube
-            let next_axis_coords = vec3<f32>(next_axis_indices) / subdivision_shape;
-
-            // for each axis, we compute the distance to the next axis intersection
-            var t_jump = t_max;
-            for (var i: u32 = 0u; i < 3u; i += 1u) {
-                if (node_step[i] != 0) {
-                    let jump = (next_axis_coords[i] - p_test[i]) / ray_os.direction[i];
-                    if (jump > 0) {
-                        t_jump = min(t_jump, jump);
-                    }
-                }
-            }
-
-            // we need to make sure that we jump to a sample, so we jump over (t_jump / dt) + 1 samples (+1 is in the
-            // continuing block of the loop
-            let num_empty_samples = floor(max(0, t_jump) / dt);
-
-            /*
-            if (t_jump < 0) {
-                color = MAGENTA;
-                break;
-            }
-            if (u32(num_empty_samples) < 1u) {
-                color = BLUE;
-                break;
-            }
-            */
-
-
-            // we compute the actual jump distance and advance the ray
-            let dt_jump = dt * num_empty_samples;
-
-
-            //let dt_jump = compute_node_jump_distance(p, subdivision_index, dt, grid_ray);
+            let dt_jump = compute_node_jump_distance(p, subdivision_index, dt, grid_ray);
             p += ray_os.direction * dt_jump;
             t += dt_jump;
-
-            /*
-            if (t >= t_max) {
-                color = GREEN;
-                break;
-            }
-            if (any(p > float3(1.0)) || any(p < float3())) {
-                color = CYAN;
-                break;
-            }
-            */
         }
 
         p += ray_os.direction * dt;
@@ -449,7 +364,7 @@ fn is_saturated(color: float4) -> bool {
 
 fn pt_request_brick(ray_sample: float3, lod: u32, channel: u32) {
     let page_table_index = compute_page_table_index(
-        channel_settings_list.channels[channel].page_table_index,
+        channel_settings[channel].page_table_index,
         lod
     );
 
@@ -462,7 +377,7 @@ fn pt_request_brick(ray_sample: float3, lod: u32, channel: u32) {
 // todo: simplify Node / Brick
 fn try_fetch_brick(ray_sample: float3, lod: u32, channel: u32, request_bricks: bool) -> Node {
     let page_table_index = compute_page_table_index(
-        channel_settings_list.channels[channel].page_table_index,
+        channel_settings[channel].page_table_index,
         lod
     );
 
@@ -499,20 +414,6 @@ fn try_fetch_brick(ray_sample: float3, lod: u32, channel: u32, request_bricks: b
         float3(),
         requested_brick
     );
-}
-
-fn compute_lighting(voxel_value: f32, channel: u32, sampling_frequency_factor: f32, color: ptr<function, vec4<f32>>) {
-    let lower_bound = channel_settings_list.channels[channel].threshold_lower;
-    let upper_bound = channel_settings_list.channels[channel].threshold_upper;
-    if (voxel_value >= lower_bound && voxel_value <= upper_bound) {
-        // todo: transfer functions
-        let transfer_function_sample = channel_settings_list.channels[channel].color;
-        var voxel_color = float4(transfer_function_sample.rgb, voxel_value * transfer_function_sample.a);
-        voxel_color.a = 1.0 - pow(1.0 - voxel_color.a, sampling_frequency_factor);
-
-        let transparency = (1.0 - (*color).a) * voxel_color.a;
-        *color += vec4<f32>(transparency * voxel_color.rgb, transparency);
-    }
 }
 
 fn compute_node_jump_distance(position: vec3<f32>, subdivision_index: u32, dt: f32, grid_ray: GridRay) -> f32 {

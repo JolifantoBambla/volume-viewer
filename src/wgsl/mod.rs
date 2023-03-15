@@ -8,11 +8,13 @@ pub fn create_wgsl_preprocessor() -> WGSLPreprocessor {
         .include("bresenham", include_str!("bresenham.wgsl"))
         .include("camera", include_str!("camera.wgsl"))
         .include("cache_update_meta", include_str!("cache_update_meta.wgsl"))
+        .include("channel_settings", include_str!("channel_settings.wgsl"))
         .include("constant", include_str!("constant.wgsl"))
         .include("dispatch_indirect", include_str!("dispatch_indirect.wgsl"))
         .include("gpu_list", include_str!("gpu_list.wgsl"))
         .include("grid_traversal", include_str!("grid_traversal.wgsl"))
         .include("grid_leap", include_str!("grid_leap.wgsl"))
+        .include("lighting", include_str!("lighting.wgsl"))
         .include(
             "multichannel_octree_util",
             include_str!("multichannel_octree_util.wgsl"),

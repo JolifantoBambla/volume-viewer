@@ -1,12 +1,13 @@
 // This interface requires the following identifiers to be defined:
 // bindings:
-//  - channel_settings_list: ChannelSettingsList;
+//  - channel_settings: array<ChannelSettings>;
 //  - page_directory_meta: PageDirectoryMeta
 //  - page_table_meta: PageTableMetas;
 //  - page_directory: texture_3d<u32>;
 //  - brick_usage_buffer: texture_storage_3d<r32uint, write>;
 //  - request_buffer: texture_storage_3d<r32uint, write>;
 
+@include(channel_settings)
 @include(page_table)
 @include(page_table_util)
 @include(type_alias)
@@ -48,7 +49,7 @@ fn _volume_accessor__get_node(ray_sample: float3, lod: u32, channel: u32, reques
     // return last_mapped_node
 
     let page_table_index = compute_page_table_index(
-        channel_settings_list.channels[channel].page_table_index,
+        channel_settings[channel].page_table_index,
         lod
     );
 

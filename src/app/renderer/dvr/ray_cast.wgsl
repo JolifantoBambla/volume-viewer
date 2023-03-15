@@ -2,8 +2,12 @@
 
 @include(aabb)
 @include(camera)
+@include(channel_settings)
 @include(constant)
+@include(grid_leap)
+@include(lighting)
 @include(page_table)
+@include(page_directory_meta_util)
 @include(ray)
 @include(timestamp)
 @include(transform)
@@ -56,29 +60,13 @@ struct Uniforms {
     settings: GlobalSettings,
 }
 
-struct ChannelSettings {
-    color: float4,
-    channel_index: u32,
-    max_lod: u32,
-    min_lod: u32,
-    threshold_lower: f32,
-    threshold_upper: f32,
-    visible: u32,
-    page_table_index: u32,
-    lod_factor: f32,
-}
-
-struct ChannelSettingsList {
-    channels: array<ChannelSettings>,
-}
-
 // Bindings
 
 // The bindings in group 0 should never change (except maybe the result image for double buffering?)
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var volume_sampler: sampler;
 @group(0) @binding(2) var result: texture_storage_2d<rgba8unorm, write>;
-@group(0) @binding(3) var<storage> channel_settings_list: ChannelSettingsList;
+@group(0) @binding(3) var<storage> channel_settings: array<ChannelSettings>;
 
 // Each channel in the multiresolution, multichannel volume is represented by its own bind group of the following structure:
 // 1) page_directory: holds page entries for accessing the brick cache
@@ -124,17 +112,17 @@ fn request_brick(page_address: int3) {
 }
 
 fn clone_channel_settings(channel_index: u32) -> ChannelSettings {
-    let channel_settings = channel_settings_list.channels[channel_index];
+    let cs = channel_settings[channel_index];
     return ChannelSettings(
-        channel_settings.color,
-        channel_settings.channel_index,
-        channel_settings.max_lod,
-        channel_settings.min_lod,
-        channel_settings.threshold_lower,
-        channel_settings.threshold_upper,
-        channel_settings.visible,
-        channel_settings.page_table_index,
-        channel_settings.lod_factor
+        cs.color,
+        cs.channel_index,
+        cs.max_lod,
+        cs.min_lod,
+        cs.threshold_lower,
+        cs.threshold_upper,
+        cs.visible,
+        cs.page_table_index,
+        cs.lod_factor
      );
 }
 
@@ -189,7 +177,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let timestamp = uniforms.timestamp;
 
-    let num_channels = uniforms.settings.num_visible_channels;
+    let num_visible_channels = uniforms.settings.num_visible_channels;
     let num_resolutions = page_directory_meta.max_resolutions;
 
     let cs = clone_channel_settings(0);
@@ -214,7 +202,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var dt = dt_scale * min_component(dt_vec);
     var p = ray_at(ray_os, t_min + offset * dt);
 
-    let first_channel_index = channel_settings_list.channels[0].page_table_index;
+    let first_channel_index = channel_settings[0].page_table_index;
 
     for (var t = t_min; t < t_max; t += dt) {
         let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
@@ -226,21 +214,24 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             dt = dt_scale * min_component(dt_vec);
         }
 
-        for (var channel = 0u; channel < num_channels; channel += 1u) {
-            let channel_lod = va_compute_lod(distance_to_camera, channel, channel_settings_list.channels[channel].lod_factor * max_component(inv_high_res_size));
+        var empty_channels = 0u;
+        var empty_lod = lod;
+
+        for (var channel = 0u; channel < num_visible_channels; channel += 1u) {
+            let channel_lod = va_compute_lod(distance_to_camera, channel, channel_settings[channel].lod_factor * max_component(inv_high_res_size));
+            empty_lod = max(empty_lod, channel_lod);
+
             let node = va_get_node(p, channel_lod, channel, !requested_brick);
             requested_brick = requested_brick || node.requested_brick;
             if (node.is_mapped) {
-                let value = sample_volume(node.sample_address);
-
-                if (value >= channel_settings_list.channels[channel].threshold_lower && value <= channel_settings_list.channels[channel].threshold_upper) {
-                    let trans_sample = channel_settings_list.channels[channel].color;
-                    var val_color = float4(trans_sample.rgb, value * trans_sample.a);
-                    val_color.a = 1.0 - pow(1.0 - val_color.a, dt_scale);
-                    color += float4((1.0 - color.a) * val_color.a * val_color.rgb, 0.);
-                    color.a += (1.0 - color.a) * val_color.a;
+                // todo: this currently means that the brick is empty, but the whole node thing should get refactored
+                if (node.has_average) {
+                    empty_channels += 1;
+                    continue;
                 }
 
+                let value = sample_volume(node.sample_address);
+                compute_lighting(value, channel, dt_scale, &color);
                 if (is_saturated(color)) {
                     break;
                 }
@@ -255,6 +246,12 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             break;
         }
 
+        if (empty_channels == num_visible_channels) {
+            let dt_jump = compute_brick_jump_distance(p, empty_lod, dt, t_max, ray_os);
+            p += ray_os.direction * dt_jump;
+            t += dt_jump;
+        }
+
         p += ray_os.direction * dt;
     }
 
@@ -264,4 +261,79 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 fn is_saturated(color: float4) -> bool {
     // todo: make threshold configurable
     return color.a > 0.95;
+}
+
+// todo: refactor in own file, simplify
+fn try_fetch_brick(ray_sample: float3, lod: u32, channel: u32, request_bricks: bool) -> Node {
+    let page_table_index = compute_page_table_index(
+        channel_settings[channel].page_table_index,
+        lod
+    );
+
+    // todo: store volume_to_padded in page table (is it already?)
+    let position_corrected = ray_sample * pt_compute_volume_to_padded(page_table_index);
+    let page_address = pt_compute_page_address(page_table_index, position_corrected);
+    let page = get_page(page_address);
+
+    var requested_brick = false;
+    if (page.flag == UNMAPPED) {
+        if (request_bricks) {
+            // todo: maybe request lower res as well?
+            request_brick(int3(page_address));
+            requested_brick = true;
+        }
+    } else if (page.flag == EMPTY) {
+        return Node(
+            true,
+            0.0,
+            true,
+            float3(),
+            false
+        );
+    } else if (page.flag == MAPPED) {
+        report_usage(int3(page.location / page_directory_meta.brick_size));
+
+        let sample_location = normalize_cache_address(
+            pt_compute_cache_address(page_table_index, ray_sample, page)
+        );
+        return Node(
+            false,
+            0.0,
+            true,
+            sample_location,
+            false
+        );
+    }
+
+    return Node(
+        false,
+        0.0,
+        false,
+        float3(),
+        requested_brick
+    );
+}
+
+fn compute_brick_jump_distance(position: vec3<f32>, resolution_level: u32, dt: f32, t_max: f32, ray: Ray) -> f32 {
+    let page_table_index = page_directory_compute_page_table_index(0, resolution_level);
+    let page_subscript = pt_compute_local_page_address(page_table_index, position);
+    let page_shape = pt_get_page_table_extent(page_table_index);
+
+    let volume_to_padded = pt_compute_volume_to_padded(page_table_index);
+
+    let grid_ray = make_grid_ray(
+        Ray (ray.origin, ray.direction * pt_compute_volume_to_padded(page_table_index), t_max),
+        t_max
+    );
+
+    // when going the positive direction, we want to check the node bound's max. axis, otherwise we'll use the
+    // node bound's min. axis, i.e., the axis we already have in the subscript
+    let next_axis_indices = vec3<i32>(page_subscript) + grid_ray.grid_step;
+
+    // to compute the distance we can jump over, we first compute the normalized floating point coordinates of
+    // the next axes.
+    // note: we don't use `subscript_to_normalized_address` here because we might need values outside the unit cube
+    let next_axis_coords = vec3<f32>(next_axis_indices) / vec3<f32>(page_shape);
+
+    return compute_jump_distance(position, next_axis_coords, dt, grid_ray);
 }
