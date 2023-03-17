@@ -13,9 +13,9 @@ use crate::renderer::settings::RenderMode;
 #[cfg(feature = "timestamp-query")]
 use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use crate::{resource, MultiChannelVolumeRendererSettings};
-use glam::UVec2;
+use glam::{UVec2, Vec4};
 use std::sync::Arc;
-use wgpu::util::DeviceExt;
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroup, Buffer, CommandEncoder, Extent3d, SamplerDescriptor, SurfaceConfiguration,
     TextureView,
@@ -34,6 +34,7 @@ pub struct MultiChannelVolumeRenderer {
     volume_render_result_extent: Extent3d,
     present_to_screen_pass: PresentToScreen,
     present_to_screen_bind_group: BindGroup,
+    present_to_screen_background_color: Buffer,
 
     // to switch between the two render modes for debugging
     page_table_render_pass: PageTableDVR,
@@ -107,11 +108,18 @@ impl MultiChannelVolumeRenderer {
             channel_settings: &volume_render_channel_settings_buffer,
         });
 
+        let present_to_screen_background_color = gpu.device().create_buffer_init(&BufferInitDescriptor {
+            label: wgpu::Label::from("Present to screen background color"),
+            contents: bytemuck::cast_slice(&[Vec4::ZERO]),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+        });
+
         let present_to_screen_pass = PresentToScreen::new(gpu, surface_configuration);
         let present_to_screen_bind_group =
             present_to_screen_pass.create_bind_group(present_to_screen::Resources {
                 sampler: &screen_space_sampler,
                 source_texture: &dvr_result.view,
+                background_color: &present_to_screen_background_color,
             });
 
         let page_table_render_pass =
@@ -132,6 +140,7 @@ impl MultiChannelVolumeRenderer {
             volume_render_result_extent,
             present_to_screen_pass,
             present_to_screen_bind_group,
+            present_to_screen_background_color,
 
             page_table_render_pass,
             page_table_bind_group,
@@ -165,6 +174,11 @@ impl MultiChannelVolumeRenderer {
             &self.volume_render_channel_settings_buffer,
             0,
             bytemuck::cast_slice(channel_settings.as_slice()),
+        );
+        self.gpu.queue().write_buffer(
+            &self.present_to_screen_background_color,
+            0,
+            bytemuck::cast_slice(&[Vec4::from(settings.background_color)]),
         );
 
         match settings.render_mode {

@@ -1,5 +1,6 @@
 @group(0) @binding(0) var screen_sampler : sampler;
 @group(0) @binding(1) var screen_texture : texture_2d<f32>;
+@group(0) @binding(2) var<uniform> background_color: vec4<f32>;
 
 struct VertexOutput {
   @builtin(position) Position : vec4<f32>,
@@ -32,5 +33,17 @@ fn vert_main(@builtin(vertex_index) VertexIndex : u32) -> VertexOutput {
 
 @fragment
 fn frag_main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
-  return textureSample(screen_texture, screen_sampler, fragUV);
+  let dvr_color = textureSample(screen_texture, screen_sampler, fragUV);
+  if (any(dvr_color > vec4<f32>())) {
+    return blend(dvr_color, background_color);
+  } else {
+    return background_color;
+  }
+}
+
+fn blend(a: vec4<f32>, b: vec4<f32>) -> vec4<f32> {
+    return vec4<f32>(
+        a.rgb * a.a + b.rgb * b.a * (1. - a.a),
+        a.a + b.a * (1. - a.a)
+    );
 }

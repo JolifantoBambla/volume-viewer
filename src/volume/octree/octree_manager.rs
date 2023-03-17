@@ -25,6 +25,7 @@ impl Octree {
             descriptor.volume.channels.len(),
         );
 
+        // todo: this should use the volume size adjusted by voxel spacing instead
         let subdivisions = VolumeSubdivision::from_input_and_target_shape(
             descriptor.volume.resolutions[0].volume_size,
             descriptor.leaf_node_size,

@@ -2,15 +2,13 @@ use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 #[cfg(feature = "timestamp-query")]
 use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use std::{borrow::Cow, sync::Arc};
-use wgpu::{
-    BindGroup, BindGroupEntry, BindGroupLayout, CommandEncoder, RenderPipeline,
-    SurfaceConfiguration, TextureView,
-};
+use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Buffer, CommandEncoder, RenderPipeline, SurfaceConfiguration, TextureView};
 use wgpu_framework::context::Gpu;
 
 pub struct Resources<'a> {
     pub sampler: &'a wgpu::Sampler,
     pub source_texture: &'a TextureView,
+    pub background_color: &'a Buffer,
 }
 
 impl<'a> AsBindGroupEntries for Resources<'a> {
@@ -24,6 +22,10 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
                 binding: 1,
                 resource: wgpu::BindingResource::TextureView(self.source_texture),
             },
+            BindGroupEntry {
+                binding: 2,
+                resource: self.background_color.as_entire_binding(),
+            }
         ]
     }
 }
