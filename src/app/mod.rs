@@ -343,13 +343,9 @@ impl OnUserEvent for App {
                     }
                 }
             },
-            self::Event::UncheckedBrick(brick) => {
-                let brick = brick.clone();
-                self.scene.volume_mut().volume_manager_mut().source_mut().enqueue_brick_unchecked(brick);
-            },
             Event::Brick(brick) => {
                 let brick = brick.clone();
-                self.scene.volume_mut().volume_manager_mut().source_mut().enqueue_brick2(brick);
+                self.scene.volume_mut().volume_manager_mut().source_mut().enqueue_brick(brick);
             }
             _ => {}
         }

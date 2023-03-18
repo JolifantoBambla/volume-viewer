@@ -318,80 +318,6 @@ impl VolumeManager {
 
         // write bricks to cache
         if !bricks.is_empty() {
-            for (global_address, brick) in bricks {
-                if let Some(local_address) = self.map_to_page_table(&global_address, None) {
-                    let brick_id = global_address.into();
-                    let local_brick_id = self
-                        .page_table_directory
-                        .brick_address_to_brick_id(&local_address);
-                    if brick.data.is_empty() {
-                        self.page_table_directory.mark_as_empty(&local_address);
-                    } else {
-                        // write brick to cache
-                        let brick_location = self.lru_cache.add_cache_entry(&brick.data, input);
-                        match brick_location {
-                            Ok(brick_location) => {
-                                // mark brick as mapped
-                                let unmapped_brick_address = self
-                                    .page_table_directory
-                                    .map_brick(&local_address, &brick_location);
-                                self.cached_bricks.insert(brick_id);
-
-                                log::info!("brick address {:?}", local_address);
-                                // todo: check if first time
-                                let mapped_first_time = true;
-                                update_result
-                                    .add_mapped_brick_id(local_brick_id, mapped_first_time);
-
-                                if let Some(unmapped_brick_local_address) = unmapped_brick_address {
-                                    let unmapped_brick_global_address = self.map_from_page_table(
-                                        unmapped_brick_local_address,
-                                        input.frame().number(),
-                                    );
-                                    let unmapped_brick_id = unmapped_brick_global_address.into();
-                                    self.cached_bricks.remove(&unmapped_brick_id);
-
-                                    let local_unmapped_brick_id = self
-                                        .page_table_directory
-                                        .brick_address_to_brick_id(&unmapped_brick_local_address);
-                                    update_result.add_unmapped_brick_id(local_unmapped_brick_id);
-                                }
-                            }
-                            Err(_) => {
-                                // todo: error handling
-                                log::error!("Could not add brick to cache");
-                                update_result.add_unsuccessful_map_attempt_brick_id(local_brick_id);
-                            }
-                        }
-                    }
-                    self.requested_bricks.remove(&brick_id);
-                } else {
-                    let brick_id = global_address.into();
-                    self.requested_bricks.remove(&brick_id);
-                }
-            }
-
-            log::info!("self cached bricks len {}", self.cached_bricks.len());
-
-            // update the page directory
-            self.page_table_directory.commit_changes();
-        }
-        update_result
-    }
-
-    fn process_new_bricks2(&mut self, input: &Input) -> CacheUpdateMeta {
-        // update CPU local LRU cache
-        self.lru_cache.update_local_lru(input.frame().number());
-
-        let bricks = self.source.poll_bricks2(min(
-            self.brick_transfer_limit,
-            self.lru_cache.num_writable_bricks(),
-        ));
-
-        let mut update_result = CacheUpdateMeta::default();
-
-        // write bricks to cache
-        if !bricks.is_empty() {
             for b in &bricks {
                 let (global_address, brick) = (&b.0, &b.1);
                 if let Some(local_address) = self.map_to_page_table(&global_address, None) {
@@ -454,87 +380,10 @@ impl VolumeManager {
         update_result
     }
 
-    fn process_new_bricks_unchecked(&mut self, input: &Input) -> CacheUpdateMeta {
-        // update CPU local LRU cache
-        self.lru_cache.update_local_lru(input.frame().number());
-
-        let bricks = self.source.poll_bricks_unchecked(min(
-            self.brick_transfer_limit,
-            self.lru_cache.num_writable_bricks(),
-        ));
-
-        let mut update_result = CacheUpdateMeta::default();
-
-        // write bricks to cache
-        if !bricks.is_empty() {
-            for b in &bricks {
-                let (global_address, brick) = (&b.0, &b.1);
-                if let Some(local_address) = self.map_to_page_table(&global_address, None) {
-                    let brick_id = (*global_address).into();
-                    let local_brick_id = self
-                        .page_table_directory
-                        .brick_address_to_brick_id(&local_address);
-                    if brick.length() == 0 {
-                        self.page_table_directory.mark_as_empty(&local_address);
-                    } else {
-                        // write brick to cache
-                        let brick_location = self.lru_cache.add_cache_entry_unchecked(&brick, input);
-                        match brick_location {
-                            Ok(brick_location) => {
-                                // mark brick as mapped
-                                let unmapped_brick_address = self
-                                    .page_table_directory
-                                    .map_brick(&local_address, &brick_location);
-                                self.cached_bricks.insert(brick_id);
-
-                                log::info!("brick address {:?}", local_address);
-                                // todo: check if first time
-                                let mapped_first_time = true;
-                                update_result
-                                    .add_mapped_brick_id(local_brick_id, mapped_first_time);
-
-                                if let Some(unmapped_brick_local_address) = unmapped_brick_address {
-                                    let unmapped_brick_global_address = self.map_from_page_table(
-                                        unmapped_brick_local_address,
-                                        input.frame().number(),
-                                    );
-                                    let unmapped_brick_id = unmapped_brick_global_address.into();
-                                    self.cached_bricks.remove(&unmapped_brick_id);
-
-                                    let local_unmapped_brick_id = self
-                                        .page_table_directory
-                                        .brick_address_to_brick_id(&unmapped_brick_local_address);
-                                    update_result.add_unmapped_brick_id(local_unmapped_brick_id);
-                                }
-                            }
-                            Err(_) => {
-                                // todo: error handling
-                                log::error!("Could not add brick to cache");
-                                update_result.add_unsuccessful_map_attempt_brick_id(local_brick_id);
-                            }
-                        }
-                    }
-                    self.requested_bricks.remove(&brick_id);
-                } else {
-                    let brick_id = (*global_address).into();
-                    self.requested_bricks.remove(&brick_id);
-                }
-            }
-
-            log::info!("self cached bricks len {}", self.cached_bricks.len());
-
-            // update the page directory
-            self.page_table_directory.commit_changes();
-        }
-        update_result
-    }
-
     /// Call this after rendering has completed to read back requests & usages
     pub fn update_cache(&mut self, input: &Input) -> CacheUpdateMeta {
         self.process_requests();
-        //self.process_new_bricks(input)
-        self.process_new_bricks2(input)
-        //self.process_new_bricks_unchecked(input)
+        self.process_new_bricks(input)
     }
 
     pub fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>) {

@@ -14,21 +14,11 @@ use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 pub trait VolumeDataSource: Debug {
     fn meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta;
 
-    fn enqueue_brick(&mut self, brick: (BrickAddress, Brick));
-
-    fn enqueue_brick2(&mut self, brick: Rc<(BrickAddress, Vec<u8>)>);
+    fn enqueue_brick(&mut self, brick: Rc<(BrickAddress, Vec<u8>)>);
 
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>);
 
-    fn poll_bricks(&mut self, limit: usize) -> Vec<(BrickAddress, Brick)>;
-
-    fn poll_bricks2(&mut self, limit: usize) -> Vec<Rc<(BrickAddress, Vec<u8>)>>;
-
-    #[cfg(target_arch = "wasm32")]
-    fn poll_bricks_unchecked(&mut self, limit: usize) -> Vec<Rc<(BrickAddress, Uint8Array)>>;
-
-    #[cfg(target_arch = "wasm32")]
-    fn enqueue_brick_unchecked(&mut self, brick: Rc<(BrickAddress, Uint8Array)>);
+    fn poll_bricks(&mut self, limit: usize) -> Vec<Rc<(BrickAddress, Vec<u8>)>>;
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -52,9 +42,7 @@ pub const BRICK_RESPONSE_EVENT: &str = "data-loader:brick-response";
 #[derive(Debug)]
 pub struct HtmlEventTargetVolumeDataSource {
     volume_meta: BrickedMultiResolutionMultiVolumeMeta,
-    brick_queue: Rc<RefCell<VecDeque<(BrickAddress, Brick)>>>,
-    brick_queue2: Rc<RefCell<VecDeque<Rc<(BrickAddress, Vec<u8>)>>>>,
-    brick_queue_unchecked: Rc<RefCell<VecDeque<Rc<(BrickAddress, Uint8Array)>>>>,
+    brick_queue: Rc<RefCell<VecDeque<Rc<(BrickAddress, Vec<u8>)>>>>,
     event_target: EventTarget,
 }
 
@@ -65,8 +53,6 @@ impl HtmlEventTargetVolumeDataSource {
         event_target: EventTarget,
     ) -> Self {
         let brick_queue = Rc::new(RefCell::new(VecDeque::new()));
-        let brick_queue2 = Rc::new(RefCell::new(VecDeque::new()));
-        let brick_queue_unchecked = Rc::new(RefCell::new(VecDeque::new()));
         let receiver = brick_queue.clone();
 
         let event_callback = Closure::wrap(Box::new(move |event: JsValue| {
@@ -75,7 +61,7 @@ impl HtmlEventTargetVolumeDataSource {
                 serde_wasm_bindgen::from_value(custom_event.detail()).expect("Invalid BrickEvent");
             receiver
                 .borrow_mut()
-                .push_back((brick_event.address, brick_event.brick));
+                .push_back(Rc::new((brick_event.address, brick_event.brick.data.to_owned())));
         }) as Box<dyn FnMut(JsValue)>);
 
         event_target
@@ -89,8 +75,6 @@ impl HtmlEventTargetVolumeDataSource {
         Self {
             volume_meta,
             brick_queue,
-            brick_queue2,
-            brick_queue_unchecked,
             event_target,
         }
     }
@@ -102,12 +86,8 @@ impl VolumeDataSource for HtmlEventTargetVolumeDataSource {
         &self.volume_meta
     }
 
-    fn enqueue_brick(&mut self, brick: (BrickAddress, Brick)) {
+    fn enqueue_brick(&mut self, brick: Rc<(BrickAddress, Vec<u8>)>) {
         self.brick_queue.borrow_mut().push_back(brick);
-    }
-
-    fn enqueue_brick2(&mut self, brick: Rc<(BrickAddress, Vec<u8>)>) {
-        self.brick_queue2.borrow_mut().push_back(brick);
     }
 
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>) {
@@ -123,31 +103,11 @@ impl VolumeDataSource for HtmlEventTargetVolumeDataSource {
         self.event_target.dispatch_event(&request_event).ok();
     }
 
-    fn poll_bricks(&mut self, limit: usize) -> Vec<(BrickAddress, Brick)> {
+    fn poll_bricks(&mut self, limit: usize) -> Vec<Rc<(BrickAddress, Vec<u8>)>> {
         let bricks_in_queue = self.brick_queue.borrow().len();
         self.brick_queue
             .borrow_mut()
             .drain(..min(limit, bricks_in_queue))
             .collect()
-    }
-
-    fn poll_bricks2(&mut self, limit: usize) -> Vec<Rc<(BrickAddress, Vec<u8>)>> {
-        let bricks_in_queue = self.brick_queue2.borrow().len();
-        self.brick_queue2
-            .borrow_mut()
-            .drain(..min(limit, bricks_in_queue))
-            .collect()
-    }
-
-    fn poll_bricks_unchecked(&mut self, limit: usize) -> Vec<Rc<(BrickAddress, Uint8Array)>> {
-        let bricks_in_queue = self.brick_queue_unchecked.borrow().len();
-        self.brick_queue_unchecked
-            .borrow_mut()
-            .drain(..min(limit, bricks_in_queue))
-            .collect()
-    }
-
-    fn enqueue_brick_unchecked(&mut self, brick: Rc<(BrickAddress, Uint8Array)>) {
-        self.brick_queue_unchecked.borrow_mut().push_back(brick);
     }
 }

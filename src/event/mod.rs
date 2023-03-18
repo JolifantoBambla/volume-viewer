@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use serde::{Deserialize, Serialize};
 use winit::event::WindowEvent;
 
@@ -60,8 +61,7 @@ pub enum SettingsChange {
 
 pub enum Event<T: 'static> {
     Window(WindowEvent<'static>),
-    Brick(std::rc::Rc<(BrickAddress, Vec<u8>)>),
-    UncheckedBrick(std::rc::Rc<(BrickAddress, js_sys::Uint8Array)>),
+    Brick(Rc<(BrickAddress, Vec<u8>)>),
     Settings(SettingsChange),
     Custom(T),
 }

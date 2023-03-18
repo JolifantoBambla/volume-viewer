@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::app::{App, GLOBAL_EVENT_LOOP_PROXY};
 use crate::event::Event;
 use crate::renderer::settings::MultiChannelVolumeRendererSettings;
@@ -33,32 +34,16 @@ pub fn initialize() {
     // called once per thread and not once globally, so this moved to `main
 }
 
-///
-#[wasm_bindgen(js_name = "dispatchChunkReceived")]
+#[wasm_bindgen(js_name = "dispatchBrickReceived")]
 pub fn dispatch_chunk_received(brick_address: JsValue, data: Vec<u8>) {
     unsafe {
         if let Some(event_loop_proxy) = GLOBAL_EVENT_LOOP_PROXY.as_ref() {
             let brick_address = serde_wasm_bindgen::from_value(brick_address).unwrap();
             event_loop_proxy
-                .send_event(Event::Brick(std::rc::Rc::new((brick_address, data))))
+                .send_event(Event::Brick(Rc::new((brick_address, data))))
                 .ok();
         } else {
-            log::error!("dispatchChunkReceived called on uninitialized event loop");
-        }
-    }
-}
-
-#[wasm_bindgen(js_name = "dispatchBrickUnchecked")]
-pub fn dispatch_brick_unchecked(brick_address: JsValue, data: JsValue) {
-    unsafe {
-        if let Some(event_loop_proxy) = GLOBAL_EVENT_LOOP_PROXY.as_ref() {
-            let brick_address = serde_wasm_bindgen::from_value(brick_address).unwrap();
-            let data: js_sys::Uint8Array = data.unchecked_into();
-            event_loop_proxy
-                .send_event(Event::UncheckedBrick(std::rc::Rc::new((brick_address, data))))
-                .ok();
-        } else {
-            log::error!("dispatchBrickUnchecked called on uninitialized event loop");
+            log::error!("dispatchBrickReceived called on uninitialized event loop");
         }
     }
 }

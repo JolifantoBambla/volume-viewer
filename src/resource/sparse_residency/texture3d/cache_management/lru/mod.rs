@@ -284,41 +284,6 @@ impl LRUCache {
         Err(CacheFullError {})
     }
 
-    /// Writes data to the cache and returns the 3D cache address of the slot the data was written to
-    pub fn add_cache_entry_unchecked(
-        &mut self,
-        data: &js_sys::Uint8Array,
-        input: &Input,
-    ) -> Result<UVec3, CacheFullError> {
-        for i in ((self.num_used_entries_local as usize)..(self.next_empty_index as usize)).rev() {
-            let cache_entry_index = self.lru_local[i];
-            let last_written = self.lru_last_writes[cache_entry_index as usize];
-            if last_written > input.frame().number()
-                || (input.frame().number() - last_written) > self.time_to_live
-            {
-                let extent = uvec_to_extent(
-                    &(index_to_subscript(
-                        data.length() - 1,
-                        &uvec_to_extent(&self.cache_entry_size),
-                    ) + UVec3::ONE),
-                );
-
-                // todo: batch updates (technically this is batched by wgpu
-                let cache_entry_location = self.cache_entry_index_to_location(cache_entry_index);
-                self.cache.write_subregion_unchecked(
-                    data,
-                    uvec_to_origin(&cache_entry_location),
-                    extent,
-                    &self.ctx,
-                );
-                self.lru_last_writes[cache_entry_index as usize] = input.frame().number();
-                self.next_empty_index = i as u32; // if i > 0 { i as u32 - 1 } else { 0 };
-                return Ok(cache_entry_location);
-            }
-        }
-        Err(CacheFullError {})
-    }
-
     #[allow(unused)]
     pub fn cache_entry_size(&self) -> UVec3 {
         self.cache_entry_size

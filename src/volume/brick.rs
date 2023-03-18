@@ -5,8 +5,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Brick {
     pub data: Vec<u8>,
-    pub min: u8,
-    pub max: u8,
 }
 
 #[readonly::make]

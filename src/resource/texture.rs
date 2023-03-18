@@ -239,31 +239,4 @@ impl Texture {
             );
         }
     }
-
-    pub fn write_subregion_unchecked(
-        &self,
-        data: &js_sys::Uint8Array,
-        origin: Origin3d,
-        extent: Extent3d,
-        ctx: &Arc<Gpu>,
-    ) {
-        if self.is_whole_texture(&origin, &extent) {
-            panic!("I'm a doctor not a whole texture!");
-            //self.write(data, ctx);
-        } else {
-            let image_copy_texture = ImageCopyTexture {
-                texture: &self.texture,
-                mip_level: 0,
-                origin,
-                aspect: TextureAspect::All,
-            };
-
-            ctx.queue().write_texture_unchecked(
-                image_copy_texture,
-                data,
-                self.data_layout(&extent),
-                extent,
-            );
-        }
-    }
 }
