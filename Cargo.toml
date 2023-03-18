@@ -44,7 +44,7 @@ wasm-bindgen-futures = "0.4.30"
 wasm-bindgen-rayon = { version = "1.0.3", features = ["no-bundler"] }
 wasm-logger = "0.2.0"
 web-sys = { version = "=0.3.61", features = ["Document", "HtmlCanvasElement", "HtmlInputElement", "Gpu", "GpuDevice", "OffscreenCanvas", "Performance", "Window", "Event", "EventInit", "CustomEvent", "CustomEventInit","EventTarget", "WorkerNavigator"] }
-wgpu = { git = "https://github.com/JolifantoBambla/wgpu", branch = "implement-timestamp-query-on-v0.14.2" }
+wgpu = { path = "../wgpu/wgpu" } #{ git = "https://github.com/JolifantoBambla/wgpu", branch = "implement-timestamp-query-on-v0.14.2" }
 winit = "0.27.5"
 
 ome-zarr = { path = "crates/ome-zarr" }

@@ -4,6 +4,7 @@ use std::cmp::min;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::rc::Rc;
+use js_sys::Uint8Array;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{CustomEvent, EventTarget};
@@ -13,9 +14,17 @@ use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 pub trait VolumeDataSource: Debug {
     fn meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta;
 
+    fn enqueue_brick(&mut self, brick: (BrickAddress, Brick));
+
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>);
 
     fn poll_bricks(&mut self, limit: usize) -> Vec<(BrickAddress, Brick)>;
+
+    #[cfg(target_arch = "wasm32")]
+    fn poll_bricks_unchecked(&mut self, limit: usize) -> Vec<Rc<(BrickAddress, Uint8Array)>>;
+
+    #[cfg(target_arch = "wasm32")]
+    fn enqueue_brick_unchecked(&mut self, brick: Rc<(BrickAddress, Uint8Array)>);
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -40,6 +49,7 @@ pub const BRICK_RESPONSE_EVENT: &str = "data-loader:brick-response";
 pub struct HtmlEventTargetVolumeDataSource {
     volume_meta: BrickedMultiResolutionMultiVolumeMeta,
     brick_queue: Rc<RefCell<VecDeque<(BrickAddress, Brick)>>>,
+    brick_queue_unchecked: Rc<RefCell<VecDeque<Rc<(BrickAddress, Uint8Array)>>>>,
     event_target: EventTarget,
 }
 
@@ -50,6 +60,7 @@ impl HtmlEventTargetVolumeDataSource {
         event_target: EventTarget,
     ) -> Self {
         let brick_queue = Rc::new(RefCell::new(VecDeque::new()));
+        let brick_queue_unchecked = Rc::new(RefCell::new(VecDeque::new()));
         let receiver = brick_queue.clone();
 
         let event_callback = Closure::wrap(Box::new(move |event: JsValue| {
@@ -72,6 +83,7 @@ impl HtmlEventTargetVolumeDataSource {
         Self {
             volume_meta,
             brick_queue,
+            brick_queue_unchecked,
             event_target,
         }
     }
@@ -81,6 +93,10 @@ impl HtmlEventTargetVolumeDataSource {
 impl VolumeDataSource for HtmlEventTargetVolumeDataSource {
     fn meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta {
         &self.volume_meta
+    }
+
+    fn enqueue_brick(&mut self, brick: (BrickAddress, Brick)) {
+        self.brick_queue.borrow_mut().push_back(brick);
     }
 
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>) {
@@ -102,5 +118,17 @@ impl VolumeDataSource for HtmlEventTargetVolumeDataSource {
             .borrow_mut()
             .drain(..min(limit, bricks_in_queue))
             .collect()
+    }
+
+    fn poll_bricks_unchecked(&mut self, limit: usize) -> Vec<Rc<(BrickAddress, Uint8Array)>> {
+        let bricks_in_queue = self.brick_queue_unchecked.borrow().len();
+        self.brick_queue_unchecked
+            .borrow_mut()
+            .drain(..min(limit, bricks_in_queue))
+            .collect()
+    }
+
+    fn enqueue_brick_unchecked(&mut self, brick: Rc<(BrickAddress, Uint8Array)>) {
+        self.brick_queue_unchecked.borrow_mut().push_back(brick);
     }
 }

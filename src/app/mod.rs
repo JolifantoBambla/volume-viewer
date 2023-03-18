@@ -1,6 +1,7 @@
 pub mod renderer;
 pub mod scene;
 
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use crate::app::renderer::dvr::common::GpuChannelSettings;
 use crate::app::renderer::MultiChannelVolumeRenderer;
@@ -19,6 +20,7 @@ use crate::wgsl::create_wgsl_preprocessor;
 use crate::{BrickedMultiResolutionMultiVolumeMeta, MultiChannelVolumeRendererSettings};
 use glam::UVec2;
 use std::sync::Arc;
+use futures::AsyncReadExt;
 use wasm_bindgen::JsCast;
 use web_sys::EventTarget;
 use wgpu::{SubmissionIndex, SurfaceConfiguration, TextureView};
@@ -341,6 +343,10 @@ impl OnUserEvent for App {
                     }
                 }
             },
+            self::Event::UncheckedBrick(brick) => {
+                let brick = brick.clone();
+                self.scene.volume_mut().volume_manager_mut().source_mut().enqueue_brick_unchecked(brick);
+            }
             _ => {}
         }
     }

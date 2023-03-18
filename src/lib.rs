@@ -47,6 +47,21 @@ pub fn dispatch_chunk_received(data: Vec<u16>, shape: Vec<u32>) {
     }
 }
 
+#[wasm_bindgen(js_name = "dispatchBrickUnchecked")]
+pub fn dispatch_brick_unchecked(brick_address: JsValue, data: JsValue) {
+    unsafe {
+        if let Some(event_loop_proxy) = GLOBAL_EVENT_LOOP_PROXY.as_ref() {
+            let brick_address = serde_wasm_bindgen::from_value(brick_address).unwrap();
+            let data: js_sys::Uint8Array = data.unchecked_into();
+            event_loop_proxy
+                .send_event(Event::UncheckedBrick(std::rc::Rc::new((brick_address, data))))
+                .ok();
+        } else {
+            log::error!("dispatchBrickUnchecked called on uninitialized event loop");
+        }
+    }
+}
+
 // todo: lib.rs should contain only init and event_loop stuff
 //  communication with JS side should only be done via events
 //  create CustomEvent enum that consists of WindowEvent and can be extended by other events

@@ -5,6 +5,7 @@ pub mod conversion;
 pub mod handler;
 
 use crate::renderer::settings::{Color, RenderMode};
+use crate::volume::BrickAddress;
 
 pub struct RawArrayReceived {
     pub data: Vec<u16>,
@@ -65,6 +66,7 @@ pub enum SettingsChange {
 pub enum Event<T: 'static> {
     Window(WindowEvent<'static>),
     RawArray(RawArrayReceived),
+    UncheckedBrick(std::rc::Rc<(BrickAddress, js_sys::Uint8Array)>),
     Settings(SettingsChange),
     Custom(T),
 }
