@@ -1,5 +1,5 @@
 use crate::app::{App, GLOBAL_EVENT_LOOP_PROXY};
-use crate::event::{Event, RawArrayReceived};
+use crate::event::Event;
 use crate::renderer::settings::MultiChannelVolumeRendererSettings;
 use crate::renderer::volume::RawVolumeBlock;
 use crate::util::init;
@@ -35,11 +35,12 @@ pub fn initialize() {
 
 ///
 #[wasm_bindgen(js_name = "dispatchChunkReceived")]
-pub fn dispatch_chunk_received(data: Vec<u16>, shape: Vec<u32>) {
+pub fn dispatch_chunk_received(brick_address: JsValue, data: Vec<u8>) {
     unsafe {
         if let Some(event_loop_proxy) = GLOBAL_EVENT_LOOP_PROXY.as_ref() {
+            let brick_address = serde_wasm_bindgen::from_value(brick_address).unwrap();
             event_loop_proxy
-                .send_event(Event::RawArray(RawArrayReceived { data, shape }))
+                .send_event(Event::Brick(std::rc::Rc::new((brick_address, data))))
                 .ok();
         } else {
             log::error!("dispatchChunkReceived called on uninitialized event loop");

@@ -1,6 +1,6 @@
 import * as Comlink from '../../node_modules/comlink/dist/esm/comlink.mjs';
 
-import init, {main, initThreadPool, dispatchBrickUnchecked} from '../../pkg/volume_viewer.js';
+import init, {main, initThreadPool, dispatchBrickUnchecked, dispatchChunkReceived} from '../../pkg/volume_viewer.js';
 import { toWrappedEvent } from './event.js';
 import { BRICK_REQUEST_EVENT, BRICK_RESPONSE_EVENT } from './volume-data-source.js';
 
@@ -151,8 +151,8 @@ export class VolumeRenderer {
                 // todo: processing a custom event is really slow, try other approaches:
                 //  - write to texture in JS and pass texture handle to canvas (copyTextureToTexture on wasm side then)
                 //  - call into wasm directly by calling a global event loop proxy or a global reference to the data source
-                if (e.data.brick.address.level === 5) console.log('firstbrick', e.data.brick.brick.data);
-                dispatchBrickUnchecked(e.data.brick.address, e.data.brick.brick.data)
+                //dispatchBrickUnchecked(e.data.brick.address, e.data.brick.brick.data);
+                dispatchChunkReceived(e.data.brick.address, e.data.brick.brick.data);
 
                 /*
                 this.#canvas.dispatchEvent(

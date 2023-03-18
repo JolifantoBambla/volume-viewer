@@ -430,10 +430,6 @@ export class OmeZarrDataSource extends VolumeDataSource {
             if (isZero(data, { type: 'u1' }, this.isZeroThreshold)) {
                 this.#setBrickEmpty(brickAddress);
             } else {
-                // todo: remove(debug)!!!
-                if (brickAddress.level === 5) {
-                    console.log(data.length, Uint8Array(data).length);
-                }
                 return {
                     data: typeof data === Uint8Array ? data : new Uint8Array(data),
                     min: 0,  //minU8(data),

@@ -7,11 +7,6 @@ pub mod handler;
 use crate::renderer::settings::{Color, RenderMode};
 use crate::volume::BrickAddress;
 
-pub struct RawArrayReceived {
-    pub data: Vec<u16>,
-    pub shape: Vec<u32>,
-}
-
 #[derive(Copy, Clone, Deserialize, Serialize)]
 pub struct Range<T> {
     pub min: T,
@@ -65,7 +60,7 @@ pub enum SettingsChange {
 
 pub enum Event<T: 'static> {
     Window(WindowEvent<'static>),
-    RawArray(RawArrayReceived),
+    Brick(std::rc::Rc<(BrickAddress, Vec<u8>)>),
     UncheckedBrick(std::rc::Rc<(BrickAddress, js_sys::Uint8Array)>),
     Settings(SettingsChange),
     Custom(T),

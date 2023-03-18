@@ -16,9 +16,13 @@ pub trait VolumeDataSource: Debug {
 
     fn enqueue_brick(&mut self, brick: (BrickAddress, Brick));
 
+    fn enqueue_brick2(&mut self, brick: Rc<(BrickAddress, Vec<u8>)>);
+
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>);
 
     fn poll_bricks(&mut self, limit: usize) -> Vec<(BrickAddress, Brick)>;
+
+    fn poll_bricks2(&mut self, limit: usize) -> Vec<Rc<(BrickAddress, Vec<u8>)>>;
 
     #[cfg(target_arch = "wasm32")]
     fn poll_bricks_unchecked(&mut self, limit: usize) -> Vec<Rc<(BrickAddress, Uint8Array)>>;
@@ -49,6 +53,7 @@ pub const BRICK_RESPONSE_EVENT: &str = "data-loader:brick-response";
 pub struct HtmlEventTargetVolumeDataSource {
     volume_meta: BrickedMultiResolutionMultiVolumeMeta,
     brick_queue: Rc<RefCell<VecDeque<(BrickAddress, Brick)>>>,
+    brick_queue2: Rc<RefCell<VecDeque<Rc<(BrickAddress, Vec<u8>)>>>>,
     brick_queue_unchecked: Rc<RefCell<VecDeque<Rc<(BrickAddress, Uint8Array)>>>>,
     event_target: EventTarget,
 }
@@ -60,6 +65,7 @@ impl HtmlEventTargetVolumeDataSource {
         event_target: EventTarget,
     ) -> Self {
         let brick_queue = Rc::new(RefCell::new(VecDeque::new()));
+        let brick_queue2 = Rc::new(RefCell::new(VecDeque::new()));
         let brick_queue_unchecked = Rc::new(RefCell::new(VecDeque::new()));
         let receiver = brick_queue.clone();
 
@@ -83,6 +89,7 @@ impl HtmlEventTargetVolumeDataSource {
         Self {
             volume_meta,
             brick_queue,
+            brick_queue2,
             brick_queue_unchecked,
             event_target,
         }
@@ -97,6 +104,10 @@ impl VolumeDataSource for HtmlEventTargetVolumeDataSource {
 
     fn enqueue_brick(&mut self, brick: (BrickAddress, Brick)) {
         self.brick_queue.borrow_mut().push_back(brick);
+    }
+
+    fn enqueue_brick2(&mut self, brick: Rc<(BrickAddress, Vec<u8>)>) {
+        self.brick_queue2.borrow_mut().push_back(brick);
     }
 
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>) {
@@ -115,6 +126,14 @@ impl VolumeDataSource for HtmlEventTargetVolumeDataSource {
     fn poll_bricks(&mut self, limit: usize) -> Vec<(BrickAddress, Brick)> {
         let bricks_in_queue = self.brick_queue.borrow().len();
         self.brick_queue
+            .borrow_mut()
+            .drain(..min(limit, bricks_in_queue))
+            .collect()
+    }
+
+    fn poll_bricks2(&mut self, limit: usize) -> Vec<Rc<(BrickAddress, Vec<u8>)>> {
+        let bricks_in_queue = self.brick_queue2.borrow().len();
+        self.brick_queue2
             .borrow_mut()
             .drain(..min(limit, bricks_in_queue))
             .collect()
