@@ -274,9 +274,11 @@ impl VolumeManager {
                 return;
             }
 
+            /*
             if !requested_ids.is_empty() {
                 log::info!("requested ids {:?}", requested_ids);
             }
+            */
 
             let mut brick_addresses =
                 Vec::with_capacity(min(requested_ids.len(), self.brick_request_limit));
@@ -297,9 +299,11 @@ impl VolumeManager {
                 }
             }
 
+            /*
             if !brick_addresses.is_empty() {
                 log::info!("requested {:?}", brick_addresses);
             }
+             */
 
             self.request_bricks(brick_addresses);
         }
@@ -338,7 +342,7 @@ impl VolumeManager {
                                     .map_brick(&local_address, &brick_location);
                                 self.cached_bricks.insert(brick_id);
 
-                                log::info!("brick address {:?}", local_address);
+                                //log::info!("brick address {:?}", local_address);
                                 // todo: check if first time
                                 let mapped_first_time = true;
                                 update_result
@@ -372,7 +376,7 @@ impl VolumeManager {
                 }
             }
 
-            log::info!("self cached bricks len {}", self.cached_bricks.len());
+            //log::info!("self cached bricks len {}", self.cached_bricks.len());
 
             // update the page directory
             self.page_table_directory.commit_changes();

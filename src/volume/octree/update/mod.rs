@@ -41,6 +41,7 @@ struct OnFirstTimeMappedPasses {
 impl OnFirstTimeMappedPasses {
     pub fn encode<'a>(&'a self, compute_pass: &mut ComputePass<'a>, num_new_bricks: u32) {
         if num_new_bricks > 0 {
+            /*
             log::info!(
                 "first time workgroups {} = new bricks {} * processing size {} / 64",
                 f32::ceil(
@@ -49,6 +50,7 @@ impl OnFirstTimeMappedPasses {
                 num_new_bricks,
                 self.processing_size
             );
+             */
             self.compute_min_max_pass.encode_1d(
                 compute_pass,
                 f32::ceil(
@@ -69,11 +71,13 @@ struct OnMappedPasses {
 impl OnMappedPasses {
     pub fn encode<'a>(&'a self, compute_pass: &mut ComputePass<'a>, num_mapped_bricks: u32) {
         if num_mapped_bricks > 0 {
+            /*
             log::info!(
                 "mapped workgroups {} = num mapped {} / 64",
                 f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32,
                 num_mapped_bricks
             );
+             */
             self.process_mapped_bricks_pass.encode_1d(
                 compute_pass,
                 f32::ceil(num_mapped_bricks as f32 / WORKGROUP_SIZE as f32) as u32,
@@ -119,7 +123,7 @@ impl BreakPointBuffers {
         helper_buffer_b: &Buffer<u32>,
     ) {
         if self.helper_buffer_a.is_ready() {
-            log::info!("copy to a");
+            //log::info!("copy to a");
             command_encoder.copy_buffer_to_buffer(
                 helper_buffer_a.buffer(),
                 0,
@@ -129,7 +133,7 @@ impl BreakPointBuffers {
             );
         }
         if self.helper_buffer_b.is_ready() {
-            log::info!("copy to b");
+            //log::info!("copy to b");
             command_encoder.copy_buffer_to_buffer(
                 helper_buffer_b.buffer(),
                 0,
@@ -238,7 +242,7 @@ impl OctreeUpdate {
         cache_update_meta: &CacheUpdateMeta,
         #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
-        log::info!("{:?}", cache_update_meta);
+        //log::info!("{:?}", cache_update_meta);
 
         let indirect_initial_data = vec![DispatchWorkgroupsIndirect::new_1d(); 1];
         for indirect_buffer in self.indirect_buffers.iter() {
@@ -607,11 +611,13 @@ impl OctreeUpdate {
                     resource: octree.octree_nodes_as_binding_resource(),
                 }],
             });
+            /*
             log::info!(
                 "workgroup size = {}, num leaf nodes 0 {}",
                 f32::ceil(num_leaf_nodes as f32 / WORKGROUP_SIZE as f32) as u32,
                 num_leaf_nodes
             );
+             */
             StaticComputeEncodeDescriptor::new_1d(
                 update_node_min_max_values_pipeline.pipeline(),
                 vec![bind_group_0, bind_group_1, bind_group_2],

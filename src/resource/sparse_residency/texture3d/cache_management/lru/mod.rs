@@ -53,22 +53,26 @@ impl LRUCacheGpuOps {
         );
 
         if self.lru.copy_to_readable(command_encoder).is_err() {
+            /*
             log::debug!(
                 "Frame {}: could not copy to readable ({})",
                 frame_number,
                 self.lru
             );
+             */
         }
         if self
             .num_used_entries
             .copy_to_readable(command_encoder)
             .is_err()
         {
+            /*
             log::debug!(
                 "Frame {}: could not copy to readable ({})",
                 frame_number,
                 self.num_used_entries
             );
+             */
         }
     }
 
@@ -76,14 +80,16 @@ impl LRUCacheGpuOps {
         if self.lru.map_all_async().is_ok() {
             if self.num_used_entries.map_all_async().is_err() {
                 self.lru.unmap();
+                /*
                 log::debug!(
                     "Frame {}: could not map ({})",
                     frame_number,
                     self.num_used_entries
                 );
+                 */
             }
         } else {
-            log::debug!("Frame {}: could not map ({})", frame_number, self.lru);
+            //log::debug!("Frame {}: could not map ({})", frame_number, self.lru);
         }
     }
 
@@ -92,15 +98,17 @@ impl LRUCacheGpuOps {
             if let Ok(num_used_entries) = self.num_used_entries.read_all() {
                 Ok((lru, num_used_entries[0]))
             } else {
+                /*
                 log::debug!(
                     "Frame {}: could not read ({})",
                     frame_number,
                     self.num_used_entries
                 );
+                 */
                 Err(())
             }
         } else {
-            log::debug!("Frame {}: could not read ({})", frame_number, self.lru);
+            //log::debug!("Frame {}: could not read ({})", frame_number, self.lru);
             Err(())
         }
     }
