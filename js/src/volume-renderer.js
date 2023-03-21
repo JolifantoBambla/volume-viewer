@@ -6,9 +6,11 @@ import { BRICK_REQUEST_EVENT, BRICK_RESPONSE_EVENT } from './volume-data-source.
 
 export const RENDER_MODE_OCTREE = "octree";
 export const RENDER_MODE_PAGE_TABLE = "page_table";
+export const RENDER_MODE_OCTREE_REFERENCE = "octree_reference";
 export const RENDER_MODES = [
     RENDER_MODE_OCTREE,
-    RENDER_MODE_PAGE_TABLE
+    RENDER_MODE_PAGE_TABLE,
+    RENDER_MODE_OCTREE_REFERENCE,
 ];
 
 export class Color {

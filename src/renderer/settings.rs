@@ -33,6 +33,9 @@ pub enum RenderMode {
     /// Uses a page table for both memory management and empty space skipping.
     #[serde(rename = "page_table")]
     PageTable,
+
+    #[serde(rename = "octree_reference")]
+    OctreeReference,
 }
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]

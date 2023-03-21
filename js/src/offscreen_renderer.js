@@ -5,7 +5,8 @@ import {
     ChannelSettings,
     VolumeRendererSettings,
     RENDER_MODE_OCTREE,
-    RENDER_MODE_PAGE_TABLE
+    RENDER_MODE_PAGE_TABLE,
+    RENDER_MODE_OCTREE_REFERENCE,
 } from './volume-renderer.js';
 
 export class Config {
@@ -89,6 +90,7 @@ async function createUI(offscreenRenderer, config) {
             options: {
                 Octree: RENDER_MODE_OCTREE,
                 "Page Table": RENDER_MODE_PAGE_TABLE,
+                "Octree Reference": RENDER_MODE_OCTREE_REFERENCE,
             }
         }
     );

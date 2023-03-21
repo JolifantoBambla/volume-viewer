@@ -3,6 +3,7 @@ pub mod dvr;
 
 use crate::app::renderer::common::CameraUniform;
 use crate::app::renderer::dvr::common::{GpuChannelSettings, Uniforms};
+use crate::app::renderer::dvr::octree_reference::OctreeReferenceDVR;
 use crate::app::renderer::dvr::page_table::PageTableDVR;
 use crate::app::renderer::dvr::{RayGuidedDVR, Resources};
 use crate::app::scene::volume::VolumeSceneObject;
@@ -39,6 +40,9 @@ pub struct MultiChannelVolumeRenderer {
     // to switch between the two render modes for debugging
     page_table_render_pass: PageTableDVR,
     page_table_bind_group: BindGroup,
+
+    octree_reference_render_pass: OctreeReferenceDVR,
+    octree_reference_bind_group: BindGroup,
 }
 
 impl MultiChannelVolumeRenderer {
@@ -131,6 +135,23 @@ impl MultiChannelVolumeRenderer {
             channel_settings: &volume_render_channel_settings_buffer,
         });
 
+        let octree_reference_render_pass =
+            OctreeReferenceDVR::new(volume.volume_manager(),
+                                    match volume {
+                                        VolumeSceneObject::TopDownOctreeVolume(o) => {
+                                            o.octree()
+                                        },
+                                        _ => panic!("not an octree volume object"),
+                                    },
+                                    wgsl_preprocessor,
+                                    gpu);
+        let octree_reference_bind_group = octree_reference_render_pass.create_bind_group(Resources {
+            volume_sampler: &volume_sampler,
+            output: &dvr_result.view,
+            uniforms: &volume_render_global_settings_buffer,
+            channel_settings: &volume_render_channel_settings_buffer,
+        });
+
         Self {
             gpu: gpu.clone(),
             volume_render_pass,
@@ -144,6 +165,9 @@ impl MultiChannelVolumeRenderer {
 
             page_table_render_pass,
             page_table_bind_group,
+
+            octree_reference_render_pass,
+            octree_reference_bind_group,
         }
     }
 
@@ -195,6 +219,15 @@ impl MultiChannelVolumeRenderer {
                 self.page_table_render_pass.encode(
                     command_encoder,
                     &self.page_table_bind_group,
+                    &self.volume_render_result_extent,
+                    #[cfg(feature = "timestamp-query")]
+                    timestamp_query_helper,
+                );
+            },
+            RenderMode::OctreeReference => {
+                self.octree_reference_render_pass.encode(
+                    command_encoder,
+                    &self.octree_reference_bind_group,
                     &self.volume_render_result_extent,
                     #[cfg(feature = "timestamp-query")]
                     timestamp_query_helper,

@@ -10,6 +10,7 @@ use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
 
 pub mod common;
+pub mod octree_reference;
 pub mod page_table;
 pub mod page_table_octree;
 
