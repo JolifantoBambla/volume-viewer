@@ -60,6 +60,8 @@
         maxResolutions: 16,
         cacheSize: [2048, 2048, 1024],
         leafNodeSize: [32, 32, 32],
+        brickTransferLimit: 256,
+        brickRequestLimit: 64,
     });
     const cacheSizeConfig = {
         cacheSize: {
@@ -175,6 +177,14 @@
         rendererCreateOptions.maxVisibleChannels = Math.floor(255 / e.value);
         maxChannelsInput.refresh();
     });
+    rendererUI.addInput(rendererCreateOptions, 'brickRequestLimit', {
+        label: 'Brick Request Limit',
+        min: 1, max: 256, step: 1,
+    })
+    rendererUI.addInput(rendererCreateOptions, 'brickTransferLimit', {
+        label: 'Brick Transfer Limit',
+        min: 1, max: 256, step: 1,
+    })
     const leafNodeSizeInput = rendererUI.addInput(leafNodeConfig, 'size', {
         label: 'Leaf node size',
         x: {min: 4, max: 32, step: 4},

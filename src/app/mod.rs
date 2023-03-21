@@ -121,6 +121,8 @@ impl App {
                 max_resolutions: render_settings.create_options.max_resolutions,
                 visible_channel_indices: visible_channel_indices.clone(),
                 cache_size: uvec_to_extent(&render_settings.create_options.cache_size),
+                brick_request_limit: render_settings.create_options.brick_request_limit,
+                brick_transfer_limit: render_settings.create_options.brick_transfer_limit,
                 ..Default::default()
             },
             &wgsl_preprocessor,

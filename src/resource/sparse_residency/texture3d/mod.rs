@@ -35,7 +35,10 @@ pub struct SparseResidencyTexture3DOptions {
     pub max_visible_channels: u32,
     pub max_resolutions: u32,
     pub visible_channel_indices: Vec<u32>,
+    // how many bricks can be requested per frame
     pub brick_request_limit: u32,
+    // how many bricks can be uploaded per upload
+    pub brick_transfer_limit: u32,
     pub cache_size: Extent3d,
     pub num_multi_buffering: u32,
     pub cache_time_to_live: u32,
@@ -48,6 +51,7 @@ impl Default for SparseResidencyTexture3DOptions {
             max_resolutions: 16,
             visible_channel_indices: vec![0],
             brick_request_limit: 32,
+            brick_transfer_limit: 32,
             cache_size: Extent3d {
                 width: 1024,
                 height: 1024,
@@ -192,10 +196,8 @@ impl VolumeManager {
             page_table_directory.extent(),
         );
 
-        let brick_request_limit = 32;
-
         let process_requests_pass =
-            ProcessRequests::new(brick_request_limit as u32, wgsl_preprocessor, ctx);
+            ProcessRequests::new(settings.brick_request_limit as u32, wgsl_preprocessor, ctx);
         let process_requests_bind_group = process_requests_pass.create_bind_group(Resources {
             page_table_meta: page_table_directory.page_table_meta_buffer(),
             request_buffer: &request_buffer,
@@ -205,8 +207,8 @@ impl VolumeManager {
         Self {
             ctx: ctx.clone(),
             source,
-            brick_transfer_limit: 32,
-            brick_request_limit,
+            brick_transfer_limit: settings.brick_transfer_limit as usize,
+            brick_request_limit: settings.brick_request_limit as usize,
             page_table_directory,
             request_buffer,
             lru_cache,

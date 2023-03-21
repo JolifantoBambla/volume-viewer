@@ -61,12 +61,16 @@ export class VolumeRendererCreateOptions {
     maxResolutions;
     cacheSize;
     leafNodeSize;
+    brickRequestLimit;
+    brickTransferLimit;
 
-    constructor({maxVisibleChannels = 17, maxResolutions = 15, cacheSize = [1024, 1024, 1024], leafNodeSize = [32, 32, 32]}) {
+    constructor({maxVisibleChannels = 17, maxResolutions = 15, cacheSize = [1024, 1024, 1024], leafNodeSize = [32, 32, 32], brickRequestLimit = 32, brickTransferLimit = 32}) {
         this.maxVisibleChannels = maxVisibleChannels;
         this.maxResolutions = maxResolutions;
         this.cacheSize = cacheSize;
         this.leafNodeSize = leafNodeSize;
+        this.brickRequestLimit = brickRequestLimit;
+        this.brickTransferLimit = brickTransferLimit;
     }
 }
 

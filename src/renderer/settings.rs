@@ -14,6 +14,12 @@ pub struct CreateOptions {
 
     #[serde(rename = "leafNodeSize")]
     pub leaf_node_size: UVec3,
+
+    #[serde(rename = "brickRequestLimit")]
+    pub brick_request_limit: u32,
+
+    #[serde(rename = "brickTransferLimit")]
+    pub brick_transfer_limit: u32,
 }
 
 #[repr(u32)]
