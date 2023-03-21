@@ -62,6 +62,7 @@ pub enum SettingsChange {
 pub enum Event<T: 'static> {
     Window(WindowEvent<'static>),
     Brick(Rc<(BrickAddress, Vec<u8>)>),
+    PollBricks,
     Settings(SettingsChange),
     Custom(T),
 }

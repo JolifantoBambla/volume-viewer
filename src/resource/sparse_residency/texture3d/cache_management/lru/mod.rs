@@ -261,14 +261,12 @@ impl LRUCache {
     pub fn add_cache_entry(
         &mut self,
         data: &Vec<u8>,
-        input: &Input,
+        frame_number: u32,
     ) -> Result<UVec3, CacheFullError> {
         for i in ((self.num_used_entries_local as usize)..(self.next_empty_index as usize)).rev() {
             let cache_entry_index = self.lru_local[i];
             let last_written = self.lru_last_writes[cache_entry_index as usize];
-            if last_written > input.frame().number()
-                || (input.frame().number() - last_written) > self.time_to_live
-            {
+            if last_written > frame_number || (frame_number - last_written) > self.time_to_live {
                 let extent = uvec_to_extent(
                     &(index_to_subscript(
                         (data.len() as u32) - 1,
@@ -284,7 +282,7 @@ impl LRUCache {
                     extent,
                     &self.ctx,
                 );
-                self.lru_last_writes[cache_entry_index as usize] = input.frame().number();
+                self.lru_last_writes[cache_entry_index as usize] = frame_number;
                 self.next_empty_index = i as u32; // if i > 0 { i as u32 - 1 } else { 0 };
                 return Ok(cache_entry_location);
             }

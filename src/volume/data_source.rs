@@ -4,7 +4,6 @@ use std::cmp::min;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::rc::Rc;
-use js_sys::Uint8Array;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{CustomEvent, EventTarget};

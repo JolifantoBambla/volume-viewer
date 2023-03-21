@@ -2,7 +2,6 @@ pub mod brick_cache_update;
 mod cache_management;
 mod page_table;
 
-use std::borrow::Borrow;
 use glam::{UVec3, Vec3};
 use std::cmp::min;
 use std::collections::HashSet;
@@ -286,7 +285,7 @@ impl VolumeManager {
                 let brick_address = self.map_from_page_table(
                     self.page_table_directory
                         .brick_id_to_brick_address(local_brick_id),
-                    timestamp,
+                    Some(timestamp),
                 );
                 let global_brick_id = brick_address.into();
                 if !self.cached_bricks.contains(&global_brick_id)
@@ -309,10 +308,7 @@ impl VolumeManager {
         }
     }
 
-    fn process_new_bricks(&mut self, input: &Input) -> CacheUpdateMeta {
-        // update CPU local LRU cache
-        self.lru_cache.update_local_lru(input.frame().number());
-
+    pub fn process_new_bricks(&mut self, last_frame_number: u32) -> CacheUpdateMeta {
         let bricks = self.source.poll_bricks(min(
             self.brick_transfer_limit,
             self.lru_cache.num_writable_bricks(),
@@ -333,7 +329,7 @@ impl VolumeManager {
                         self.page_table_directory.mark_as_empty(&local_address);
                     } else {
                         // write brick to cache
-                        let brick_location = self.lru_cache.add_cache_entry(&brick, input);
+                        let brick_location = self.lru_cache.add_cache_entry(&brick, last_frame_number);
                         match brick_location {
                             Ok(brick_location) => {
                                 // mark brick as mapped
@@ -351,7 +347,7 @@ impl VolumeManager {
                                 if let Some(unmapped_brick_local_address) = unmapped_brick_address {
                                     let unmapped_brick_global_address = self.map_from_page_table(
                                         unmapped_brick_local_address,
-                                        input.frame().number(),
+                                        None, //input.frame().number(),
                                     );
                                     let unmapped_brick_id = unmapped_brick_global_address.into();
                                     self.cached_bricks.remove(&unmapped_brick_id);
@@ -385,10 +381,12 @@ impl VolumeManager {
     }
 
     /// Call this after rendering has completed to read back requests & usages
-    pub fn update_cache(&mut self, input: &Input) -> CacheUpdateMeta {
+    pub fn update_cache_meta(&mut self, input: &Input) {
         self.process_requests();
-        self.process_new_bricks(input)
+        // update CPU local LRU cache
+        self.lru_cache.update_local_lru(input.frame().number());
     }
+
 
     pub fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>) {
         if !brick_addresses.is_empty() {
@@ -413,11 +411,15 @@ impl VolumeManager {
             })
     }
 
-    fn map_from_page_table(&self, brick_address: BrickAddress, timestamp: u32) -> BrickAddress {
+    fn map_from_page_table(&self, brick_address: BrickAddress, timestamp: Option<u32>) -> BrickAddress {
+        let channel_configuration = if let Some(timestamp) = timestamp {
+            self.get_channel_configuration(timestamp)
+        } else {
+            self.channel_configuration.last().unwrap()
+        };
         BrickAddress::new(
             brick_address.index,
-            self.get_channel_configuration(timestamp)
-                .page_table_to_dataset(brick_address.channel),
+            channel_configuration.page_table_to_dataset(brick_address.channel),
             brick_address.level,
         )
     }

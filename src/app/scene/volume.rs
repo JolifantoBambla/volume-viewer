@@ -110,12 +110,16 @@ impl VolumeSceneObject {
         channel_mapping
     }
 
+    pub fn update_cache_meta(&mut self, input: &Input) {
+        self.volume_manager_mut().update_cache_meta(input);
+    }
+
     pub fn update_cache(
         &mut self,
-        input: &Input,
+        last_frame_number: u32,
         #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
-        let cache_update = self.volume_manager_mut().update_cache(input);
+        let cache_update = self.volume_manager_mut().process_new_bricks(last_frame_number);
         if let VolumeSceneObject::TopDownOctreeVolume(v) = self {
             // try reading update's frame's buffer
             #[cfg(feature = "timestamp-query")]

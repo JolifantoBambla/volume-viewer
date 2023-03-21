@@ -1,7 +1,6 @@
 pub mod renderer;
 pub mod scene;
 
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use crate::app::renderer::dvr::common::GpuChannelSettings;
 use crate::app::renderer::MultiChannelVolumeRenderer;
@@ -19,8 +18,8 @@ use crate::volume::HtmlEventTargetVolumeDataSource;
 use crate::wgsl::create_wgsl_preprocessor;
 use crate::{BrickedMultiResolutionMultiVolumeMeta, MultiChannelVolumeRendererSettings};
 use glam::UVec2;
+use gloo_timers::callback::Interval;
 use std::sync::Arc;
-use futures::AsyncReadExt;
 use wasm_bindgen::JsCast;
 use web_sys::EventTarget;
 use wgpu::{SubmissionIndex, SurfaceConfiguration, TextureView};
@@ -32,7 +31,7 @@ use wgpu_framework::event::lifecycle::{
 use wgpu_framework::event::window::{OnResize, OnUserEvent, OnWindowEvent};
 use wgpu_framework::input::Input;
 use winit::event::WindowEvent;
-use winit::event_loop::EventLoop;
+use winit::event_loop::{EventLoop, EventLoopProxy};
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
 use crate::timing::monitoring::MonitoringDataFrame;
@@ -73,6 +72,12 @@ pub struct App {
 
     #[cfg(target_arch = "wasm32")]
     event_target: EventTarget,
+
+    #[cfg(target_arch = "wasm32")]
+    brick_poll_interval: Option<Interval>,
+
+    event_loop_proxy: Option<EventLoopProxy<<Self as OnUserEvent>::UserEvent>>,
+    last_frame_number: u32,
 }
 
 impl App {
@@ -193,6 +198,9 @@ impl App {
             #[cfg(feature = "timestamp-query")]
             octree_update_timestamp_query_set,
             event_target,
+            brick_poll_interval: None,
+            event_loop_proxy: None,
+            last_frame_number: 0,
         }
     }
 
@@ -229,6 +237,18 @@ impl GpuApp for App {
         unsafe {
             GLOBAL_EVENT_LOOP_PROXY = Some(event_loop.create_proxy());
         }
+
+        self.event_loop_proxy = Some(event_loop.create_proxy());
+        if let Some(event_loop_proxy) = &self.event_loop_proxy {
+            event_loop_proxy.send_event(Event::PollBricks).ok();
+        }
+        /*
+        let event_proxy = event_loop.create_proxy();
+        // send a poll event every 16 ms
+        self.brick_poll_interval = Some(Interval::new(16, move || {
+            event_proxy.send_event(Event::PollBricks).ok();
+        }));
+         */
     }
 
     fn render(&mut self, view: &TextureView, input: &Input) -> SubmissionIndex {
@@ -347,6 +367,23 @@ impl OnUserEvent for App {
                 let brick = brick.clone();
                 self.scene.volume_mut().volume_manager_mut().source_mut().enqueue_brick(brick);
             }
+            Event::PollBricks => {
+                log::warn!("poll bricks");
+                self.scene.volume_mut().update_cache(
+                    self.last_frame_number,
+                    #[cfg(feature = "timestamp-query")]
+                    &mut self.octree_update_timestamp_query_set,
+                );
+
+                if let Some(event_loop_proxy) = &self.event_loop_proxy {
+                    let proxy = event_loop_proxy.clone();
+                    gloo_timers::callback::Timeout::new(16, move || {
+                        proxy.send_event(Event::PollBricks).ok();
+                    }).forget();
+                } else {
+                    log::warn!("no event loop proxy");
+                }
+            }
             _ => {}
         }
     }
@@ -398,11 +435,8 @@ impl OnCommandsSubmitted for App {
                 channel_mapping,
             };
         }
-        self.scene.volume_mut().update_cache(
-            input,
-            #[cfg(feature = "timestamp-query")]
-            &mut self.octree_update_timestamp_query_set,
-        );
+        self.scene.volume_mut().update_cache_meta(input);
+        self.last_frame_number = input.frame().number();
     }
 }
 
@@ -463,6 +497,7 @@ impl OnFrameEnd for App {
                 if let Some(&timestamp) = self.octree_update_timestamp_query_set.get_last("octree update [end]") {
                     monitoring.octree_update_end = timestamp as f64 / 1_000_000.0;
                 }
+                log::info!("octree update took {:?} ms", monitoring.octree_update);
             }
             #[cfg(target_arch = "wasm32")]
             {
@@ -486,5 +521,13 @@ impl OnFrameEnd for App {
 impl OnResize for App {
     fn on_resize(&mut self, _width: u32, _height: u32) {
         todo!()
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        if let Some(interval) = self.brick_poll_interval.take() {
+            interval.cancel();
+        }
     }
 }
