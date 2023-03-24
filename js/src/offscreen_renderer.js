@@ -7,6 +7,10 @@ import {
     RENDER_MODE_OCTREE,
     RENDER_MODE_PAGE_TABLE,
     RENDER_MODE_OCTREE_REFERENCE,
+    OUTPUT_MODE_DVR,
+    OUTPUT_MODE_BRICKS_ACCESSED,
+    OUTPUT_MODE_NODES_ACCESSED,
+    OUTPUT_MODE_SAMPLE_STEPS,
 } from './volume-renderer.js';
 
 export class Config {
@@ -87,6 +91,7 @@ async function createUI(offscreenRenderer, config) {
     const renderModeSelector = renderPane.addInput(
         volumeRendererSettings, 'renderMode',
         {
+            label: 'Render Mode',
             options: {
                 Octree: RENDER_MODE_OCTREE,
                 "Page Table": RENDER_MODE_PAGE_TABLE,
@@ -94,6 +99,18 @@ async function createUI(offscreenRenderer, config) {
             }
         }
     );
+    const outputModeSelector = renderPane.addInput(
+        volumeRendererSettings, 'outputMode',
+        {
+            label: 'Output Mode',
+            options: {
+                DVR: OUTPUT_MODE_DVR,
+                "Bricks Accessed": OUTPUT_MODE_BRICKS_ACCESSED,
+                "Nodes Accessed": OUTPUT_MODE_NODES_ACCESSED,
+                "Sample Steps": OUTPUT_MODE_SAMPLE_STEPS,
+            }
+        }
+    )
     const stepsSlider = renderPane.addInput(
         volumeRendererSettings, 'stepScale',
         {min: 0.5, max: 10.0, step: 0.2, label: 'Step spacing'}
@@ -120,7 +137,7 @@ async function createUI(offscreenRenderer, config) {
         document.body.style.backgroundColor = rgbToHex(e.value);
     });
 
-    [renderModeSelector, stepsSlider, maxStepsSlider, backgroundColorPicker]
+    [renderModeSelector, outputModeSelector, stepsSlider, maxStepsSlider, backgroundColorPicker]
         .forEach(i => i.on('change', dispatchGlobalSettingsChange));
 
     const channelsSettings = renderPane.addFolder({

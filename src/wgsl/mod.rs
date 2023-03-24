@@ -25,6 +25,7 @@ pub fn create_wgsl_preprocessor() -> WGSLPreprocessor {
             "octree_node_write_util",
             include_str!("octree_node_write_util.wgsl"),
         )
+        .include("output_modes", include_str!("output_modes.wgsl"))
         .include(
             "page_directory_util",
             include_str!("page_directory_util.wgsl"),

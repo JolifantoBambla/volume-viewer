@@ -6,6 +6,7 @@
 @include(constant)
 @include(grid_leap)
 @include(lighting)
+@include(output_modes)
 @include(page_table)
 @include(page_directory_meta_util)
 @include(ray)
@@ -48,6 +49,8 @@ struct GlobalSettings {
     max_steps: u32,
     num_visible_channels: u32,
     background_color: float4,
+    output_mode: u32,
+    padding: vec3<u32>,
 }
 
 // todo: come up with a better name...
@@ -194,6 +197,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var requested_brick = false;
     var last_lod = 0u;
     var steps_taken = 0u;
+    var bricks_accessed = 0u;
+    var nodes_accessed = 0u;
 
     let offset = hash_u32_to_f32(pcg_hash(u32(pixel.x + pixel.x * pixel.y)));
     let dt_scale = uniforms.settings.step_scale;
@@ -224,6 +229,9 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             let node = va_get_node(p, channel_lod, channel, !requested_brick);
             requested_brick = requested_brick || node.requested_brick;
             if (node.is_mapped) {
+                bricks_accessed += 1u;
+                nodes_accessed += 1u;
+
                 // todo: this currently means that the brick is empty, but the whole node thing should get refactored
                 if (node.has_average) {
                     empty_channels += 1;
@@ -255,7 +263,16 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         p += ray_os.direction * dt;
     }
 
-    debug(pixel, color);
+    if (uniforms.settings.output_mode == DVR) {
+        debug(pixel, color);
+        // todo: proper normalizing!
+    } else if (uniforms.settings.output_mode == BRICKS_ACCESSED) {
+        debug(pixel, vec4<f32>(vec3(f32(bricks_accessed) / 255.0), 1.0));
+    } else if (uniforms.settings.output_mode == NODES_ACCESSED) {
+        debug(pixel, vec4<f32>(vec3(f32(nodes_accessed) / 255.0), 1.0));
+    } else if (uniforms.settings.output_mode == SAMPLE_STEPS) {
+        debug(pixel, vec4<f32>(vec3(f32(steps_taken) / 255.0), 1.0));
+    }
 }
 
 fn is_saturated(color: float4) -> bool {

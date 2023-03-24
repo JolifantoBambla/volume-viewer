@@ -2,7 +2,7 @@ use crate::app::scene::camera::{Camera, CameraView};
 use glam::{Mat4, UVec3};
 
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 #[readonly::make]
 pub struct TransformUniform {
     pub object_to_world: Mat4,
@@ -41,7 +41,7 @@ impl From<&CameraView> for TransformUniform {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
     pub transform: TransformUniform,
     pub projection: Mat4,

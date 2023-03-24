@@ -6,6 +6,7 @@
 @include(constant)
 @include(grid_leap)
 @include(lighting)
+@include(output_modes)
 @include(page_table)
 @include(ray)
 @include(timestamp)
@@ -35,6 +36,8 @@ struct GlobalSettings {
     max_steps: u32,
     num_visible_channels: u32,
     background_color: float4,
+    output_mode: u32,
+    padding: vec3<u32>,
 }
 
 // todo: come up with a better name...
@@ -182,6 +185,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var requested_brick = false;
     var last_lod = 0u;
     var steps_taken = 0u;
+    var bricks_accessed = 0u;
+    var nodes_accessed = 0u;
 
     let offset = hash_u32_to_f32(pcg_hash(u32(pixel.x + pixel.x * pixel.y)));
     let dt_scale = uniforms.settings.step_scale;
@@ -226,10 +231,16 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         var last_value_channel = 0u;
 
         while (subdivision_index <= target_culling_level && channel < num_visible_channels) {
+            nodes_accessed += 1;
             if (last_channel != channel) {
                 lower_threshold = u32(floor((channel_settings[channel].threshold_lower - EPSILON) * 255.0));
                 upper_threshold = u32(floor((channel_settings[channel].threshold_upper + EPSILON) * 255.0));
                 channel_lod_factor = channel_settings[channel].lod_factor * max_component(inv_high_res_size);
+                // on a channel switch we need to make sure that the whole subtree is mapped
+                // to ensure this, we start traversal from the top
+                subdivision_index = start_subdivision_index;
+                last_channel = channel;
+                last_value = -1.0;
             }
 
             let multichannel_global_node_index = to_multichannel_node_index(
@@ -266,6 +277,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             let brick = try_fetch_brick(p, target_resolution, channel, !requested_brick);
             requested_brick = requested_brick || brick.requested_brick;
             if (brick.is_mapped) {
+                bricks_accessed += 1;
                 last_value = sample_volume(brick.sample_address);
                 last_value_channel = channel;
             } else {
@@ -303,7 +315,16 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         p += ray_os.direction * dt;
     }
 
-    debug(pixel, saturate(color));
+    if (uniforms.settings.output_mode == DVR) {
+        debug(pixel, color);
+        // todo: proper normalizing!
+    } else if (uniforms.settings.output_mode == BRICKS_ACCESSED) {
+        debug(pixel, vec4<f32>(vec3(f32(bricks_accessed) / 255.0), 1.0));
+    } else if (uniforms.settings.output_mode == NODES_ACCESSED) {
+        debug(pixel, vec4<f32>(vec3(f32(nodes_accessed) / 255.0), 1.0));
+    } else if (uniforms.settings.output_mode == SAMPLE_STEPS) {
+        debug(pixel, vec4<f32>(vec3(f32(steps_taken) / 255.0), 1.0));
+    }
     //debug(pixel, saturate(vec4(vec3(f32(steps_taken / uniforms.settings.max_steps)), 1.0)));
 }
 

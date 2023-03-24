@@ -38,6 +38,23 @@ pub enum RenderMode {
     OctreeReference,
 }
 
+#[repr(u32)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+pub enum OutputMode {
+    #[serde(rename = "dvr")]
+    Dvr,
+
+    #[serde(rename = "bricksAccessed")]
+    BricksAccessed,
+
+    /// for page table this is the same as BricksAccessed
+    #[serde(rename = "nodesAccessed")]
+    NodesAccessed,
+
+    #[serde(rename = "sampleSteps")]
+    SampleSteps,
+}
+
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct Color {
     r: f32,
@@ -110,6 +127,9 @@ pub struct MultiChannelVolumeRendererSettings {
 
     #[serde(rename = "renderMode")]
     pub render_mode: RenderMode,
+
+    #[serde(rename = "outputMode")]
+    pub output_mode: OutputMode,
 
     /// The `step_scale` is used to scale steps along a ray, where a scale of 1 is sampling roughly
     /// corresponds to one sample per voxel, and a smaller scale corresponds to smaller steps.

@@ -1,7 +1,7 @@
 use crate::app::renderer::common::{CameraUniform, TransformUniform};
 use crate::MultiChannelVolumeRendererSettings;
 use bytemuck::Contiguous;
-use glam::{UVec4, Vec4};
+use glam::{UVec3, UVec4, Vec4};
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
@@ -34,13 +34,16 @@ impl From<&crate::renderer::settings::ChannelSettings> for GpuChannelSettings {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct GlobalSettings {
     pub render_mode: u32,
     pub step_scale: f32,
     pub max_steps: u32,
     pub num_visible_channels: u32,
     pub background_color: Vec4,
+    pub output_mode: u32,
+    pub padding1: UVec3,
+    pub padding2: Vec4,
 }
 
 impl From<&MultiChannelVolumeRendererSettings> for GlobalSettings {
@@ -55,12 +58,15 @@ impl From<&MultiChannelVolumeRendererSettings> for GlobalSettings {
                 .filter(|c| c.visible)
                 .count() as u32,
             background_color: Vec4::from(settings.background_color),
+            output_mode: settings.output_mode as u32,
+            padding1: UVec3::ZERO,
+            padding2: Vec4::ZERO,
         }
     }
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniforms {
     pub camera: CameraUniform,
     pub volume_transform: TransformUniform,

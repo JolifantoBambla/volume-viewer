@@ -329,6 +329,9 @@ impl OnUserEvent for App {
                 SettingsChange::RenderMode(mode) => {
                     self.settings.render_mode = *mode;
                 }
+                SettingsChange::OutputMode(mode) => {
+                    self.settings.output_mode = *mode;
+                }
                 SettingsChange::StepScale(step_scale) => {
                     if *step_scale > 0. {
                         self.settings.step_scale = *step_scale;
@@ -370,7 +373,7 @@ impl OnUserEvent for App {
                 self.scene.volume_mut().volume_manager_mut().source_mut().enqueue_brick(brick);
             }
             Event::PollBricks => {
-                log::warn!("poll bricks");
+                //log::warn!("poll bricks");
                 self.scene.volume_mut().update_cache(
                     self.last_frame_number,
                     #[cfg(feature = "timestamp-query")]
@@ -499,7 +502,7 @@ impl OnFrameEnd for App {
                 if let Some(&timestamp) = self.octree_update_timestamp_query_set.get_last("octree update [end]") {
                     monitoring.octree_update_end = timestamp as f64 / 1_000_000.0;
                 }
-                log::info!("octree update took {:?} ms", monitoring.octree_update);
+                //log::info!("octree update took {:?} ms", monitoring.octree_update);
             }
             #[cfg(target_arch = "wasm32")]
             {

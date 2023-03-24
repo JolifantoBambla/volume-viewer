@@ -5,7 +5,7 @@ use winit::event::WindowEvent;
 pub mod conversion;
 pub mod handler;
 
-use crate::renderer::settings::{Color, RenderMode};
+use crate::renderer::settings::{Color, OutputMode, RenderMode};
 use crate::volume::BrickAddress;
 
 #[derive(Copy, Clone, Deserialize, Serialize)]
@@ -45,6 +45,9 @@ pub struct ChannelSetting {
 pub enum SettingsChange {
     #[serde(rename = "renderMode")]
     RenderMode(RenderMode),
+
+    #[serde(rename = "outputMode")]
+    OutputMode(OutputMode),
 
     #[serde(rename = "stepScale")]
     StepScale(f32),

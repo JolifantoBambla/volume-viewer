@@ -13,6 +13,17 @@ export const RENDER_MODES = [
     RENDER_MODE_OCTREE_REFERENCE,
 ];
 
+export const OUTPUT_MODE_DVR = "dvr";
+export const OUTPUT_MODE_BRICKS_ACCESSED = "bricksAccessed";
+export const OUTPUT_MODE_NODES_ACCESSED = "nodesAccessed";
+export const OUTPUT_MODE_SAMPLE_STEPS = "sampleSteps";
+export const OUTPUT_MODES = [
+    OUTPUT_MODE_DVR,
+    OUTPUT_MODE_BRICKS_ACCESSED,
+    OUTPUT_MODE_NODES_ACCESSED,
+    OUTPUT_MODE_SAMPLE_STEPS,
+]
+
 export class Color {
     r;
     g;
@@ -79,15 +90,17 @@ export class VolumeRendererCreateOptions {
 export class VolumeRendererSettings {
     createOptions;
     renderMode;
+    outputMode;
     stepScale;
     maxSteps;
     backgroundColor;
     channelSettings;
 
-    constructor({createOptions = new VolumeRendererCreateOptions({}), renderMode = RENDER_MODE_PAGE_TABLE, stepScale = 1.0, maxSteps = 300, backgroundColor = new Color({}),channelSettings = [new ChannelSettings({})]}) {
+    constructor({createOptions = new VolumeRendererCreateOptions({}), renderMode = RENDER_MODE_PAGE_TABLE, outputMode = OUTPUT_MODE_DVR, stepScale = 1.0, maxSteps = 300, backgroundColor = new Color({}),channelSettings = [new ChannelSettings({})]}) {
         // todo: validation
         this.createOptions = createOptions;
         this.renderMode = renderMode;
+        this.outputMode = outputMode;
         this.stepScale = stepScale;
         this.maxSteps = maxSteps;
         this.backgroundColor = backgroundColor;
