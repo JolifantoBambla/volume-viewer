@@ -196,6 +196,7 @@ pub struct Camera {
     last_mouse_position: Vec2,
     left_mouse_pressed: bool,
     right_mouse_pressed: bool,
+    orbiting: bool,
 
     speed: f32,
 }
@@ -238,6 +239,7 @@ impl Camera {
             last_mouse_position,
             left_mouse_pressed,
             right_mouse_pressed,
+            orbiting: false,
 
             speed,
         }
@@ -261,8 +263,12 @@ impl Camera {
 }
 
 impl Update for Camera {
-    fn update(&mut self, _input: &Input) {
+    fn update(&mut self, input: &Input) {
         // todo: update camera here instead of OnWindowEvent
+        if self.orbiting {
+            let delta = Vec2::new(0.0001 * input.time().delta(), 0.0);
+            self.view.orbit(delta, false);
+        }
     }
 }
 
@@ -277,40 +283,57 @@ impl OnWindowEvent for Camera {
                         ..
                     },
                 ..
-            } => match virtual_keycode {
-                VirtualKeyCode::D => self.view.move_right(self.speed),
-                VirtualKeyCode::A => self.view.move_left(self.speed),
-                VirtualKeyCode::W | VirtualKeyCode::Up => self.view.move_forward(self.speed),
-                VirtualKeyCode::S | VirtualKeyCode::Down => self.view.move_backward(self.speed),
-                VirtualKeyCode::C => {
-                    if self.projection().is_orthographic() {
-                        self.set_projection(self.perspective);
-                    } else {
-                        self.set_projection(self.orthographic);
+            } =>
+            if self.orbiting {
+                match virtual_keycode {
+                    VirtualKeyCode::O => {
+                        self.orbiting = false;
                     }
+                    _ => {}
                 }
-                _ => {}
+            } else {
+                match virtual_keycode {
+                    VirtualKeyCode::D => self.view.move_right(self.speed),
+                    VirtualKeyCode::A => self.view.move_left(self.speed),
+                    VirtualKeyCode::W | VirtualKeyCode::Up => self.view.move_forward(self.speed),
+                    VirtualKeyCode::S | VirtualKeyCode::Down => self.view.move_backward(self.speed),
+                    VirtualKeyCode::C => {
+                        if self.projection().is_orthographic() {
+                            self.set_projection(self.perspective);
+                        } else {
+                            self.set_projection(self.orthographic);
+                        }
+                    }
+                    VirtualKeyCode::O => {
+                        self.orbiting = true;
+                    }
+                    _ => {}
+                }
             },
             WindowEvent::CursorMoved { position, .. } => {
-                let mouse_position = Vec2::new(position.x as f32, position.y as f32);
-                let delta = (mouse_position - self.last_mouse_position) / self.resolution;
-                self.last_mouse_position = mouse_position;
+                if !self.orbiting {
+                    let mouse_position = Vec2::new(position.x as f32, position.y as f32);
+                    let delta = (mouse_position - self.last_mouse_position) / self.resolution;
+                    self.last_mouse_position = mouse_position;
 
-                if self.left_mouse_pressed {
-                    self.view.orbit(delta, false);
-                } else if self.right_mouse_pressed {
-                    let translation = delta * self.speed * 20.;
-                    self.view.move_right(translation.x);
-                    self.view.move_down(translation.y);
+                    if self.left_mouse_pressed {
+                        self.view.orbit(delta, false);
+                    } else if self.right_mouse_pressed {
+                        let translation = delta * self.speed * 20.;
+                        self.view.move_right(translation.x);
+                        self.view.move_down(translation.y);
+                    }
                 }
             }
             WindowEvent::MouseWheel {
                 delta: MouseScrollDelta::PixelDelta(delta),
                 ..
             } => {
-                self.view.move_forward(
-                    (f64::min(delta.y.abs(), 1.) * delta.y.signum()) as f32 * self.speed,
-                );
+                if !self.orbiting {
+                    self.view.move_forward(
+                        (f64::min(delta.y.abs(), 1.) * delta.y.signum()) as f32 * self.speed,
+                    );
+                }
             }
             WindowEvent::MouseInput { state, button, .. } => match button {
                 MouseButton::Left => {
