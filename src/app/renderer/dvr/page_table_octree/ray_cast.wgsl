@@ -201,6 +201,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     var last_node_index = 4294967295u;
 
     let grid_ray = make_grid_ray(ray_os, t_max);
+    let start_subdivision_index = 2u;
+    var last_subdivision_level = start_subdivision_index;
 
     for (var t = t_min; t < t_max; t += dt) {
         let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
@@ -220,8 +222,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
         var channel = 0u;
         // todo: make start level configurable (e.g., start at level 2 because 0 and 1 are unlikely to be empty anyway)
-        let start_subdivision_index = 2u;
-        var subdivision_index = start_subdivision_index;
+        var subdivision_index = last_subdivision_level;
         var empty_channels = 0u;
         var homogeneous_channels = 0u;
 
@@ -354,6 +355,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
 
         p += ray_os.direction * dt;
+        last_subdivision_level = max(start_subdivision_index, subdivision_index - 1);
 
         // todo: remove(debug)
         last_node_index = terminated_at_index;
