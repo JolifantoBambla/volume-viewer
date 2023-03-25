@@ -119,6 +119,10 @@ async function createUI(offscreenRenderer, config) {
         volumeRendererSettings, 'maxSteps',
         {min: 1, max: 1000, step: 1, label: 'Max. steps'}
     );
+    const statisticsNormalizationSlider = renderPane.addInput(
+        volumeRendererSettings, 'statisticsNormalizationConstant',
+        {min: 1, max: 10000, step: 1, label: 'Stat. norm.'}
+    );
     const backgroundColorPicker = renderPane.addInput(volumeRendererSettings, 'backgroundColor', {
         label: 'Background color',
         picker: 'inline',
@@ -137,7 +141,7 @@ async function createUI(offscreenRenderer, config) {
         document.body.style.backgroundColor = rgbToHex(e.value);
     });
 
-    [renderModeSelector, outputModeSelector, stepsSlider, maxStepsSlider, backgroundColorPicker]
+    [renderModeSelector, outputModeSelector, stepsSlider, maxStepsSlider, statisticsNormalizationSlider, backgroundColorPicker]
         .forEach(i => i.on('change', dispatchGlobalSettingsChange));
 
     const channelsSettings = renderPane.addFolder({

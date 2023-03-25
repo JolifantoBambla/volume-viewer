@@ -182,12 +182,13 @@ impl MultiChannelVolumeRenderer {
         command_encoder: &mut CommandEncoder,
         #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
-        let uniforms = Uniforms::new(
+        let mut uniforms = Uniforms::new(
             CameraUniform::from(scene.camera()),
             scene.volume_transform(),
             input.frame().number(),
             settings,
         );
+        uniforms.settings.voxel_spacing = scene.volume().volume_manager().meta().normalized_scale();
 
         self.gpu.queue().write_buffer(
             &self.volume_render_global_settings_buffer,

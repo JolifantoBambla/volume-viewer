@@ -93,16 +93,18 @@ export class VolumeRendererSettings {
     outputMode;
     stepScale;
     maxSteps;
+    statisticsNormalizationConstant;
     backgroundColor;
     channelSettings;
 
-    constructor({createOptions = new VolumeRendererCreateOptions({}), renderMode = RENDER_MODE_PAGE_TABLE, outputMode = OUTPUT_MODE_DVR, stepScale = 1.0, maxSteps = 300, backgroundColor = new Color({}),channelSettings = [new ChannelSettings({})]}) {
+    constructor({createOptions = new VolumeRendererCreateOptions({}), renderMode = RENDER_MODE_PAGE_TABLE, outputMode = OUTPUT_MODE_DVR, stepScale = 1.0, maxSteps = 300, statisticsNormalizationConstant = 255, backgroundColor = new Color({}),channelSettings = [new ChannelSettings({})]}) {
         // todo: validation
         this.createOptions = createOptions;
         this.renderMode = renderMode;
         this.outputMode = outputMode;
         this.stepScale = stepScale;
         this.maxSteps = maxSteps;
+        this.statisticsNormalizationConstant = statisticsNormalizationConstant;
         this.backgroundColor = backgroundColor;
         this.channelSettings = channelSettings;
     }

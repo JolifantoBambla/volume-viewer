@@ -4,6 +4,7 @@
 @include(camera)
 @include(channel_settings)
 @include(constant)
+@include(global_settings)
 @include(grid_leap)
 @include(lighting)
 @include(output_modes)
@@ -37,30 +38,6 @@ fn white(pixel: int2) {
 }
 fn black(pixel: int2) {
     textureStore(result, pixel, BLACK);
-}
-
-// RENDER MODES
-const GRID_TRAVERSAL = 0u;
-const DIRECT = 1u;
-
-struct GlobalSettings {
-    render_mode: u32,
-    step_scale: f32,
-    max_steps: u32,
-    num_visible_channels: u32,
-    background_color: float4,
-    output_mode: u32,
-    padding: vec3<u32>,
-}
-
-// todo: come up with a better name...
-// todo: clean up those uniforms - find out what i really need and throw away the rest
-struct Uniforms {
-    camera: Camera,
-    volume_transform: Transform,
-    //todo: use Timestamp struct
-    @size(16) timestamp: u32,
-    settings: GlobalSettings,
 }
 
 // Bindings
@@ -203,7 +180,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     let offset = hash_u32_to_f32(pcg_hash(u32(pixel.x + pixel.x * pixel.y)));
     let dt_scale = uniforms.settings.step_scale;
 
-    var dt_vec = 1. / (float3(page_table_meta.metas[last_lod].volume_size) * abs(ray_os.direction));
+    var dt_vec = 1. / ((float3(page_table_meta.metas[last_lod].volume_size) * uniforms.settings.voxel_spacing) * abs(ray_os.direction));
     var dt = dt_scale * min_component(dt_vec);
     var p = ray_at(ray_os, t_min + offset * dt);
 
@@ -215,7 +192,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         let lod_changed = lod != last_lod;
         if (lod_changed) {
             last_lod = lod;
-            dt_vec = 1. / (float3(page_table_meta.metas[compute_page_table_index(first_channel_index, lod)].volume_size) * abs(ray_os.direction));
+            dt_vec = 1. / ((float3(page_table_meta.metas[compute_page_table_index(first_channel_index, lod)].volume_size) * uniforms.settings.voxel_spacing) * abs(ray_os.direction));
             dt = dt_scale * min_component(dt_vec);
         }
 
@@ -223,6 +200,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         var empty_lod = lod;
 
         for (var channel = 0u; channel < num_visible_channels; channel += 1u) {
+            nodes_accessed += 1u;
             let channel_lod = va_compute_lod(distance_to_camera, channel, channel_settings[channel].lod_factor * max_component(inv_high_res_size));
             empty_lod = max(empty_lod, channel_lod);
 
@@ -230,7 +208,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             requested_brick = requested_brick || node.requested_brick;
             if (node.is_mapped) {
                 bricks_accessed += 1u;
-                nodes_accessed += 1u;
 
                 // todo: this currently means that the brick is empty, but the whole node thing should get refactored
                 if (node.has_average) {
@@ -264,14 +241,13 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     }
 
     if (uniforms.settings.output_mode == DVR) {
-        debug(pixel, color);
-        // todo: proper normalizing!
+            debug(pixel, color);
     } else if (uniforms.settings.output_mode == BRICKS_ACCESSED) {
-        debug(pixel, vec4<f32>(vec3(f32(bricks_accessed) / 255.0), 1.0));
+        debug(pixel, vec4<f32>(vec3(f32(bricks_accessed) / f32(uniforms.settings.statistics_normalization_constant)), 1.0));
     } else if (uniforms.settings.output_mode == NODES_ACCESSED) {
-        debug(pixel, vec4<f32>(vec3(f32(nodes_accessed) / 255.0), 1.0));
+        debug(pixel, vec4<f32>(vec3(f32(nodes_accessed) / f32(uniforms.settings.statistics_normalization_constant)), 1.0));
     } else if (uniforms.settings.output_mode == SAMPLE_STEPS) {
-        debug(pixel, vec4<f32>(vec3(f32(steps_taken) / 255.0), 1.0));
+        debug(pixel, vec4<f32>(vec3(f32(steps_taken) / f32(uniforms.settings.statistics_normalization_constant)), 1.0));
     }
 }
 

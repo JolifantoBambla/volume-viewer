@@ -48,11 +48,48 @@ impl VolumeSubdivision {
         let mut subdivisions = Vec::new();
         let mut last_shape = input_shape;
         while last_shape.cmpgt(target_shape).any() {
-            let subdivide = BVec3::new(
-                last_shape.x > last_shape.y / 2 && last_shape.x > last_shape.z / 2,
-                last_shape.y > last_shape.x / 2 && last_shape.y > last_shape.z / 2,
-                last_shape.z > last_shape.x / 2 && last_shape.z > last_shape.y / 2,
+            let mut subdivide = BVec3::new(
+                last_shape.x > target_shape.x,
+                last_shape.y > target_shape.y,
+                last_shape.z > target_shape.z,
             );
+            if subdivide.x {
+                if last_shape.y > target_shape.y && last_shape.x < last_shape.y / 2 {
+                    subdivide.x = false;
+                }
+                if last_shape.z > target_shape.z && last_shape.x < last_shape.z / 2 {
+                    subdivide.x = false;
+                }
+            }
+            if subdivide.y {
+                if last_shape.x > target_shape.x && last_shape.y < last_shape.x / 2 {
+                    subdivide.y = false;
+                }
+                if last_shape.z > target_shape.z && last_shape.y < last_shape.z / 2 {
+                    subdivide.y = false;
+                }
+            }
+            if subdivide.z {
+                if last_shape.x > target_shape.x && last_shape.z < last_shape.x {
+                    subdivide.z = false;
+                }
+                if last_shape.y > target_shape.y && last_shape.z < last_shape.y / 2 {
+                    subdivide.z = false;
+                }
+            }
+
+            /*
+            let subdivide = BVec3::new(
+                !(last_shape.x < last_shape.y / 2 || last_shape.x < last_shape.z / 2) && last_shape.x > target_shape.x,
+                !(last_shape.y < last_shape.x / 2 || last_shape.y < last_shape.z / 2) && last_shape.y > target_shape.y,
+                !(last_shape.z < last_shape.x / 2 || last_shape.z < last_shape.y / 2) && last_shape.z > target_shape.z,
+                //last_shape.x > last_shape.y / 2 && last_shape.x > last_shape.z / 2,
+                //last_shape.y > last_shape.x / 2 && last_shape.y > last_shape.z / 2,
+                //last_shape.z > last_shape.x / 2 && last_shape.z > last_shape.y / 2,
+            );
+             */
+
+            log::info!("last shape {:?}, subidivide {:?}, target_shape {:?}", last_shape, subdivide, target_shape);
             last_shape = UVec3::new(
                 if subdivide.x {
                     last_shape.x / 2

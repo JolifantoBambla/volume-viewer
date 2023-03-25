@@ -55,6 +55,9 @@ pub enum SettingsChange {
     #[serde(rename = "maxSteps")]
     MaxSteps(u32),
 
+    #[serde(rename = "statisticsNormalizationConstant")]
+    StatisticsNormalizationConstant(u32),
+
     #[serde(rename = "backgroundColor")]
     BackgroundColor(Color),
 

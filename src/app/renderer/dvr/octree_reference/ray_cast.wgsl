@@ -4,6 +4,7 @@
 @include(camera)
 @include(channel_settings)
 @include(constant)
+@include(global_settings)
 @include(grid_leap)
 @include(lighting)
 @include(output_modes)
@@ -28,26 +29,6 @@
 
 fn debug(pixel: int2, color: float4) {
     textureStore(result, pixel, color);
-}
-
-struct GlobalSettings {
-    render_mode: u32,
-    step_scale: f32,
-    max_steps: u32,
-    num_visible_channels: u32,
-    background_color: float4,
-    output_mode: u32,
-    padding: vec3<u32>,
-}
-
-// todo: come up with a better name...
-// todo: clean up those uniforms - find out what i really need and throw away the rest
-struct Uniforms {
-    camera: Camera,
-    volume_transform: Transform,
-    //todo: use Timestamp struct
-    @size(16) timestamp: u32,
-    settings: GlobalSettings,
 }
 
 // Bindings
@@ -191,13 +172,16 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     let offset = hash_u32_to_f32(pcg_hash(u32(pixel.x + pixel.x * pixel.y)));
     let dt_scale = uniforms.settings.step_scale;
 
-    var dt_vec = 1. / (float3(page_table_meta.metas[last_lod].volume_size) * abs(ray_os.direction));
+    //var dt_vec = 1. / (float3(page_table_meta.metas[last_lod].volume_size) * abs(ray_os.direction));
+    var dt_vec = 1. / ((float3(page_table_meta.metas[last_lod].volume_size) * uniforms.settings.voxel_spacing) * abs(ray_os.direction));
     var dt = dt_scale * min_component(dt_vec);
     var p = ray_at(ray_os, t_min + offset * dt);
 
     let first_channel_index = channel_settings[0].page_table_index;
 
     let grid_ray = make_grid_ray(ray_os, t_max);
+    let start_subdivision_index = 0u;
+    var last_subdivision_level = start_subdivision_index;
 
     for (var t = t_min; t < t_max; t += dt) {
         let distance_to_camera = abs((object_to_view * float4(p, 1.)).z);
@@ -205,7 +189,8 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         let lod_changed = lod != last_lod;
         if (lod_changed) {
             last_lod = lod;
-            dt_vec = 1. / (float3(page_table_meta.metas[compute_page_table_index(first_channel_index, lod)].volume_size) * abs(ray_os.direction));
+            //dt_vec = 1. / (float3(page_table_meta.metas[compute_page_table_index(first_channel_index, lod)].volume_size) * abs(ray_os.direction));
+            dt_vec = 1. / ((float3(page_table_meta.metas[compute_page_table_index(first_channel_index, lod)].volume_size) * uniforms.settings.voxel_spacing) * abs(ray_os.direction));
             dt = dt_scale * min_component(dt_vec);
         }
 
@@ -216,9 +201,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         let target_culling_level = subdivision_get_leaf_node_level_index();
 
         var channel = 0u;
-        // todo: make start level configurable (e.g., start at level 2 because 0 and 1 are unlikely to be empty anyway)
-        let start_subdivision_index = 0u;
-        var subdivision_index = start_subdivision_index;
+        var subdivision_index = last_subdivision_level;
         var empty_channels = 0u;
         var homogeneous_channels = 0u;
 
@@ -273,7 +256,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 continue;
             }
             */
-            let target_resolution = max(0, num_resolutions - subdivision_index - 1);
+            let target_resolution = max(0, min(num_resolutions - subdivision_index, num_resolutions - 1));
             let brick = try_fetch_brick(p, target_resolution, channel, !requested_brick);
             requested_brick = requested_brick || brick.requested_brick;
             if (brick.is_mapped) {
@@ -313,19 +296,18 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
 
         p += ray_os.direction * dt;
+        //last_subdivision_level = max(start_subdivision_index, subdivision_index - 1);
     }
 
     if (uniforms.settings.output_mode == DVR) {
         debug(pixel, color);
-        // todo: proper normalizing!
     } else if (uniforms.settings.output_mode == BRICKS_ACCESSED) {
-        debug(pixel, vec4<f32>(vec3(f32(bricks_accessed) / 255.0), 1.0));
+        debug(pixel, vec4<f32>(vec3(f32(bricks_accessed) / f32(uniforms.settings.statistics_normalization_constant)), 1.0));
     } else if (uniforms.settings.output_mode == NODES_ACCESSED) {
-        debug(pixel, vec4<f32>(vec3(f32(nodes_accessed) / 255.0), 1.0));
+        debug(pixel, vec4<f32>(vec3(f32(nodes_accessed) / f32(uniforms.settings.statistics_normalization_constant)), 1.0));
     } else if (uniforms.settings.output_mode == SAMPLE_STEPS) {
-        debug(pixel, vec4<f32>(vec3(f32(steps_taken) / 255.0), 1.0));
+        debug(pixel, vec4<f32>(vec3(f32(steps_taken) / f32(uniforms.settings.statistics_normalization_constant)), 1.0));
     }
-    //debug(pixel, saturate(vec4(vec3(f32(steps_taken / uniforms.settings.max_steps)), 1.0)));
 }
 
 fn is_saturated(color: float4) -> bool {

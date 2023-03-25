@@ -1,7 +1,7 @@
 use crate::app::renderer::common::{CameraUniform, TransformUniform};
 use crate::MultiChannelVolumeRendererSettings;
 use bytemuck::Contiguous;
-use glam::{UVec3, UVec4, Vec4};
+use glam::{UVec2, UVec3, UVec4, Vec3, Vec4};
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
@@ -42,8 +42,10 @@ pub struct GlobalSettings {
     pub num_visible_channels: u32,
     pub background_color: Vec4,
     pub output_mode: u32,
-    pub padding1: UVec3,
-    pub padding2: Vec4,
+    pub statistics_normalization_constant: u32,
+    pub padding1: UVec2,
+    pub voxel_spacing: Vec3,
+    pub padding2: f32,
 }
 
 impl From<&MultiChannelVolumeRendererSettings> for GlobalSettings {
@@ -59,8 +61,10 @@ impl From<&MultiChannelVolumeRendererSettings> for GlobalSettings {
                 .count() as u32,
             background_color: Vec4::from(settings.background_color),
             output_mode: settings.output_mode as u32,
-            padding1: UVec3::ZERO,
-            padding2: Vec4::ZERO,
+            statistics_normalization_constant: settings.statistics_normalization_constant,
+            padding1: UVec2::ZERO,
+            voxel_spacing: Vec3::ZERO,
+            padding2: 0.0,
         }
     }
 }

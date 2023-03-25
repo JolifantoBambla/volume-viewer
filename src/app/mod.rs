@@ -342,6 +342,9 @@ impl OnUserEvent for App {
                 SettingsChange::MaxSteps(max_steps) => {
                     self.settings.max_steps = *max_steps;
                 }
+                SettingsChange::StatisticsNormalizationConstant(c) => {
+                    self.settings.statistics_normalization_constant = *c;
+                }
                 SettingsChange::BackgroundColor(color) => {
                     self.settings.background_color = *color;
                 }

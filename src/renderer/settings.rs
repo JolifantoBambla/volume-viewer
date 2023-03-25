@@ -141,6 +141,9 @@ pub struct MultiChannelVolumeRendererSettings {
     #[serde(rename = "maxSteps")]
     pub max_steps: u32,
 
+    #[serde(rename = "statisticsNormalizationConstant")]
+    pub statistics_normalization_constant: u32,
+
     /// The background color to use for rendering.
     #[serde(rename = "backgroundColor")]
     pub background_color: Color,
