@@ -322,19 +322,21 @@ export class OmeZarrDataSource extends VolumeDataSource {
         const numChannels = this.#zarrArrays[0].meta.shape[this.#zarrArrays[0].meta.shape.length - 4];
 
         const brickSize = config.bricks.minimumSize;
+        const stupidBrickSize = [...brickSize];
         for (const arr of this.#zarrArrays) {
             for (let i = 0; i < 3; ++i) {
-                brickSize[i] = Math.min(
+                stupidBrickSize[i] = Math.min(
                     config.bricks.maximumSize[i],
                     arr.shape[arr.shape.length - 1 - i],
                     Math.max(
                         config.bricks.minimumSize[i],
-                        brickSize[i],
+                        stupidBrickSize[i],
                         arr.chunks[arr.chunks.length - 1 - i]
                     )
                 );
             }
         }
+        console.info('brick size vs. stupid brick size', brickSize, stupidBrickSize);
 
         const resolutions = [];
         for (let i = 0; i < this.#zarrArrays.length; ++i) {

@@ -141,6 +141,8 @@ export class VolumeRenderer {
         const volumeDataSource = Comlink.wrap(worker);
         const volumeMeta = await volumeDataSource.initialize(config.dataSource);
 
+        console.log(volumeMeta);
+
         this.#canvas = offscreenCanvas;
         this.#loader = {
             worker,
