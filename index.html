@@ -187,9 +187,9 @@
     })
     const leafNodeSizeInput = rendererUI.addInput(leafNodeConfig, 'size', {
         label: 'Leaf node size',
-        x: {min: 4, max: 32, step: 4},
-        y: {min: 4, max: 32, step: 4},
-        z: {min: 4, max: 32, step: 4}
+        x: {min: 4, max: 256, step: 4},
+        y: {min: 4, max: 256, step: 4},
+        z: {min: 4, max: 256, step: 4}
     });
     leafNodeSizeInput.on('change', (e) => {
         rendererCreateOptions.leafNodeSize = [e.value.x, e.value.y, e.value.z];
