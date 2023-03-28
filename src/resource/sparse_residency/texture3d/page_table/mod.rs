@@ -7,12 +7,13 @@ use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{BindingResource, Buffer, BufferUsages, Extent3d};
 
 use crate::resource::Texture;
-use crate::util::extent::{subscript_to_index, uvec_to_extent, IndexToSubscript, SubscriptToIndex};
+use crate::util::extent::{subscript_to_index, uvec_to_extent, IndexToSubscript, SubscriptToIndex, index_to_subscript};
 use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 
 use crate::resource::buffer::TypedBuffer;
 pub use meta::{PageDirectoryMeta, PageTableMeta};
 use wgpu_framework::context::Gpu;
+use crate::resource::sparse_residency::texture3d::page_table::PageTableEntryFlag::Mapped;
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -53,8 +54,6 @@ pub struct PageTableDirectory {
     page_table_meta_buffer: Buffer,
     page_directory: Texture,
     meta: PageDirectoryMeta,
-    max_visible_channels: u32,
-    max_resolutions: u32,
 
     cache_addresses_in_use: HashMap<UVec3, usize>,
 }
@@ -114,8 +113,6 @@ impl PageTableDirectory {
 
         Self {
             ctx: ctx.clone(),
-            max_visible_channels,
-            max_resolutions,
             page_directory_meta_buffer,
             page_table_meta_buffer,
             page_directory,
@@ -167,6 +164,10 @@ impl PageTableDirectory {
         let offset = page_table.offset();
         let location = brick_address.index;
         subscript_to_index(&(offset + location), &self.page_directory.extent) as usize
+    }
+
+    fn is_unmapped(&self, page_index: usize) -> bool {
+        self.local_page_directory[page_index].w == PageTableEntryFlag::Unmapped as u32
     }
 
     /// Marks the brick at the given `brick_address` as empty, i.e., `PageTableEntryFlag::Empty`.
@@ -227,10 +228,12 @@ impl PageTableDirectory {
     /// # Arguments
     ///
     /// * `channel_index`: the index of the channel for which all page tables should be invalidated
-    pub fn invalidate_channel_page_tables(&mut self, channel_index: u32) {
-        for resolution in 0..self.max_resolutions {
-            self.invalidate_page_table(resolution, channel_index);
+    pub fn invalidate_channel_page_tables(&mut self, channel_index: u32) -> Vec<BrickAddress> {
+        let mut unmapped_local_brick_addresses = Vec::new();
+        for resolution in 0..self.resolution_capacity() as u32 {
+            unmapped_local_brick_addresses.append(&mut self.invalidate_page_table(resolution, channel_index));
         }
+        unmapped_local_brick_addresses
     }
 
     /// Invalidates the page table with `resolution_index` and `channel_index` by marking all their
@@ -240,17 +243,23 @@ impl PageTableDirectory {
     ///
     /// * `resolution_index`: the resolution index of the page table to invalidate
     /// * `channel_index`: the channel index of the page table to invalidate
-    pub fn invalidate_page_table(&mut self, resolution_index: u32, channel_index: u32) {
+    pub fn invalidate_page_table(&mut self, resolution_index: u32, channel_index: u32) -> Vec<BrickAddress> {
         let page_table = self.meta.get_page_table(resolution_index, channel_index);
         let offset = page_table.offset();
-        let last = offset + page_table.extent();
+        let last = offset + page_table.extent() - UVec3::ONE;
 
         let begin = subscript_to_index(&(offset), &self.page_directory.extent) as usize;
         let end = subscript_to_index(&last, &self.page_directory.extent) as usize;
 
-        for index in begin..end {
-            self.mark_as_unmapped(index);
+        let mut unmapped_page_ids = Vec::new();
+        for index in begin..end + 1 {
+            if !self.is_unmapped(index) {
+                self.mark_as_unmapped(index);
+                let brick_location = index_to_subscript(index as u32, &self.page_directory.extent) - offset;
+                unmapped_page_ids.push(BrickAddress::new(brick_location, channel_index, resolution_index));
+            }
         }
+        unmapped_page_ids
     }
 
     /// Commits local changes to the page table directory to its GPU texture representation.
@@ -285,7 +294,11 @@ impl PageTableDirectory {
     }
 
     pub fn channel_capacity(&self) -> usize {
-        self.max_visible_channels as usize
+        self.meta.num_channels()
+    }
+
+    pub fn resolution_capacity(&self) -> usize {
+        self.meta.num_resolutions()
     }
 
     pub fn shape(&self) -> UVec2 {

@@ -145,6 +145,7 @@ impl App {
         };
 
         let volume_meta2 = volume_manager.meta().clone();
+        #[cfg(not(feature = "page-table-only"))]
         let volume = VolumeSceneObject::new_octree_volume(
             OctreeDescriptor {
                 volume: &volume_meta2,
@@ -155,8 +156,9 @@ impl App {
             &wgsl_preprocessor,
             gpu,
         );
-        // todo: make this configurable
-        //let volume = VolumeSceneObject::new_page_table_volume(volume_manager);
+
+        #[cfg(feature = "page-table-only")]
+        let volume = VolumeSceneObject::new_page_table_volume(volume_manager);
 
         let renderer = MultiChannelVolumeRenderer::new(
             window_size,

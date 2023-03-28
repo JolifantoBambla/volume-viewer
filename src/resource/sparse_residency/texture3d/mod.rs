@@ -462,12 +462,20 @@ impl VolumeManager {
                         .dataset_to_page_table(no_longer_selected[i])
                         .unwrap();
                     new_pt2d[idx] = new_selected[i];
-                    self.page_table_directory
-                        .invalidate_channel_page_tables(idx as u32);
+                    for local_brick_address in self.page_table_directory
+                        .invalidate_channel_page_tables(idx as u32) {
+                        let unmapped_brick_global_address = self.map_from_page_table(
+                            local_brick_address,
+                            None,
+                        );
+                        // todo: these need to be passed to the octree as well
+                        self.cached_bricks.remove(&unmapped_brick_global_address.into());
+                    }
                 } else {
                     new_pt2d.push(new_selected[i]);
                 }
             }
+            self.page_table_directory.commit_changes()
         }
         self.channel_configuration
             .push(ChannelConfigurationState::from_mapping(new_pt2d, timestamp));

@@ -41,7 +41,9 @@ pub struct MultiChannelVolumeRenderer {
     page_table_render_pass: PageTableDVR,
     page_table_bind_group: BindGroup,
 
+    #[cfg(not(feature = "page-table-only"))]
     octree_reference_render_pass: OctreeReferenceDVR,
+    #[cfg(not(feature = "page-table-only"))]
     octree_reference_bind_group: BindGroup,
 }
 
@@ -135,6 +137,7 @@ impl MultiChannelVolumeRenderer {
             channel_settings: &volume_render_channel_settings_buffer,
         });
 
+        #[cfg(not(feature = "page-table-only"))]
         let octree_reference_render_pass =
             OctreeReferenceDVR::new(volume.volume_manager(),
                                     match volume {
@@ -145,6 +148,7 @@ impl MultiChannelVolumeRenderer {
                                     },
                                     wgsl_preprocessor,
                                     gpu);
+        #[cfg(not(feature = "page-table-only"))]
         let octree_reference_bind_group = octree_reference_render_pass.create_bind_group(Resources {
             volume_sampler: &volume_sampler,
             output: &dvr_result.view,
@@ -166,7 +170,9 @@ impl MultiChannelVolumeRenderer {
             page_table_render_pass,
             page_table_bind_group,
 
+            #[cfg(not(feature = "page-table-only"))]
             octree_reference_render_pass,
+            #[cfg(not(feature = "page-table-only"))]
             octree_reference_bind_group,
         }
     }
@@ -216,15 +222,7 @@ impl MultiChannelVolumeRenderer {
                     timestamp_query_helper,
                 );
             }
-            RenderMode::PageTable => {
-                self.page_table_render_pass.encode(
-                    command_encoder,
-                    &self.page_table_bind_group,
-                    &self.volume_render_result_extent,
-                    #[cfg(feature = "timestamp-query")]
-                    timestamp_query_helper,
-                );
-            },
+            #[cfg(not(feature = "page-table-only"))]
             RenderMode::OctreeReference => {
                 self.octree_reference_render_pass.encode(
                     command_encoder,
@@ -233,7 +231,16 @@ impl MultiChannelVolumeRenderer {
                     #[cfg(feature = "timestamp-query")]
                     timestamp_query_helper,
                 );
-            }
+            },
+            _ => {
+                self.page_table_render_pass.encode(
+                    command_encoder,
+                    &self.page_table_bind_group,
+                    &self.volume_render_result_extent,
+                    #[cfg(feature = "timestamp-query")]
+                        timestamp_query_helper,
+                );
+            },
         }
 
         self.present_to_screen_pass.encode(
