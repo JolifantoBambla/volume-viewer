@@ -55,7 +55,7 @@ pub struct PageTableDirectory {
     page_directory: Texture,
     meta: PageDirectoryMeta,
 
-    cache_addresses_in_use: HashMap<UVec3, usize>,
+    cache_addresses_in_use: HashMap<UVec3, (usize, u32, u32)>, // page_index, resolution, channel
 }
 
 impl PageTableDirectory {
@@ -208,17 +208,24 @@ impl PageTableDirectory {
         brick_address: &BrickAddress,
         cache_address: &UVec3,
     ) -> Option<BrickAddress> {
-        let brick_index = self.brick_address_to_page_index(brick_address);
-        self.mark_as_mapped(brick_index, cache_address);
+        let page_index = self.brick_address_to_page_index(brick_address);
+        self.mark_as_mapped(page_index, cache_address);
         let unmapped_brick_address =
-            if let Some(&unmapped_brick_id) = self.cache_addresses_in_use.get(cache_address) {
-                self.mark_as_unmapped(unmapped_brick_id);
-                Some(self.brick_id_to_brick_address(unmapped_brick_id as u32))
+            if let Some(&(unmapped_page_index, resolution, channel)) = self.cache_addresses_in_use.get(cache_address) {
+                self.mark_as_unmapped(unmapped_page_index);
+                let page_table = self.meta.get_page_table(resolution, channel);
+                let offset = page_table.offset();
+                let unmapped_brick_address = BrickAddress::new(
+                    index_to_subscript(unmapped_page_index as u32, &self.page_directory.extent) - offset,
+                    channel,
+                    resolution
+                );
+                Some(unmapped_brick_address)
             } else {
                 None
             };
         self.cache_addresses_in_use
-            .insert(*cache_address, brick_index);
+            .insert(*cache_address, (page_index, brick_address.level, brick_address.channel));
         unmapped_brick_address
     }
 

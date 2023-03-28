@@ -58,7 +58,7 @@ impl Default for SparseResidencyTexture3DOptions {
                 depth_or_array_layers: 1024,
             },
             num_multi_buffering: 2,
-            cache_time_to_live: u32::MAX,
+            cache_time_to_live: 300,
         }
     }
 }
