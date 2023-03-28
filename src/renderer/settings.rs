@@ -141,6 +141,9 @@ pub struct MultiChannelVolumeRendererSettings {
     #[serde(rename = "maxSteps")]
     pub max_steps: u32,
 
+    #[serde(rename = "brickRequestRadius")]
+    pub brick_request_radius: f32,
+
     #[serde(rename = "statisticsNormalizationConstant")]
     pub statistics_normalization_constant: u32,
 

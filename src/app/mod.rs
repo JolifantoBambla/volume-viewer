@@ -30,7 +30,7 @@ use wgpu_framework::event::lifecycle::{
 };
 use wgpu_framework::event::window::{OnResize, OnUserEvent, OnWindowEvent};
 use wgpu_framework::input::Input;
-use winit::event::WindowEvent;
+use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{EventLoop, EventLoopProxy};
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
@@ -78,6 +78,10 @@ pub struct App {
 
     event_loop_proxy: Option<EventLoopProxy<<Self as OnUserEvent>::UserEvent>>,
     last_frame_number: u32,
+
+    is_monitoring: bool,
+    monitoring_data: Vec<MonitoringDataFrame>,
+    num_monitoring_iterations: u32,
 }
 
 impl App {
@@ -203,6 +207,9 @@ impl App {
             brick_poll_interval: None,
             event_loop_proxy: None,
             last_frame_number: 0,
+            is_monitoring: false,
+            monitoring_data: Vec::new(),
+            num_monitoring_iterations: 0,
         }
     }
 
@@ -324,7 +331,33 @@ impl OnUserEvent for App {
     fn on_user_event(&mut self, event: &Self::UserEvent) {
         match event {
             // todo: use input & update instead
-            Self::UserEvent::Window(_) => self.scene.on_user_event(event),
+            Self::UserEvent::Window(e) => {
+                match e {
+                    WindowEvent::KeyboardInput {
+                        input:
+                        KeyboardInput {
+                            virtual_keycode: Some(virtual_keycode),
+                            state: ElementState::Pressed,
+                            ..
+                        },
+                        ..
+                    } => match virtual_keycode {
+                        VirtualKeyCode::M => {
+                            self.is_monitoring = true;
+                            let event_loop_proxy = self.event_loop_proxy.as_ref().unwrap().clone();
+                            gloo_timers::callback::Timeout::new(
+                                10_000,
+                                move || {
+                                    event_loop_proxy.send_event(Self::UserEvent::StopMonitoring).ok();
+                                }
+                            ).forget();
+                        }
+                        _ => {}
+                    }
+                    _ => {}
+                }
+                self.scene.on_user_event(event)
+            },
             Self::UserEvent::Settings(settings_change) => match settings_change {
                 SettingsChange::RenderMode(mode) => {
                     self.settings.render_mode = *mode;
@@ -341,6 +374,9 @@ impl OnUserEvent for App {
                 }
                 SettingsChange::MaxSteps(max_steps) => {
                     self.settings.max_steps = *max_steps;
+                }
+                SettingsChange::BrickRequestRadius(r) => {
+                    self.settings.brick_request_radius = *r;
                 }
                 SettingsChange::StatisticsNormalizationConstant(c) => {
                     self.settings.statistics_normalization_constant = *c;
@@ -391,6 +427,29 @@ impl OnUserEvent for App {
                 } else {
                     log::warn!("no event loop proxy");
                 }
+            },
+            Event::StopMonitoring => {
+                self.num_monitoring_iterations += 1;
+                let monitoring_data = self.monitoring_data.clone();
+                if (self.num_monitoring_iterations == 10) {
+                    self.is_monitoring = false;
+                    self.num_monitoring_iterations = 0;
+                } else {
+                    let event_loop_proxy = self.event_loop_proxy.as_ref().unwrap().clone();
+                    gloo_timers::callback::Timeout::new(
+                        10_000,
+                        move || {
+                            event_loop_proxy.send_event(Self::UserEvent::StopMonitoring).ok();
+                        }
+                    ).forget();
+                }
+                self.monitoring_data = Vec::new();
+
+
+                let dvr_avg: f64 = monitoring_data.iter()
+                    .map(|m| m.dvr)
+                    .sum::<f64>() / monitoring_data.len() as f64;
+                log::info!("DVR[{}] avg.: {:?} ms", self.num_monitoring_iterations, dvr_avg);
             }
             _ => {}
         }
@@ -506,6 +565,9 @@ impl OnFrameEnd for App {
                     monitoring.octree_update_end = timestamp as f64 / 1_000_000.0;
                 }
                 //log::info!("octree update took {:?} ms", monitoring.octree_update);
+            }
+            if self.is_monitoring {
+                self.monitoring_data.push(monitoring.clone());
             }
             #[cfg(target_arch = "wasm32")]
             {

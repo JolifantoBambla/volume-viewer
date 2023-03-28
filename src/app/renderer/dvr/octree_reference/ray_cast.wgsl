@@ -130,6 +130,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     // initialize result
     textureStore(result, pixel, float4());
 
+    let center_to_pixel = length(vec2<f32>(pixel) - (resolution / 2.0));
+    let center_to_corner = length(resolution / 2.0);
+    let request_bricks = center_to_pixel / center_to_corner <= uniforms.settings.brick_request_radius;
+
     // generate a ray and transform it to the volume's space (i.e. where the volume is a unit cube with x in [0,1]^3)
     let ray_ws = generate_camera_ray(uniforms.camera, float2(pixel), resolution);
     let ray_os = transform_ray(ray_ws, uniforms.volume_transform.world_to_object);
@@ -163,7 +167,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     // Set up state tracking
     var color = float4();
-    var requested_brick = false;
+    var requested_brick = !request_bricks;//false;
     var last_lod = 0u;
     var steps_taken = 0u;
     var bricks_accessed = 0u;
@@ -180,7 +184,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
     let first_channel_index = channel_settings[0].page_table_index;
 
     let grid_ray = make_grid_ray(ray_os, t_max);
-    let start_subdivision_index = 0u;
+    let start_subdivision_index = 2u;
     var last_subdivision_level = start_subdivision_index;
 
     for (var t = t_min; t < t_max; t += dt) {

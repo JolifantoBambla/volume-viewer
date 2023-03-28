@@ -11,7 +11,7 @@ struct GlobalSettings {
     statistics_normalization_constant: u32,
     padding1: vec2<u32>,
     voxel_spacing: vec3<f32>,
-    padding2: f32,
+    brick_request_radius: f32,
 }
 
 // todo: come up with a better name...

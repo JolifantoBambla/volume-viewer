@@ -119,6 +119,10 @@ async function createUI(offscreenRenderer, config) {
         volumeRendererSettings, 'maxSteps',
         {min: 1, max: 1000, step: 1, label: 'Max. steps'}
     );
+    const brickRequestRadiusSlider = renderPane.addInput(
+        volumeRendererSettings, 'brickRequestRadius',
+        {min: 0.0, max: 1.0, step: 0.0001, label: 'Lens Radius'}
+    )
     const statisticsNormalizationSlider = renderPane.addInput(
         volumeRendererSettings, 'statisticsNormalizationConstant',
         {min: 1, max: 10000, step: 1, label: 'Stat. norm.'}
@@ -141,7 +145,7 @@ async function createUI(offscreenRenderer, config) {
         document.body.style.backgroundColor = rgbToHex(e.value);
     });
 
-    [renderModeSelector, outputModeSelector, stepsSlider, maxStepsSlider, statisticsNormalizationSlider, backgroundColorPicker]
+    [renderModeSelector, outputModeSelector, stepsSlider, maxStepsSlider, brickRequestRadiusSlider, statisticsNormalizationSlider, backgroundColorPicker]
         .forEach(i => i.on('change', dispatchGlobalSettingsChange));
 
     const channelsSettings = renderPane.addFolder({

@@ -55,6 +55,9 @@ pub enum SettingsChange {
     #[serde(rename = "maxSteps")]
     MaxSteps(u32),
 
+    #[serde(rename = "brickRequestRadius")]
+    BrickRequestRadius(f32),
+
     #[serde(rename = "statisticsNormalizationConstant")]
     StatisticsNormalizationConstant(u32),
 
@@ -69,6 +72,7 @@ pub enum Event<T: 'static> {
     Window(WindowEvent<'static>),
     Brick(Rc<(BrickAddress, Vec<u8>)>),
     PollBricks,
+    StopMonitoring,
     Settings(SettingsChange),
     Custom(T),
 }

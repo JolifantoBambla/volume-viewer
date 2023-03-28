@@ -106,6 +106,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // initialize result
     store_result(pixel, vec4<f32>());
 
+    let center_to_pixel = length(vec2<f32>(pixel) - (resolution / 2.0));
+    let center_to_corner = length(resolution / 2.0);
+    let request_bricks = center_to_pixel / center_to_corner <= uniforms.settings.brick_request_radius;
+
     // generate a ray and transform it to the volume's space (i.e. where the volume is a unit cube with x in [0,1]^3)
     let ray_ws = generate_camera_ray(uniforms.camera, vec2<f32>(pixel), resolution);
     let ray_os = transform_ray(ray_ws, uniforms.volume_transform.world_to_object);
@@ -135,7 +139,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     // Set up state tracking
     var color = vec4<f32>();
-    var requested_brick = false;
+    var requested_brick = !request_bricks;
     var last_lod = 0u;
     var steps_taken = 0u;
     var bricks_accessed = 0u;

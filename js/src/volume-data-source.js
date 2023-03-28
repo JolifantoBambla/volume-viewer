@@ -1,5 +1,6 @@
 import init, {
     initThreadPool,
+    initPreprocessing,
     clampU8, clampU16, clampF32,
     isZeroU8, isZeroU16, isZeroF32,
     minU8, minU16, minF32,
@@ -58,7 +59,7 @@ const getMaxValueForDataTypeDescriptor = ({type = 'u1'}) => {
         case 'u2':
             return 65535.;
         case 'f4':
-            return Number.MAX_VALUE;
+            return 65535.;//Number.MAX_VALUE;
         default:
             throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
     }
@@ -84,7 +85,7 @@ const clamp = (data, thresholdLower, thresholdUpper, {type = 'u1'}) => {
         case 'u2':
             return clampU16(data, thresholdLower, thresholdUpper);
         case 'f4':
-            return clampF32(data, thresholdLower, thresholdUpper);
+            return clampU8(data, thresholdLower, thresholdUpper);//clampF32(data, thresholdLower, thresholdUpper);
         default:
             throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
     }
@@ -98,7 +99,7 @@ const castToU8 = (data, {type = 'u1'}) => {
         case 'u2':
             return scaleU16ToU8(data, getMaxValueForDataTypeDescriptor({type}));
         case 'f4':
-            return scaleF32ToU8(data, getMaxValueForDataTypeDescriptor({type}));
+            return new Uint8Array(scaleF32ToU8(data, getMaxValueForDataTypeDescriptor({type})));
         default:
             throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
     }
@@ -262,7 +263,7 @@ export class VolumeDataSource extends BrickLoader {
             case 'u2':
                 return scaleU16ToU8(data, maxValue);
             case 'f4':
-                return scaleF32ToU8(data, maxValue);
+                return new Uint8Array(scaleF32ToU8(data, maxValue));
             default:
                 throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
         }
@@ -560,6 +561,7 @@ export class VolumeLoader {
 
         await init();
         await initThreadPool(navigator.hardwareConcurrency);
+        initPreprocessing();
 
         this.#dataSource = await createVolumeDataSource(dataSourceConfig);
 

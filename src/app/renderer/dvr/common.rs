@@ -45,7 +45,7 @@ pub struct GlobalSettings {
     pub statistics_normalization_constant: u32,
     pub padding1: UVec2,
     pub voxel_spacing: Vec3,
-    pub padding2: f32,
+    pub brick_request_radius: f32,
 }
 
 impl From<&MultiChannelVolumeRendererSettings> for GlobalSettings {
@@ -64,7 +64,7 @@ impl From<&MultiChannelVolumeRendererSettings> for GlobalSettings {
             statistics_normalization_constant: settings.statistics_normalization_constant,
             padding1: UVec2::ZERO,
             voxel_spacing: Vec3::ZERO,
-            padding2: 0.0,
+            brick_request_radius: settings.brick_request_radius,
         }
     }
 }
