@@ -17,11 +17,13 @@ export const OUTPUT_MODE_DVR = "dvr";
 export const OUTPUT_MODE_BRICKS_ACCESSED = "bricksAccessed";
 export const OUTPUT_MODE_NODES_ACCESSED = "nodesAccessed";
 export const OUTPUT_MODE_SAMPLE_STEPS = "sampleSteps";
+export const OUTPUT_MODE_DVR_PLUS_LENS = "dvrPlusBrickRequestLimit";
 export const OUTPUT_MODES = [
     OUTPUT_MODE_DVR,
     OUTPUT_MODE_BRICKS_ACCESSED,
     OUTPUT_MODE_NODES_ACCESSED,
     OUTPUT_MODE_SAMPLE_STEPS,
+    OUTPUT_MODE_DVR_PLUS_LENS,
 ]
 
 export class Color {

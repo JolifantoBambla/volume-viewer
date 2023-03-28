@@ -108,7 +108,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let center_to_pixel = length(vec2<f32>(pixel) - (resolution / 2.0));
     let center_to_corner = length(resolution / 2.0);
-    let request_bricks = center_to_pixel / center_to_corner <= uniforms.settings.brick_request_radius;
+    let pixel_radius = center_to_pixel / center_to_corner;
+    let request_bricks = pixel_radius <= uniforms.settings.brick_request_radius;
 
     // generate a ray and transform it to the volume's space (i.e. where the volume is a unit cube with x in [0,1]^3)
     let ray_ws = generate_camera_ray(uniforms.camera, vec2<f32>(pixel), resolution);
@@ -200,7 +201,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         store_result(pixel, vec4<f32>(vec3(f32(nodes_accessed) / 255.0), 1.0));
     } else if (uniforms.settings.output_mode == SAMPLE_STEPS) {
         store_result(pixel, vec4<f32>(vec3(f32(steps_taken) / 255.0), 1.0));
-    }
+    } else if (uniforms.settings.output_mode == DVR_PLUS_LENS_RADIUS) {
+         if (pixel_radius < uniforms.settings.brick_request_radius + 0.001 && pixel_radius > uniforms.settings.brick_request_radius - 0.001) {
+             color = RED;
+         }
+         store_result(pixel, color);
+     } else {
+         store_result(pixel, color);
+     }
 }
 
 struct Brick {

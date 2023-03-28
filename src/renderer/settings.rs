@@ -53,6 +53,9 @@ pub enum OutputMode {
 
     #[serde(rename = "sampleSteps")]
     SampleSteps,
+
+    #[serde(rename = "dvrPlusBrickRequestLimit")]
+    DvrPlusBrickRequestLimit,
 }
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]

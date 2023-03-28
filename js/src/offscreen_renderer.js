@@ -11,6 +11,7 @@ import {
     OUTPUT_MODE_BRICKS_ACCESSED,
     OUTPUT_MODE_NODES_ACCESSED,
     OUTPUT_MODE_SAMPLE_STEPS,
+    OUTPUT_MODE_DVR_PLUS_LENS,
 } from './volume-renderer.js';
 
 export class Config {
@@ -108,6 +109,7 @@ async function createUI(offscreenRenderer, config) {
                 "Bricks Accessed": OUTPUT_MODE_BRICKS_ACCESSED,
                 "Nodes Accessed": OUTPUT_MODE_NODES_ACCESSED,
                 "Sample Steps": OUTPUT_MODE_SAMPLE_STEPS,
+                "DVR (+lens)": OUTPUT_MODE_DVR_PLUS_LENS,
             }
         }
     )
