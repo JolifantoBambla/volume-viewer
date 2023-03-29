@@ -59,6 +59,7 @@ const getMaxValueForDataTypeDescriptor = ({type = 'u1'}) => {
         case 'u2':
             return 65535.;
         case 'f4':
+            // this is not a good idea
             return 65535.;//Number.MAX_VALUE;
         default:
             throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
