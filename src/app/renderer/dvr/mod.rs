@@ -57,7 +57,7 @@ impl RayGuidedDVR {
         gpu: &Arc<Gpu>,
     ) -> Self {
         match volume {
-            VolumeSceneObject::TopDownOctreeVolume(o) => {
+            VolumeSceneObject::ResidencyOctreeVolume(o) => {
                 Self::PageTableOctree(PageTableOctreeDVR::new(
                     volume.volume_manager(),
                     o.octree(),

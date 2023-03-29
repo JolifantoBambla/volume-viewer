@@ -43,7 +43,8 @@ pub struct GlobalSettings {
     pub background_color: Vec4,
     pub output_mode: u32,
     pub statistics_normalization_constant: u32,
-    pub padding1: UVec2,
+    pub min_request_lod: u32,
+    pub padding1: u32,
     pub voxel_spacing: Vec3,
     pub brick_request_radius: f32,
 }
@@ -62,7 +63,8 @@ impl From<&MultiChannelVolumeRendererSettings> for GlobalSettings {
             background_color: Vec4::from(settings.background_color),
             output_mode: settings.output_mode as u32,
             statistics_normalization_constant: settings.statistics_normalization_constant,
-            padding1: UVec2::ZERO,
+            min_request_lod: 0,
+            padding1: 0,
             voxel_spacing: Vec3::ZERO,
             brick_request_radius: settings.brick_request_radius,
         }

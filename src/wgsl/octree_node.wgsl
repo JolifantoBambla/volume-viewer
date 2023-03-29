@@ -79,3 +79,48 @@ fn node_make_mask_for_resolution(resolution: u32) -> u32 {
 fn node_resolution_is_partially_mapped(node: u32, resolution: u32) -> bool {
     return (node_get_partially_mapped_resolutions(node) & node_make_mask_for_resolution(resolution)) > 0;
 }
+
+// bitmasks
+const LOWER_RES_MASKS: array<u32, 8> = array<u32,8>(
+    0x1fe,
+    0x1fc,
+    0x1f8,
+    0x1f0,
+
+    0x1e0,
+    0x1c0,
+    0x180,
+    0x100
+);
+const HIGHER_RES_MASKS: array<u32, 10> = array<u32, 10>(
+    0x0,
+    0x1,
+    0x3,
+    0x7,
+
+    0xf,
+    0x1f,
+    0x3f,
+    0x7f,
+
+    0xff,
+    0x1ff
+);
+
+const NO_OTHER_RES: u32 = 4294967295;
+
+fn mask_find_next_higher_res(partially_mapped_mask: u32, resolution: u32) -> u32 {
+    let test = partially_mapped_mask & HIGHER_RES_MASKS[resolution];
+    if (test == 0) {
+        return NO_OTHER_RES;
+    }
+    return 31 - countLeadingZeros(test);
+}
+
+fn mask_find_next_lower_res(partially_mapped_mask: u32, resolution: u32) -> u32 {
+    let test = partially_mapped_mask & LOWER_RES_MASKS[resolution];
+    if (test == 0) {
+        return NO_OTHER_RES;
+    }
+    return countTrailingZeros(test);
+}

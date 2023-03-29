@@ -1,6 +1,6 @@
 @include(type_alias)
 
-type PageTableFlag = u32;
+alias PageTableFlag = u32;
 const UNMAPPED = 0u;
 const MAPPED = 1u;
 const EMPTY = 2u;

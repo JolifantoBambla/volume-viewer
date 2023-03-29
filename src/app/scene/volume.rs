@@ -11,18 +11,24 @@ use wgpu::Label;
 use wgpu_framework::context::Gpu;
 use wgpu_framework::input::Input;
 use wgsl_preprocessor::WGSLPreprocessor;
+use crate::util::extent::box_volume;
 
 #[derive(Debug)]
-pub struct OctreeVolume {
+pub struct ResidencyOctreeVolume {
     object_to_world: Mat4,
     octree: Octree,
     octree_update: OctreeUpdate,
     volume_manager: VolumeManager,
+    min_request_lod: u32,
 }
 
-impl OctreeVolume {
+impl ResidencyOctreeVolume {
     pub fn octree(&self) -> &Octree {
         &self.octree
+    }
+
+    pub fn min_request_lod(&self) -> u32 {
+        self.min_request_lod
     }
 }
 
@@ -34,7 +40,7 @@ pub struct PageTableVolume {
 
 #[derive(Debug)]
 pub enum VolumeSceneObject {
-    TopDownOctreeVolume(Box<OctreeVolume>),
+    ResidencyOctreeVolume(Box<ResidencyOctreeVolume>),
     PageTableVolume(Box<PageTableVolume>),
 }
 
@@ -61,31 +67,43 @@ impl VolumeSceneObject {
     ) -> Self {
         let octree = Octree::new(descriptor, gpu);
         let octree_update = OctreeUpdate::new(&octree, &volume_manager, wgsl_preprocessor);
-        Self::TopDownOctreeVolume(Box::new(OctreeVolume {
+
+        let leaf_node_level = octree.subdivisions().last().unwrap();
+        let mut min_request_lod = volume_manager.meta().resolutions.len() as u32;
+        for (i, resolution) in volume_manager.meta().resolutions.iter().rev().enumerate() {
+            log::info!("res vol size {}, leaf node shape {}, {} >= 64", resolution.volume_size, leaf_node_level.shape(), box_volume(&(resolution.volume_size / leaf_node_level.shape())));
+            if box_volume(&(resolution.volume_size / leaf_node_level.shape())) >= 4*4*4 {
+                min_request_lod = i as u32;
+                break;
+            }
+        }
+
+        Self::ResidencyOctreeVolume(Box::new(ResidencyOctreeVolume {
             object_to_world: Self::make_volume_transform(&volume_manager),
             volume_manager,
             octree,
             octree_update,
+            min_request_lod,
         }))
     }
 
     pub fn volume_transform(&self) -> Mat4 {
         match self {
-            VolumeSceneObject::TopDownOctreeVolume(v) => v.object_to_world,
+            VolumeSceneObject::ResidencyOctreeVolume(v) => v.object_to_world,
             VolumeSceneObject::PageTableVolume(v) => v.object_to_world,
         }
     }
 
     pub fn volume_manager(&self) -> &VolumeManager {
         match self {
-            VolumeSceneObject::TopDownOctreeVolume(v) => &v.volume_manager,
+            VolumeSceneObject::ResidencyOctreeVolume(v) => &v.volume_manager,
             VolumeSceneObject::PageTableVolume(v) => &v.volume_manager,
         }
     }
 
     pub fn volume_manager_mut(&mut self) -> &mut VolumeManager {
         match self {
-            VolumeSceneObject::TopDownOctreeVolume(v) => &mut v.volume_manager,
+            VolumeSceneObject::ResidencyOctreeVolume(v) => &mut v.volume_manager,
             VolumeSceneObject::PageTableVolume(v) => &mut v.volume_manager,
         }
     }
@@ -102,7 +120,7 @@ impl VolumeSceneObject {
             .map(|c| c.unwrap() as u32)
             .collect();
 
-        if let VolumeSceneObject::TopDownOctreeVolume(_v) = self {
+        if let VolumeSceneObject::ResidencyOctreeVolume(_v) = self {
             // todo: handle new channel selection in octree update
             //v.octree.set_visible_channels(visible_channels.as_slice());
         }
@@ -120,7 +138,7 @@ impl VolumeSceneObject {
         #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
         let cache_update = self.volume_manager_mut().process_new_bricks(last_frame_number);
-        if let VolumeSceneObject::TopDownOctreeVolume(v) = self {
+        if let VolumeSceneObject::ResidencyOctreeVolume(v) = self {
             // try reading update's frame's buffer
             #[cfg(feature = "timestamp-query")]
             timestamp_query_helper.read_buffer();

@@ -1,6 +1,6 @@
 @include(type_alias)
 
-fn swap(a: ptr<function, f32, read_write>, b: ptr<function, f32, read_write>) {
+fn swap(a: ptr<function, f32>, b: ptr<function, f32>) {
     let helper = *a;
     *a = *b;
     *b = helper;

@@ -40,7 +40,7 @@ fn prepare_workgroup_memory(
     return wg_sum[l_address2];
 }
 
-fn up_sweep(local_thread_id: u32, l_address1: u32, l_address2: u32, offset: ptr<function, u32, read_write>) {
+fn up_sweep(local_thread_id: u32, l_address1: u32, l_address2: u32, offset: ptr<function, u32>) {
     // Build sum in place UP the tree
     for (var d = TEMP_SIZE >> 1u; d > 0u; d = d >> 1u) {
         workgroupBarrier();
@@ -53,7 +53,7 @@ fn up_sweep(local_thread_id: u32, l_address1: u32, l_address2: u32, offset: ptr<
     }
 }
 
-fn down_sweep(local_thread_id: u32, l_address1: u32, l_address2: u32, offset: ptr<function, u32, read_write>) {
+fn down_sweep(local_thread_id: u32, l_address1: u32, l_address2: u32, offset: ptr<function, u32>) {
     // Traverse DOWN tree and build scan
     for (var d = 1u; d < TEMP_SIZE; d = d * 2u) {
         *offset = *offset >> 1u;

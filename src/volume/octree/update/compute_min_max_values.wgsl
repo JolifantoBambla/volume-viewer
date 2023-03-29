@@ -60,6 +60,9 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
         return;
     }
 
+    //let page_table_extent = pt_get_page_table_extent(page_table_index);
+    //let volume_to_padded = pt_compute_volume_to_padded(page_table_index);
+
     let subdivision_index = subdivision_get_leaf_node_level_index();
     let num_channels = page_directory_meta.max_channels;
 
@@ -106,7 +109,10 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
                     }
 
                     let chache_position = offset + position;
-                    let value = min(u32(textureLoad(brick_cache, int3(chache_position), 0).x * 255.0), 255);
+                    var value = min(u32(textureLoad(brick_cache, int3(chache_position), 0).x * 255.0), 255);
+                    if (page.flag == EMPTY) {
+                        value = 0;
+                    }
                     current_min = min(current_min, value);
                     current_max = max(current_max, value);
                 }

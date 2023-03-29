@@ -141,7 +141,7 @@ impl MultiChannelVolumeRenderer {
         let octree_reference_render_pass =
             OctreeReferenceDVR::new(volume.volume_manager(),
                                     match volume {
-                                        VolumeSceneObject::TopDownOctreeVolume(o) => {
+                                        VolumeSceneObject::ResidencyOctreeVolume(o) => {
                                             o.octree()
                                         },
                                         _ => panic!("not an octree volume object"),
@@ -195,6 +195,12 @@ impl MultiChannelVolumeRenderer {
             settings,
         );
         uniforms.settings.voxel_spacing = scene.volume().volume_manager().meta().normalized_scale();
+        match scene.volume() {
+            VolumeSceneObject::ResidencyOctreeVolume(v) => {
+                uniforms.settings.min_request_lod = v.min_request_lod();
+            }
+            _ => {}
+        }
 
         self.gpu.queue().write_buffer(
             &self.volume_render_global_settings_buffer,

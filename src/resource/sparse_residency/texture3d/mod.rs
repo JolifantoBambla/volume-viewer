@@ -329,6 +329,8 @@ impl VolumeManager {
                         .brick_address_to_brick_id(&local_address);
                     if brick.is_empty() {
                         self.page_table_directory.mark_as_empty(&local_address);
+                        update_result
+                            .add_mapped_brick_id(local_brick_id, true);
                     } else {
                         // write brick to cache
                         let brick_location = self.lru_cache.add_cache_entry(&brick, last_frame_number);
@@ -379,6 +381,7 @@ impl VolumeManager {
             // update the page directory
             self.page_table_directory.commit_changes();
         }
+
         update_result
     }
 

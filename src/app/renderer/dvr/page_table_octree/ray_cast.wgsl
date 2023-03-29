@@ -183,9 +183,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
     let first_channel_index = channel_settings[0].page_table_index;
 
-    // todo: remove (debug)
-    var last_node_index = 4294967295u;
-
     let grid_ray = make_grid_ray(ray_os, t_max);
     let start_subdivision_index = 2u;
     var last_subdivision_level = start_subdivision_index;
@@ -207,13 +204,9 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         let target_culling_level = subdivision_get_leaf_node_level_index();
 
         var channel = 0u;
-        // todo: make start level configurable (e.g., start at level 2 because 0 and 1 are unlikely to be empty anyway)
         var subdivision_index = last_subdivision_level;
         var empty_channels = 0u;
         var homogeneous_channels = 0u;
-
-        // todo: remove (debug)
-        var terminated_at_index = 0u;
 
         var last_channel = channel;
         var lower_threshold = u32(floor((channel_settings[channel].threshold_lower - EPSILON) * 255.0));
@@ -226,6 +219,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 lower_threshold = u32(floor((channel_settings[channel].threshold_lower - EPSILON) * 255.0));
                 upper_threshold = u32(floor((channel_settings[channel].threshold_upper + EPSILON) * 255.0));
                 channel_lod_factor = channel_settings[channel].lod_factor * max_component(inv_high_res_size);
+                last_channel = channel;
             }
 
             let multichannel_global_node_index = to_multichannel_node_index(
@@ -234,12 +228,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 page_directory_meta_get_channel_index(channel_settings[channel].page_table_index)
             );
 
-            terminated_at_index = multichannel_global_node_index;
-
             let node = node_idx_load_global(multichannel_global_node_index);
             if (node_has_no_data(node)) {
                 if (!requested_brick) {
-                    pt_request_brick(p, channel_settings[channel].min_lod, channel);
+                    pt_request_brick(p, uniforms.settings.min_request_lod, channel);
                     requested_brick = true;
                 }
                 channel += 1;
@@ -262,7 +254,7 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
             */
             if (node_is_not_mapped(node)) {
                 if (!requested_brick) {
-                    pt_request_brick(p, channel_settings[channel].min_lod, channel);
+                    pt_request_brick(p, uniforms.settings.min_request_lod, channel);
                     requested_brick = true;
                 }
                 channel += 1;
@@ -273,7 +265,10 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                 continue;
             }
 
-            let target_resolution = va_compute_lod(distance_to_camera, channel, channel_lod_factor);
+            let target_resolution = min(
+                va_compute_lod(distance_to_camera, channel, channel_lod_factor),
+                uniforms.settings.min_request_lod
+            );
             let target_mask = node_make_mask_for_resolution(target_resolution);
             let resolution_mapping = node_get_partially_mapped_resolutions(node);
             let target_partially_mapped = (target_mask & resolution_mapping) > 0;
@@ -291,20 +286,41 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                     pt_request_brick(p, target_resolution, channel);
                     requested_brick = true;
                 }
-                // todo: use countLeadingZeros & countTrailingZeros here
-                let channel_lowest_lod = channel_settings[channel].min_lod;
-                for (var res = target_resolution + 1; res <= channel_lowest_lod; res += 1) {
-                    let brick = try_fetch_brick(p, res, channel, false);
-                    if (brick.is_mapped) {
-                        bricks_accessed += 1;
-                        value = sample_volume(brick.sample_address);
+
+                var next_min_res = target_resolution;
+                var next_max_res = target_resolution;
+                var next_higher_mask = HIGHER_RES_MASKS[next_max_res];
+                var next_lower_mask = LOWER_RES_MASKS[next_min_res];
+                for (
+                    var mapped_mask = (resolution_mapping & HIGHER_RES_MASKS[next_max_res]) | (resolution_mapping & LOWER_RES_MASKS[next_min_res]);
+                    mapped_mask > 0;
+                    mapped_mask = (mapped_mask & next_higher_mask) | (mapped_mask & next_lower_mask)
+                ) {
+                    next_max_res = mask_find_next_higher_res(mapped_mask, next_max_res);
+                    if (next_max_res == NO_OTHER_RES) {
+                        next_higher_mask = 0;
+                    } else {
+                        next_higher_mask = HIGHER_RES_MASKS[next_max_res];
+                    }
+                    next_min_res = mask_find_next_lower_res(mapped_mask, next_min_res);
+                    if (next_min_res == NO_OTHER_RES) {
+                        next_lower_mask = 0;
+                    } else {
+                        next_lower_mask = LOWER_RES_MASKS[next_min_res];
+                    }
+                    if (next_higher_mask == 0 && next_lower_mask == 0) {
                         break;
                     }
-                }
-                if (value < 0.0) {
-                    let channel_highest_lod = channel_settings[channel].max_lod;
-                    for (var res = target_resolution - 1; res >= channel_highest_lod; res -= 1) {
-                        let brick = try_fetch_brick(p, res, channel, false);
+
+                    if (distance(f32(next_min_res), f32(target_resolution)) < distance(f32(next_max_res), f32(target_resolution))) {
+                        let brick = try_fetch_brick(p, next_min_res, channel, !requested_brick);
+                        if (brick.is_mapped) {
+                            bricks_accessed += 1;
+                            value = sample_volume(brick.sample_address);
+                            break;
+                        }
+                    } else {
+                        let brick = try_fetch_brick(p, next_max_res, channel, !requested_brick);
                         if (brick.is_mapped) {
                             bricks_accessed += 1;
                             value = sample_volume(brick.sample_address);
@@ -312,6 +328,35 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
                         }
                     }
                 }
+/*
+                let channel_lowest_lod = max(channel_settings[channel].min_lod, uniforms.settings.min_request_lod);
+                for (var res = target_resolution + 1; res <= channel_lowest_lod; res += 1) {
+                    let brick = try_fetch_brick(p, res, channel, true);
+                    if (brick.is_mapped) {
+                        bricks_accessed += 1;
+                        value = sample_volume(brick.sample_address);
+                        break;
+                    }
+                }
+                if (value < 0.0 && target_resolution > 0) {
+                    let channel_highest_lod = channel_settings[channel].max_lod;
+                    for (var res = target_resolution - 1u; res != channel_highest_lod - 1u; res -= 1u) {
+                        let brick = try_fetch_brick(p, res, channel, !requested_brick);
+                        if (brick.is_mapped) {
+                            bricks_accessed += 1;
+                            value = sample_volume(brick.sample_address);
+                            break;
+                        }
+                    }
+                }
+                */
+                /*
+                if (value < 0.0) {
+                    for (var request_lower = target_resolution + 1; request_lower <= uniforms.settings.min_request_lod; request_lower += 1) {
+                        pt_request_brick(p, request_lower, channel);
+                    }
+                }
+                */
             }
 
             compute_lighting(value, channel, dt_scale, &color);
@@ -328,13 +373,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
         }
 
         if (empty_channels == num_visible_channels) {
-            /*
-            if (terminated_at_index == last_node_index) {
-                //color = RED;
-                //break;
-            }
-            */
-
             let dt_jump = compute_node_jump_distance(p, subdivision_index, dt, grid_ray);
             p += ray_os.direction * dt_jump;
             t += dt_jump;
@@ -342,13 +380,6 @@ fn main(@builtin(global_invocation_id) global_id: uint3) {
 
         p += ray_os.direction * dt;
         last_subdivision_level = max(start_subdivision_index, subdivision_index - 1);
-
-        // todo: remove(debug)
-        last_node_index = terminated_at_index;
-    }
-
-    if (steps_taken <= 3u) {
-        //color = YELLOW;
     }
 
     if (uniforms.settings.output_mode == DVR) {

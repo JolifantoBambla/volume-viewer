@@ -9,7 +9,8 @@ struct GlobalSettings {
     background_color: vec4<f32>,
     output_mode: u32,
     statistics_normalization_constant: u32,
-    padding1: vec2<u32>,
+    min_request_lod: u32,
+    padding1: u32,
     voxel_spacing: vec3<f32>,
     brick_request_radius: f32,
 }
