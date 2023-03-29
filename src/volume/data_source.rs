@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::cmp::min;
 use std::collections::{HashMap, VecDeque};
+use std::fmt::Debug;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -9,16 +10,18 @@ use web_sys::{CustomEvent, EventTarget};
 
 use crate::volume::{Brick, BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 
-pub trait VolumeDataSource {
-    fn get_meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta;
+pub trait VolumeDataSource: Debug {
+    fn meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta;
+
+    fn enqueue_brick(&mut self, brick: Rc<(BrickAddress, Vec<u8>)>);
 
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>);
 
-    fn poll_bricks(&mut self, limit: usize) -> Vec<(BrickAddress, Brick)>;
+    fn poll_bricks(&mut self, limit: usize) -> Vec<Rc<(BrickAddress, Vec<u8>)>>;
 }
 
 #[cfg(target_arch = "wasm32")]
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct BrickEvent {
     address: BrickAddress,
     brick: Brick,
@@ -35,9 +38,10 @@ pub const BRICK_RESPONSE_EVENT: &str = "data-loader:brick-response";
 /// it.
 /// It is agnostic of the way the `web_sys::EventTarget` actually acquires bricks.
 #[cfg(target_arch = "wasm32")]
+#[derive(Debug)]
 pub struct HtmlEventTargetVolumeDataSource {
     volume_meta: BrickedMultiResolutionMultiVolumeMeta,
-    brick_queue: Rc<RefCell<VecDeque<(BrickAddress, Brick)>>>,
+    brick_queue: Rc<RefCell<VecDeque<Rc<(BrickAddress, Vec<u8>)>>>>,
     event_target: EventTarget,
 }
 
@@ -49,13 +53,14 @@ impl HtmlEventTargetVolumeDataSource {
     ) -> Self {
         let brick_queue = Rc::new(RefCell::new(VecDeque::new()));
         let receiver = brick_queue.clone();
+
         let event_callback = Closure::wrap(Box::new(move |event: JsValue| {
             let custom_event = event.unchecked_into::<CustomEvent>();
             let brick_event: BrickEvent =
                 serde_wasm_bindgen::from_value(custom_event.detail()).expect("Invalid BrickEvent");
             receiver
                 .borrow_mut()
-                .push_back((brick_event.address, brick_event.brick));
+                .push_back(Rc::new((brick_event.address, brick_event.brick.data.to_owned())));
         }) as Box<dyn FnMut(JsValue)>);
 
         event_target
@@ -76,8 +81,12 @@ impl HtmlEventTargetVolumeDataSource {
 
 #[cfg(target_arch = "wasm32")]
 impl VolumeDataSource for HtmlEventTargetVolumeDataSource {
-    fn get_meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta {
+    fn meta(&self) -> &BrickedMultiResolutionMultiVolumeMeta {
         &self.volume_meta
+    }
+
+    fn enqueue_brick(&mut self, brick: Rc<(BrickAddress, Vec<u8>)>) {
+        self.brick_queue.borrow_mut().push_back(brick);
     }
 
     fn request_bricks(&mut self, brick_addresses: Vec<BrickAddress>) {
@@ -88,12 +97,12 @@ impl VolumeDataSource for HtmlEventTargetVolumeDataSource {
             BRICK_REQUEST_EVENT,
             false,
             false,
-            &JsValue::from_serde(&request_data).unwrap(),
+            &serde_wasm_bindgen::to_value(&request_data).expect("Could not serialize request data"),
         );
         self.event_target.dispatch_event(&request_event).ok();
     }
 
-    fn poll_bricks(&mut self, limit: usize) -> Vec<(BrickAddress, Brick)> {
+    fn poll_bricks(&mut self, limit: usize) -> Vec<Rc<(BrickAddress, Vec<u8>)>> {
         let bricks_in_queue = self.brick_queue.borrow().len();
         self.brick_queue
             .borrow_mut()

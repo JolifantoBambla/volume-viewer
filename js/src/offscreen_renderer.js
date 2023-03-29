@@ -4,8 +4,14 @@ import { toWrappedEvent } from './event.js';
 import {
     ChannelSettings,
     VolumeRendererSettings,
-    RENDER_MODE_GRID_TRAVERSAL,
-    RENDER_MODE_DIRECT
+    RENDER_MODE_OCTREE,
+    RENDER_MODE_PAGE_TABLE,
+    RENDER_MODE_OCTREE_REFERENCE,
+    OUTPUT_MODE_DVR,
+    OUTPUT_MODE_BRICKS_ACCESSED,
+    OUTPUT_MODE_NODES_ACCESSED,
+    OUTPUT_MODE_SAMPLE_STEPS,
+    OUTPUT_MODE_DVR_PLUS_LENS,
 } from './volume-renderer.js';
 
 export class Config {
@@ -86,12 +92,27 @@ async function createUI(offscreenRenderer, config) {
     const renderModeSelector = renderPane.addInput(
         volumeRendererSettings, 'renderMode',
         {
+            label: 'Render Mode',
             options: {
-                'Grid Traversal': RENDER_MODE_GRID_TRAVERSAL,
-                Direct: RENDER_MODE_DIRECT,
+                Octree: RENDER_MODE_OCTREE,
+                "Page Table": RENDER_MODE_PAGE_TABLE,
+                "Octree Reference": RENDER_MODE_OCTREE_REFERENCE,
             }
         }
     );
+    const outputModeSelector = renderPane.addInput(
+        volumeRendererSettings, 'outputMode',
+        {
+            label: 'Output Mode',
+            options: {
+                DVR: OUTPUT_MODE_DVR,
+                "Bricks Accessed": OUTPUT_MODE_BRICKS_ACCESSED,
+                "Nodes Accessed": OUTPUT_MODE_NODES_ACCESSED,
+                "Sample Steps": OUTPUT_MODE_SAMPLE_STEPS,
+                "DVR (+lens)": OUTPUT_MODE_DVR_PLUS_LENS,
+            }
+        }
+    )
     const stepsSlider = renderPane.addInput(
         volumeRendererSettings, 'stepScale',
         {min: 0.5, max: 10.0, step: 0.2, label: 'Step spacing'}
@@ -99,6 +120,14 @@ async function createUI(offscreenRenderer, config) {
     const maxStepsSlider = renderPane.addInput(
         volumeRendererSettings, 'maxSteps',
         {min: 1, max: 1000, step: 1, label: 'Max. steps'}
+    );
+    const brickRequestRadiusSlider = renderPane.addInput(
+        volumeRendererSettings, 'brickRequestRadius',
+        {min: 0.0, max: 1.0, step: 0.0001, label: 'Lens Radius'}
+    )
+    const statisticsNormalizationSlider = renderPane.addInput(
+        volumeRendererSettings, 'statisticsNormalizationConstant',
+        {min: 1, max: 10000, step: 1, label: 'Stat. norm.'}
     );
     const backgroundColorPicker = renderPane.addInput(volumeRendererSettings, 'backgroundColor', {
         label: 'Background color',
@@ -118,7 +147,7 @@ async function createUI(offscreenRenderer, config) {
         document.body.style.backgroundColor = rgbToHex(e.value);
     });
 
-    [renderModeSelector, stepsSlider, maxStepsSlider, backgroundColorPicker]
+    [renderModeSelector, outputModeSelector, stepsSlider, maxStepsSlider, brickRequestRadiusSlider, statisticsNormalizationSlider, backgroundColorPicker]
         .forEach(i => i.on('change', dispatchGlobalSettingsChange));
 
     const channelsSettings = renderPane.addFolder({
@@ -153,6 +182,88 @@ async function createUI(offscreenRenderer, config) {
             .forEach(i => i.on('change', e => dispatchChannelSettingsChange(e, c.channelIndex)));
     });
 
+    const monitoringParams = {
+        dvr: 0.0,
+        present: 0.0,
+        lruUpdate: 0.0,
+        processRequests: 0.0,
+        octree_update: 0.0,
+    };
+    const monitoringFolder = pane.addFolder({
+        title: 'Monitoring'
+    });
+    const dvrFpsGraph = monitoringFolder.addBlade({
+        view: 'fpsgraph',
+        label: 'DVR (FPS)',
+    });
+    monitoringFolder.addMonitor(monitoringParams, 'dvr', {
+        label: 'DVR (ms [0,32])',
+        view: 'graph',
+        max: 32,
+    });
+    const presentFpsGraph = monitoringFolder.addBlade({
+        view: 'fpsgraph',
+        label: 'Present (FPS)',
+    });
+    monitoringFolder.addMonitor(monitoringParams, 'present', {
+        label: 'Present (ms [0,5])',
+        view: 'graph',
+        max: 5,
+    });
+    const lruUpdateFpsGraph = monitoringFolder.addBlade({
+        view: 'fpsgraph',
+        label: 'LRU update (FPS)',
+    });
+    monitoringFolder.addMonitor(monitoringParams, 'lruUpdate', {
+        label: 'LRU update (ms [0, 0.2])',
+        view: 'graph',
+        max: 0.2,
+    });
+    const processRequestsFpsGraph = monitoringFolder.addBlade({
+        view: 'fpsgraph',
+        label: 'Process requests (FPS)',
+    });
+    monitoringFolder.addMonitor(monitoringParams, 'processRequests', {
+        label: 'Process requests (ms [0, 0.2])',
+        view: 'graph',
+        max: 0.2,
+    });
+    /*
+    const octreeUpdateFpsGraph = monitoringFolder.addBlade({
+        view: 'fpsgraph',
+        label: 'Octree update (FPS)',
+    });
+    */
+    monitoringFolder.addMonitor(monitoringParams, 'octree_update', {
+        label: 'Octree update (ms [0, 0.1])',
+        view: 'graph',
+        max: 0.1,
+    });
+
+    const onMonitoringDataFrame = (monitoring) => {
+        monitoringParams.dvr = monitoring.dvr;
+        monitoringParams.present = monitoring.present;
+        monitoringParams.lruUpdate = monitoring.lruUpdate;
+        monitoringParams.processRequests = monitoring.processRequests;
+        monitoringParams.octree_update = monitoring.octree_update;
+
+        dvrFpsGraph.controller_.valueController.stopwatch_.begin({getTime: () => monitoring.dvrBegin});
+        dvrFpsGraph.controller_.valueController.stopwatch_.end({getTime: () => monitoring.dvrEnd});
+        presentFpsGraph.controller_.valueController.stopwatch_.begin({getTime: () => monitoring.presentBegin});
+        presentFpsGraph.controller_.valueController.stopwatch_.end({getTime: () => monitoring.presentEnd});
+        lruUpdateFpsGraph.controller_.valueController.stopwatch_.begin({getTime: () => monitoring.lruUpdateBegin});
+        lruUpdateFpsGraph.controller_.valueController.stopwatch_.end({getTime: () => monitoring.lruUpdateEnd});
+        processRequestsFpsGraph.controller_.valueController.stopwatch_.begin({getTime: () => monitoring.processRequestsBegin});
+        processRequestsFpsGraph.controller_.valueController.stopwatch_.end({getTime: () => monitoring.processRequestsEnd});
+        /*
+        if (monitoring.octree_update > 0.0) {
+            octreeUpdateFpsGraph.controller_.valueController.stopwatch_.begin({getTime: () => monitoring.octreeUpdateBegin});
+            octreeUpdateFpsGraph.controller_.valueController.stopwatch_.end({getTime: () => monitoring.octreeUpdateEnd});
+        }
+         */
+    };
+
+    /*
     const exportSettingsButton = pane.addButton({
         title: 'Export Settings',
     });
@@ -161,7 +272,9 @@ async function createUI(offscreenRenderer, config) {
         console.log(preset);
     });
 
-    return volumeRendererSettings;
+     */
+
+    return [volumeRendererSettings, onMonitoringDataFrame];
 }
 
 export async function createOffscreenRenderer(config) {
@@ -191,7 +304,13 @@ export async function createOffscreenRenderer(config) {
         window.onkeyup = dispatchToWorker;
         window.onkeypress = dispatchToWorker;
 
-        const volumeRendererSettings = await createUI(offscreenRenderer, config);
+        const [volumeRendererSettings, onMonitoringDataFrame] = await createUI(offscreenRenderer, config);
+
+        worker.addEventListener('message', e => {
+            if (e.data.type === 'monitoring') {
+                onMonitoringDataFrame(e.data.data);
+            }
+        })
 
         return {
             offscreenRenderer,

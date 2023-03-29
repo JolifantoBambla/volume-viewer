@@ -1,5 +1,7 @@
 import init, {
     initThreadPool,
+    initPreprocessing,
+    clampU8, clampU16, clampF32,
     isZeroU8, isZeroU16, isZeroF32,
     minU8, minU16, minF32,
     maxU8, maxU16, maxF32,
@@ -24,8 +26,21 @@ const splitDtype = dtype => {
     }
 };
 
-const maxValue = (data, dtypeDescriptor) => {
-    switch (dtypeDescriptor.type) {
+const minValue = (data, {type = 'u1'}) => {
+    switch (type) {
+        case 'u1':
+            return minU8(data);
+        case 'u2':
+            return minU16(data);
+        case 'f4':
+            return minF32(data);
+        default:
+            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
+    }
+}
+
+const maxValue = (data, {type = 'u1'}) => {
+    switch (type) {
         case 'u1':
             return maxU8(data);
         case 'u2':
@@ -33,25 +48,26 @@ const maxValue = (data, dtypeDescriptor) => {
         case 'f4':
             return maxF32(data);
         default:
-            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
     }
 }
 
-const getMaxValueForDataTypeDescriptor = dtypeDescriptor => {
-    switch (dtypeDescriptor.type) {
+const getMaxValueForDataTypeDescriptor = ({type = 'u1'}) => {
+    switch (type) {
         case 'u1':
             return 255.;
         case 'u2':
             return 65535.;
         case 'f4':
-            return Number.MAX_VALUE;
+            // this is not a good idea
+            return 65535.;//Number.MAX_VALUE;
         default:
-            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
     }
 };
 
-const isZero = (data, dtypeDescriptor, threshold) => {
-    switch (dtypeDescriptor.type) {
+const isZero = (data, {type = 'u1'}, threshold) => {
+    switch (type) {
         case 'u1':
             return isZeroU8(data, threshold);
         case 'u2':
@@ -59,27 +75,40 @@ const isZero = (data, dtypeDescriptor, threshold) => {
         case 'f4':
             return isZeroF32(data, threshold);
         default:
-            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
+    }
+};
+
+const clamp = (data, thresholdLower, thresholdUpper, {type = 'u1'}) => {
+    switch (type) {
+        case 'u1':
+            return clampU8(data, thresholdLower, thresholdUpper);
+        case 'u2':
+            return clampU16(data, thresholdLower, thresholdUpper);
+        case 'f4':
+            return clampU8(data, thresholdLower, thresholdUpper);//clampF32(data, thresholdLower, thresholdUpper);
+        default:
+            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
     }
 };
 
 // todo: this actually scales - should add a simple cast as well
-const castToU8 = (data, dtypeDescriptor) => {
-    switch (dtypeDescriptor.type) {
+const castToU8 = (data, {type = 'u1'}) => {
+    switch (type) {
         case 'u1':
             return data;
         case 'u2':
-            return scaleU16ToU8(data, getMaxValueForDataTypeDescriptor(dtypeDescriptor));
+            return scaleU16ToU8(data, getMaxValueForDataTypeDescriptor({type}));
         case 'f4':
-            return scaleF32ToU8(data, getMaxValueForDataTypeDescriptor(dtypeDescriptor));
+            return new Uint8Array(scaleF32ToU8(data, getMaxValueForDataTypeDescriptor({type})));
         default:
-            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
     }
 };
 
-const logTransformToU8 = (data, dtypeDescriptor) => {
-    const maxValue = getMaxValueForDataTypeDescriptor(dtypeDescriptor);
-    switch (dtypeDescriptor.type) {
+const logTransformToU8 = (data, {type = 'u1'}) => {
+    const maxValue = getMaxValueForDataTypeDescriptor({type});
+    switch (type) {
         case 'u1':
             return logScaleU8(data, maxValue);
         case 'u2':
@@ -87,7 +116,7 @@ const logTransformToU8 = (data, dtypeDescriptor) => {
         case 'f4':
             return logScaleF32(data, maxValue);
         default:
-            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+            throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
     }
 };
 
@@ -149,16 +178,20 @@ export class RawVolumeChunk {
     chunk;
 }
 
+export class Brick {
+    data;
+    min;
+    max;
+}
+
 /**
  * An interface for brick loading.
  */
 export class BrickLoader {
     /**
      * Loads a chunk of the volume at a given resolution level
-     * @param brickIndex
-     * @param level
-     * @param channel
-     * @returns {Promise<RawVolumeChunk>}
+     * @returns {Promise<Brick>}
+     * @param brickAddress
      */
     async loadBrick(brickAddress) {
         throw new Error("not implemented");
@@ -211,7 +244,7 @@ export class VolumeDataSource extends BrickLoader {
         throw new Error("not implemented");
     }
 
-    async getMaxValue(brickAddress, dtypeDescriptor) {
+    async getMaxValue(brickAddress, {type = 'u1'}) {
         throw new Error("not implemented");
     }
 
@@ -223,23 +256,23 @@ export class VolumeDataSource extends BrickLoader {
         return this.#config.preprocessing.preprocessingMethod || PREPROCESS_METHOD_CAST;
     }
 
-    async #scaleToMax(data, dtypeDescriptor, brickAddress) {
-        const maxValue = await this.getMaxValue(brickAddress, dtypeDescriptor);
-        switch (dtypeDescriptor.type) {
+    async #scaleToMax(data, {type = 'u1'}, brickAddress) {
+        const maxValue = await this.getMaxValue(brickAddress, {type});
+        switch (type) {
             case 'u1':
                 return scaleU8ToU8(data, maxValue);
             case 'u2':
                 return scaleU16ToU8(data, maxValue);
             case 'f4':
-                return scaleF32ToU8(data, maxValue);
+                return new Uint8Array(scaleF32ToU8(data, maxValue));
             default:
-                throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+                throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
         }
     }
 
-    async #logScale(data, dtypeDescriptor, brickAddress) {
-        const maxValue = await this.getMaxValue(brickAddress, dtypeDescriptor);
-        switch (dtypeDescriptor.type) {
+    async #logScale(data, {type = 'u1'}, brickAddress) {
+        const maxValue = await this.getMaxValue(brickAddress, {type});
+        switch (type) {
             case 'u1':
                 return logScaleU8(data, maxValue);
             case 'u2':
@@ -247,21 +280,21 @@ export class VolumeDataSource extends BrickLoader {
             case 'f4':
                 return logScaleF32(data, maxValue);
             default:
-                throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${dtypeDescriptor.type}`);
+                throw Error(`Expected one of ['u1', 'u2', 'f4'], got ${type}`);
         }
     }
 
-    async preprocess(data, dtypeDescriptor, brickAddress) {
+    async preprocess(data, {type = 'u1'}, brickAddress) {
         switch (this.preprocessingMethod) {
             case PREPROCESS_METHOD_LOG_SCALE:
-                return this.#logScale(data, dtypeDescriptor, brickAddress);
+                return this.#logScale(data, {type}, brickAddress);
             case PREPROCESS_METHOD_SCALE_TO_MAX:
-                return this.#scaleToMax(data, dtypeDescriptor, brickAddress);
+                return this.#scaleToMax(data, {type}, brickAddress);
             case PREPROCESS_METHOD_LOG:
-                return logTransformToU8(data, dtypeDescriptor);
+                return logTransformToU8(data, {type});
             case PREPROCESS_METHOD_CAST:
             default:
-                return castToU8(data, dtypeDescriptor);
+                return castToU8(data, {type});
         }
     }
 
@@ -290,19 +323,21 @@ export class OmeZarrDataSource extends VolumeDataSource {
         const numChannels = this.#zarrArrays[0].meta.shape[this.#zarrArrays[0].meta.shape.length - 4];
 
         const brickSize = config.bricks.minimumSize;
+        const stupidBrickSize = [...brickSize];
         for (const arr of this.#zarrArrays) {
             for (let i = 0; i < 3; ++i) {
-                brickSize[i] = Math.min(
+                stupidBrickSize[i] = Math.min(
                     config.bricks.maximumSize[i],
                     arr.shape[arr.shape.length - 1 - i],
                     Math.max(
                         config.bricks.minimumSize[i],
-                        brickSize[i],
+                        stupidBrickSize[i],
                         arr.chunks[arr.chunks.length - 1 - i]
                     )
                 );
             }
         }
+        console.info('brick size vs. stupid brick size', brickSize, stupidBrickSize);
 
         const resolutions = [];
         for (let i = 0; i < this.#zarrArrays.length; ++i) {
@@ -389,22 +424,31 @@ export class OmeZarrDataSource extends VolumeDataSource {
 
             const raw = await this.#zarrArrays[brickAddress.level]
                 .getRaw([0, brickAddress.channel, ...brickSelection]);
-            const data = await this.preprocess(
-                raw.data,
-                dtypeDescriptor,
-                brickAddress);
+            const data = clamp(
+                await this.preprocess(raw.data, dtypeDescriptor, brickAddress),
+                this.isZeroThreshold,
+                1.0,
+                dtypeDescriptor
+            );
 
-            // todo: all values below isZeroThreshold should be set 0 - right now, only blocks containing only such data are set 0!
             if (isZero(data, { type: 'u1' }, this.isZeroThreshold)) {
                 this.#setBrickEmpty(brickAddress);
             } else {
-                return data;
+                return {
+                    data: typeof data === Uint8Array ? data : new Uint8Array(data),
+                    min: 0,  //minU8(data),
+                    max: 255 //maxU8(data),
+                };
             }
         }
-        return new Uint8Array(0);
+        return {
+            data: new Uint8Array(0),
+            min: 0,
+            max: 0
+        };
     }
 
-    async getMaxValue(brickAddress, dtypeDescriptor) {
+    async getMaxValue(brickAddress, {type = 'u1'}) {
         if (!this.#maxValues[brickAddress.channel]) {
             this.#maxValues[brickAddress.channel] = maxValue(
                 (await this.#zarrArrays
@@ -412,7 +456,7 @@ export class OmeZarrDataSource extends VolumeDataSource {
                         .reverse()[0]
                         .getRaw([0, brickAddress.channel])
                 ).data,
-                dtypeDescriptor
+                {type}
             );
         }
         return this.#maxValues[brickAddress.channel];
@@ -448,12 +492,12 @@ export class PreprocessConfig {
     }
 }
 
-export class BrickConfig {
+export class PageTableConfig {
     minimumSize;
     maximumSize;
 
     constructor({ maxSize = [256, 256, 256], minSize = [32, 32, 32] }) {
-        if (maxSize.length != 3 || minSize.length != 3) {
+        if (maxSize.length !== 3 || minSize.length !== 3) {
             throw Error(`Expected brick sizes of exactly length 3, got ${minSize} and ${maxSize}`);
         }
         for (let i = 0; i < 3; ++i) {
@@ -520,6 +564,7 @@ export class VolumeLoader {
 
         await init();
         await initThreadPool(navigator.hardwareConcurrency);
+        initPreprocessing();
 
         this.#dataSource = await createVolumeDataSource(dataSourceConfig);
 
@@ -560,7 +605,7 @@ export class VolumeLoader {
                     type: BRICK_RESPONSE_EVENT,
                     brick: {
                         address: brickAddress,
-                        data: await this.#dataSource.loadBrick(brickAddress) || [],
+                        brick: await this.#dataSource.loadBrick(brickAddress),
                     }
                 });
                 this.#currentlyLoading[JSON.stringify(brickAddress)] = false;

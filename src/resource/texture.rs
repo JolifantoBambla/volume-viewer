@@ -1,6 +1,5 @@
 use crate::renderer::volume::RawVolumeBlock;
 use crate::util::extent::extent_volume;
-use crate::GPUContext;
 use glam::UVec4;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
@@ -9,8 +8,10 @@ use wgpu::{
     TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView,
     TextureViewDescriptor,
 };
+use wgpu_framework::context::Gpu;
 
 #[readonly::make]
+#[derive(Debug)]
 pub struct Texture {
     pub texture: wgpu::Texture,
     pub view: TextureView,
@@ -195,8 +196,8 @@ impl Texture {
         }
     }
 
-    pub fn write<T: bytemuck::Pod>(&self, data: &[T], ctx: &Arc<GPUContext>) {
-        ctx.queue.write_texture(
+    pub fn write<T: bytemuck::Pod>(&self, data: &[T], ctx: &Arc<Gpu>) {
+        ctx.queue().write_texture(
             self.texture.as_image_copy(),
             bytemuck::cast_slice(data),
             self.data_layout(&self.extent),
@@ -218,7 +219,7 @@ impl Texture {
         data: &[T],
         origin: Origin3d,
         extent: Extent3d,
-        ctx: &Arc<GPUContext>,
+        ctx: &Arc<Gpu>,
     ) {
         if self.is_whole_texture(&origin, &extent) {
             self.write(data, ctx);
@@ -230,7 +231,7 @@ impl Texture {
                 aspect: TextureAspect::All,
             };
 
-            ctx.queue.write_texture(
+            ctx.queue().write_texture(
                 image_copy_texture,
                 bytemuck::cast_slice(data),
                 self.data_layout(&extent),

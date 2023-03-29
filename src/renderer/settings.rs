@@ -1,4 +1,4 @@
-use glam::Vec4;
+use glam::{UVec3, Vec4};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -8,20 +8,54 @@ pub struct CreateOptions {
 
     #[serde(rename = "maxResolutions")]
     pub max_resolutions: u32,
+
+    #[serde(rename = "cacheSize")]
+    pub cache_size: UVec3,
+
+    #[serde(rename = "leafNodeSize")]
+    pub leaf_node_size: UVec3,
+
+    #[serde(rename = "brickRequestLimit")]
+    pub brick_request_limit: u32,
+
+    #[serde(rename = "brickTransferLimit")]
+    pub brick_transfer_limit: u32,
 }
 
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub enum RenderMode {
-    /// Renders a bricked volume by stepping from brick to brick in a voxel line, and sampling the
-    /// fetched bricks.
-    #[serde(rename = "grid_traversal")]
-    GridTraversal,
+    /// Uses a hybrid Octree-Page-Table data structure.
+    /// An Octree is used for empty space skipping, while a page table is used for memory management.
+    #[serde(rename = "octree")]
+    Octree,
 
-    /// Renders a bricked volume by sampling a ray at regular intervals and fetching the
-    /// corresponding brick for each sample.
-    #[serde(rename = "direct")]
-    Direct,
+    /// Uses a page table for both memory management and empty space skipping.
+    #[serde(rename = "page_table")]
+    PageTable,
+
+    #[serde(rename = "octree_reference")]
+    OctreeReference,
+}
+
+#[repr(u32)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+pub enum OutputMode {
+    #[serde(rename = "dvr")]
+    Dvr,
+
+    #[serde(rename = "bricksAccessed")]
+    BricksAccessed,
+
+    /// for page table this is the same as BricksAccessed
+    #[serde(rename = "nodesAccessed")]
+    NodesAccessed,
+
+    #[serde(rename = "sampleSteps")]
+    SampleSteps,
+
+    #[serde(rename = "dvrPlusBrickRequestLimit")]
+    DvrPlusBrickRequestLimit,
 }
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
@@ -97,6 +131,9 @@ pub struct MultiChannelVolumeRendererSettings {
     #[serde(rename = "renderMode")]
     pub render_mode: RenderMode,
 
+    #[serde(rename = "outputMode")]
+    pub output_mode: OutputMode,
+
     /// The `step_scale` is used to scale steps along a ray, where a scale of 1 is sampling roughly
     /// corresponds to one sample per voxel, and a smaller scale corresponds to smaller steps.
     /// Range: [0,n]
@@ -106,6 +143,12 @@ pub struct MultiChannelVolumeRendererSettings {
     /// The maximum number of samples to take for each ray.
     #[serde(rename = "maxSteps")]
     pub max_steps: u32,
+
+    #[serde(rename = "brickRequestRadius")]
+    pub brick_request_radius: f32,
+
+    #[serde(rename = "statisticsNormalizationConstant")]
+    pub statistics_normalization_constant: u32,
 
     /// The background color to use for rendering.
     #[serde(rename = "backgroundColor")]

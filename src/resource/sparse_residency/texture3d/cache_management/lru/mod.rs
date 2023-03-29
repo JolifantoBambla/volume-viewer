@@ -1,28 +1,21 @@
 mod lru_update;
 
-use std::collections::HashSet;
 use glam::UVec3;
-use std::mem::size_of;
-use std::rc::Rc;
 use std::sync::Arc;
-use web_sys::console::time;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
-use wgpu::{
-    BindGroup, BindingResource, Buffer, BufferAddress, BufferUsages, CommandEncoder, Extent3d,
-    MapMode,
-};
+use wgpu::{BindingResource, Buffer, CommandEncoder, Extent3d};
 use wgsl_preprocessor::WGSLPreprocessor;
 
-use crate::resource::{MappableBuffer, Texture};
+use crate::resource::{buffer::ReadableStorageBuffer, Texture};
 use crate::util::extent::{
     box_volume, extent_to_uvec, index_to_subscript, uvec_to_extent, uvec_to_origin,
 };
-use crate::{GPUContext, Input};
-
-use crate::resource::buffer::{BufferMapError, ReadableStorageBuffer, TypedBuffer};
-
-use lru_update::{LRUUpdate, LRUUpdateResources};
 use crate::util::multi_buffer::MultiBuffered;
+use wgpu_framework::input::Input;
+
+#[cfg(feature = "timestamp-query")]
+use crate::timing::timestamp_query_helper::TimestampQueryHelper;
+use lru_update::{LRUUpdate, LRUUpdateResources};
+use wgpu_framework::context::Gpu;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -39,6 +32,7 @@ pub struct LRUCacheSettings {
     pub time_to_live: u32,
 }
 
+#[derive(Debug)]
 struct LRUCacheGpuOps {
     lru: ReadableStorageBuffer<u32>,
     num_used_entries: ReadableStorageBuffer<NumUsedEntries>,
@@ -46,14 +40,39 @@ struct LRUCacheGpuOps {
 }
 
 impl LRUCacheGpuOps {
-    pub fn encode(&self, command_encoder: &mut CommandEncoder, frame_number: u32) {
-        self.lru_update_pass.encode(command_encoder);
+    pub fn encode(
+        &self,
+        command_encoder: &mut CommandEncoder,
+        frame_number: u32,
+        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
+    ) {
+        self.lru_update_pass.encode(
+            command_encoder,
+            #[cfg(feature = "timestamp-query")]
+            timestamp_query_helper,
+        );
 
         if self.lru.copy_to_readable(command_encoder).is_err() {
-            log::debug!("Frame {}: could not copy to readable ({})", frame_number, self.lru);
+            /*
+            log::debug!(
+                "Frame {}: could not copy to readable ({})",
+                frame_number,
+                self.lru
+            );
+             */
         }
-        if self.num_used_entries.copy_to_readable(command_encoder).is_err() {
-            log::debug!("Frame {}: could not copy to readable ({})", frame_number, self.num_used_entries);
+        if self
+            .num_used_entries
+            .copy_to_readable(command_encoder)
+            .is_err()
+        {
+            /*
+            log::debug!(
+                "Frame {}: could not copy to readable ({})",
+                frame_number,
+                self.num_used_entries
+            );
+             */
         }
     }
 
@@ -61,10 +80,16 @@ impl LRUCacheGpuOps {
         if self.lru.map_all_async().is_ok() {
             if self.num_used_entries.map_all_async().is_err() {
                 self.lru.unmap();
-                log::debug!("Frame {}: could not map ({})", frame_number, self.num_used_entries);
+                /*
+                log::debug!(
+                    "Frame {}: could not map ({})",
+                    frame_number,
+                    self.num_used_entries
+                );
+                 */
             }
         } else {
-            log::debug!("Frame {}: could not map ({})", frame_number, self.lru);
+            //log::debug!("Frame {}: could not map ({})", frame_number, self.lru);
         }
     }
 
@@ -73,18 +98,25 @@ impl LRUCacheGpuOps {
             if let Ok(num_used_entries) = self.num_used_entries.read_all() {
                 Ok((lru, num_used_entries[0]))
             } else {
-                log::debug!("Frame {}: could not read ({})", frame_number, self.num_used_entries);
+                /*
+                log::debug!(
+                    "Frame {}: could not read ({})",
+                    frame_number,
+                    self.num_used_entries
+                );
+                 */
                 Err(())
             }
         } else {
-            log::debug!("Frame {}: could not read ({})", frame_number, self.lru);
+            //log::debug!("Frame {}: could not read ({})", frame_number, self.lru);
             Err(())
         }
     }
 }
 
+#[derive(Debug)]
 pub struct LRUCache {
-    ctx: Arc<GPUContext>,
+    ctx: Arc<Gpu>,
 
     cache: Texture,
     cache_entry_size: UVec3,
@@ -103,8 +135,6 @@ pub struct LRUCache {
 
     lru_local: Vec<u32>,
 
-    lru_buffer_size: BufferAddress,
-
     num_used_entries_local: u32,
 
     lru_stuff: MultiBuffered<LRUCacheGpuOps>,
@@ -115,9 +145,9 @@ impl LRUCache {
         settings: LRUCacheSettings,
         timestamp_uniform_buffer: &Buffer,
         wgsl_preprocessor: &WGSLPreprocessor,
-        ctx: &Arc<GPUContext>,
+        ctx: &Arc<Gpu>,
     ) -> Self {
-        let cache = Texture::create_brick_cache(&ctx.device, settings.cache_size);
+        let cache = Texture::create_brick_cache(ctx.device(), settings.cache_size);
 
         let usage_buffer_size = extent_to_uvec(&settings.cache_size) / settings.cache_entry_size;
         let num_entries = box_volume(&usage_buffer_size);
@@ -126,27 +156,22 @@ impl LRUCache {
         let next_empty_index = num_entries;
         let lru_local = Vec::from_iter((0..num_entries).rev());
         let lru_last_update = vec![u32::MAX; num_entries as usize];
-        let lru_buffer_size = (size_of::<u32>() * num_entries as usize) as BufferAddress;
 
         // 1:1 mapping, 1 timestamp per brick in cache
         let usage_buffer = Texture::create_u32_storage_3d(
             "Usage Buffer".to_string(),
-            &ctx.device,
-            &ctx.queue,
+            ctx.device(),
+            ctx.queue(),
             uvec_to_extent(&usage_buffer_size),
         );
 
         let lru_stuff = MultiBuffered::new(
             || {
-                let lru = ReadableStorageBuffer::from_data(
-                    "lru",
-                    &lru_local,
-                    &ctx.device
-                );
+                let lru = ReadableStorageBuffer::from_data("lru", &lru_local, ctx.device());
                 let num_used_entries = ReadableStorageBuffer::from_data(
                     "num used entries",
                     &vec![num_unused_entries],
-                    &ctx.device,
+                    ctx.device(),
                 );
 
                 let lru_update_pass = LRUUpdate::new(
@@ -154,10 +179,10 @@ impl LRUCache {
                         lru.storage_buffer().clone(),
                         num_used_entries.storage_buffer().clone(),
                         &usage_buffer,
-                        &timestamp_uniform_buffer
+                        timestamp_uniform_buffer,
                     ),
                     wgsl_preprocessor,
-                    ctx
+                    ctx,
                 );
 
                 LRUCacheGpuOps {
@@ -178,25 +203,36 @@ impl LRUCache {
             time_to_live: settings.time_to_live,
             next_empty_index,
             lru_local,
-            lru_buffer_size,
             num_used_entries_local: 0,
-            lru_stuff
+            lru_stuff,
         }
     }
 
-    pub fn encode_lru_update(&self, encoder: &mut CommandEncoder, timestamp: u32) {
-        self.lru_stuff.get(timestamp as usize).encode(encoder, timestamp);
+    pub fn encode_lru_update(
+        &self,
+        encoder: &mut CommandEncoder,
+        timestamp: u32,
+        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
+    ) {
+        self.lru_stuff.get(timestamp as usize).encode(
+            encoder,
+            timestamp,
+            #[cfg(feature = "timestamp-query")]
+            timestamp_query_helper,
+        );
     }
 
     /// tries to read the last frame's to
     /// to update its CPU local list of free cache entries.
     pub fn update_local_lru(&mut self, timestamp: u32) {
-        self.lru_stuff.get(timestamp as usize).map_read_buffers(timestamp);
+        self.lru_stuff
+            .get(timestamp as usize)
+            .map_read_buffers(timestamp);
 
-        if let Ok((lru, num_used_entries)) =
-            self.lru_stuff
-                .get_previous(timestamp as usize)
-                .read_buffers(timestamp)
+        if let Ok((lru, num_used_entries)) = self
+            .lru_stuff
+            .get_previous(timestamp as usize)
+            .read_buffers(timestamp)
         {
             self.lru_local = lru;
             self.num_used_entries_local = num_used_entries.num;
@@ -204,7 +240,7 @@ impl LRUCache {
         }
     }
 
-    pub(crate) fn get_cache_as_binding_resource(&self) -> BindingResource {
+    pub(crate) fn cache_as_binding_resource(&self) -> BindingResource {
         BindingResource::TextureView(&self.cache.view)
     }
 
@@ -225,14 +261,12 @@ impl LRUCache {
     pub fn add_cache_entry(
         &mut self,
         data: &Vec<u8>,
-        input: &Input,
+        frame_number: u32,
     ) -> Result<UVec3, CacheFullError> {
         for i in ((self.num_used_entries_local as usize)..(self.next_empty_index as usize)).rev() {
             let cache_entry_index = self.lru_local[i];
             let last_written = self.lru_last_writes[cache_entry_index as usize];
-            if last_written > input.frame.number
-                || (input.frame.number - last_written) > self.time_to_live
-            {
+            if last_written > frame_number || (frame_number - last_written) > self.time_to_live {
                 let extent = uvec_to_extent(
                     &(index_to_subscript(
                         (data.len() as u32) - 1,
@@ -248,7 +282,7 @@ impl LRUCache {
                     extent,
                     &self.ctx,
                 );
-                self.lru_last_writes[cache_entry_index as usize] = input.frame.number;
+                self.lru_last_writes[cache_entry_index as usize] = frame_number;
                 self.next_empty_index = i as u32; // if i > 0 { i as u32 - 1 } else { 0 };
                 return Ok(cache_entry_location);
             }
@@ -256,6 +290,7 @@ impl LRUCache {
         Err(CacheFullError {})
     }
 
+    #[allow(unused)]
     pub fn cache_entry_size(&self) -> UVec3 {
         self.cache_entry_size
     }

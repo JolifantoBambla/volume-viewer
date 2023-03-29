@@ -16,17 +16,25 @@ A web-based volume viewer for large-scale multichannel volume data
 
 From the project root run:
 ```
-RUSTFLAGS=--cfg\=web_sys_unstable_apis\ -C\ target-feature\=+atomics\,+bulk-memory\,+mutable-globals \
-RUSTUP_TOOLCHAIN=nightly \
-wasm-pack build --target web -- . -Z build-std=panic_abort,std
+wasm-pack build --target web
 ```
 
 ### Required Rustflags
+These are set from `.cargo/config.toml`.
 * `--cfg=web_sys_unstable_apis`: enables unstable APIs like WebGPU for the `web_sys` crate
 * `-C target-feature=+atomics,+bulk-memory,+mutable-globals`: enables atomics & shared memory for WASM. This is required for multithreading.
 
 ### Required Unstable Flags
+These are set from `.cargo/config.toml`.
+The nightly toolchain used to build this project is defined in `rust-toolchain.toml`.
 * `build-std=panic_abort,std`: rebuild std with the features (atomics, etc.) enabled by `RUSTFLAGS`
+
+### Timestamp Queries
+This crate provides a `timestamp-query` feature which enables timing GPU passes via WebGPU's timestamp query.
+To use this feature, Chromium (or Chrome) has to be run with the following flag enabled:
+```
+--disable-dawn-features=disallow_unsafe_apis
+```
 
 ## Demo
 Check out [the wiki](https://github.com/JolifantoBambla/volume-viewer/wiki/Demo) for more information on how to try out the demo.

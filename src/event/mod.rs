@@ -1,23 +1,20 @@
+use std::rc::Rc;
 use serde::{Deserialize, Serialize};
 use winit::event::WindowEvent;
 
 pub mod conversion;
 pub mod handler;
 
-use crate::renderer::settings::{Color, RenderMode};
+use crate::renderer::settings::{Color, OutputMode, RenderMode};
+use crate::volume::BrickAddress;
 
-pub struct RawArrayReceived {
-    pub data: Vec<u16>,
-    pub shape: Vec<u32>,
-}
-
-#[derive(Deserialize, Serialize)]
+#[derive(Copy, Clone, Deserialize, Serialize)]
 pub struct Range<T> {
     pub min: T,
     pub max: T,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Copy, Clone, Deserialize, Serialize)]
 pub enum ChannelSettingsChange {
     #[serde(rename = "lod")]
     LoD(Range<u32>),
@@ -35,7 +32,7 @@ pub enum ChannelSettingsChange {
     Visible(bool),
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Copy, Clone, Deserialize, Serialize)]
 pub struct ChannelSetting {
     #[serde(rename = "channelIndex")]
     pub channel_index: u32,
@@ -49,11 +46,20 @@ pub enum SettingsChange {
     #[serde(rename = "renderMode")]
     RenderMode(RenderMode),
 
+    #[serde(rename = "outputMode")]
+    OutputMode(OutputMode),
+
     #[serde(rename = "stepScale")]
     StepScale(f32),
 
     #[serde(rename = "maxSteps")]
     MaxSteps(u32),
+
+    #[serde(rename = "brickRequestRadius")]
+    BrickRequestRadius(f32),
+
+    #[serde(rename = "statisticsNormalizationConstant")]
+    StatisticsNormalizationConstant(u32),
 
     #[serde(rename = "backgroundColor")]
     BackgroundColor(Color),
@@ -62,9 +68,11 @@ pub enum SettingsChange {
     ChannelSetting(ChannelSetting),
 }
 
-pub enum Event<'a, T: 'static> {
-    Window(WindowEvent<'a>),
-    RawArray(RawArrayReceived),
+pub enum Event<T: 'static> {
+    Window(WindowEvent<'static>),
+    Brick(Rc<(BrickAddress, Vec<u8>)>),
+    PollBricks,
+    StopMonitoring,
     Settings(SettingsChange),
     Custom(T),
 }

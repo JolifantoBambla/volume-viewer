@@ -4,18 +4,18 @@ use glam::{UVec2, UVec3, Vec3};
 use std::cmp::min;
 
 #[repr(C)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PageTableMeta {
     /// The offset of this page table in the page directory.
-    pub(crate) offset: UVec3,
+    offset: UVec3,
 
     /// The extent of this page table in the page directory.
     /// The extent of the full volume represented by this page table is the component-wise product
     /// `self.extent * brick_size`, where `brick_size` is the size of one page in cache.
-    pub(crate) extent: UVec3,
+    extent: UVec3,
 
     ///
-    pub(crate) volume_meta: ResolutionMeta,
+    resolution_meta: ResolutionMeta,
 }
 
 impl PageTableMeta {
@@ -23,27 +23,39 @@ impl PageTableMeta {
         Self {
             offset,
             extent,
-            volume_meta,
+            resolution_meta: volume_meta,
         }
     }
 
     pub fn get_max_location(&self) -> UVec3 {
         self.offset + self.extent
     }
+
+    pub fn offset(&self) -> UVec3 {
+        self.offset
+    }
+
+    pub fn extent(&self) -> UVec3 {
+        self.extent
+    }
+
+    pub fn resolution_meta(&self) -> &ResolutionMeta {
+        &self.resolution_meta
+    }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PageDirectoryMeta {
-    /// The size of a brick in the brick cache. This is constant across all resolutions of the
-    /// bricked multi-resolution volume.
-    pub(crate) brick_size: UVec3,
+    /// The size of a brick in the brick cache. This is constant across all channels and resolutions
+    /// of the bricked multi-resolution volume.
+    brick_size: UVec3,
 
-    pub(crate) scale: Vec3,
+    normalized_volume_size: Vec3,
 
-    pub(crate) extent: UVec3,
+    extent: UVec3,
 
     /// The resolutions
-    pub(crate) page_tables: Vec<PageTableMeta>,
+    page_tables: Vec<PageTableMeta>,
 
     num_channels: usize,
     num_resolutions: usize,
@@ -99,9 +111,9 @@ impl PageDirectoryMeta {
             .fold(UVec3::ZERO, |a, b| a.max(b.get_max_location()));
 
         Self {
-            brick_size: UVec3::from(volume_meta.brick_size),
-            scale: Vec3::from(volume_meta.scale),
+            brick_size: volume_meta.brick_size,
             extent,
+            normalized_volume_size: volume_meta.top_level_normalized_size(),
             page_tables,
             num_channels,
             num_resolutions,
@@ -109,24 +121,24 @@ impl PageDirectoryMeta {
     }
 
     // todo: find a better name
-    pub fn get_page_table_size(&self) -> UVec2 {
+    pub fn get_page_table_directory_shape(&self) -> UVec2 {
         UVec2::new(self.num_channels as u32, self.num_resolutions as u32)
     }
 
     pub fn get_page_table(&self, resolution: u32, channel: u32) -> &PageTableMeta {
         let subscript = UVec2::new(channel, resolution);
-        let size = self.get_page_table_size();
+        let size = self.get_page_table_directory_shape();
         &self.page_tables[subscript.to_index(&size) as usize]
     }
 
     pub fn brick_size(&self) -> UVec3 {
         self.brick_size
     }
-    pub fn scale(&self) -> Vec3 {
-        self.scale
-    }
     pub fn extent(&self) -> UVec3 {
         self.extent
+    }
+    pub fn normalized_volume_size(&self) -> Vec3 {
+        self.normalized_volume_size
     }
     pub fn page_tables(&self) -> &Vec<PageTableMeta> {
         &self.page_tables

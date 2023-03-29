@@ -39,17 +39,18 @@ extern "C" {
 
 impl Group {
     pub async fn open(store: String, path: String) -> Group {
-        let mode = JsValue::from_serde(&PersistenceMode::ReadOnly).unwrap();
+        let mode = serde_wasm_bindgen::to_value(&PersistenceMode::ReadOnly).unwrap();
         let group = open_group(store, path, mode, JsValue::NULL, true).await;
         group.unchecked_into()
     }
 
     pub async fn get_attributes(&self) -> ome_ngff::metadata::Metadata {
-        self.attrs()
-            .unchecked_into::<Attributes>()
-            .as_object()
-            .await
-            .into_serde()
-            .expect("Failed to deserialize attributes")
+        serde_wasm_bindgen::from_value(
+            self.attrs()
+                .unchecked_into::<Attributes>()
+                .as_object()
+                .await,
+        )
+        .expect("Failed to deserialize attributes")
     }
 }

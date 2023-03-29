@@ -1,25 +1,22 @@
-use crate::renderer::context::GPUContext;
 use crate::renderer::pass::AsBindGroupEntries;
+use crate::resource::buffer::TypedBuffer;
 use crate::resource::MappableBuffer;
 use std::cmp::min;
-use std::marker::PhantomData;
-use std::mem::size_of;
 use std::sync::Arc;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
-    BindGroupEntry, BindingResource, Buffer, BufferAddress, BufferDescriptor, BufferUsages,
-    CommandEncoder, Maintain, MapMode,
+    BindGroupEntry, BindingResource, BufferAddress, BufferUsages, CommandEncoder, Maintain, MapMode,
 };
-use crate::resource::buffer::TypedBuffer;
+use wgpu_framework::context::Gpu;
 
 #[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct GpuListMeta {
     capacity: u32,
     fill_pointer: u32,
     written_at: u32,
 }
 
+#[derive(Debug)]
 pub struct GpuListReadResult<T: bytemuck::Pod + bytemuck::Zeroable> {
     list: Vec<T>,
     written_at: u32,
@@ -31,46 +28,44 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> From<GpuListReadResult<T>> for (Vec<
     }
 }
 
+#[derive(Debug)]
 pub struct GpuList<T: bytemuck::Pod + bytemuck::Zeroable> {
-    ctx: Arc<GPUContext>,
+    ctx: Arc<Gpu>,
     capacity: u32,
     list_buffer: TypedBuffer<T>,
     list_read_buffer: MappableBuffer<T>,
-    list_buffer_size: BufferAddress,
     meta_buffer: TypedBuffer<GpuListMeta>,
     meta_read_buffer: MappableBuffer<GpuListMeta>,
 }
 
 impl<T: bytemuck::Pod> GpuList<T> {
-    pub fn new(label: &str, capacity: u32, ctx: &Arc<GPUContext>) -> Self {
-        let list_buffer_size = (size_of::<T>() * capacity as usize) as BufferAddress;
+    pub fn new(label: &str, capacity: u32, ctx: &Arc<Gpu>) -> Self {
         let meta = GpuListMeta {
             capacity,
             fill_pointer: 0,
             written_at: 0,
         };
         let list_buffer = TypedBuffer::new_zeroed(
-            format!("{} [list]", label).as_str(),
+            format!("{label} [list]").as_str(),
             capacity as usize,
             BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            &ctx.device
+            ctx.device(),
         );
         let meta_buffer = TypedBuffer::new_single_element(
-            format!("{} [meta]", label).as_str(),
+            format!("{label} [meta]").as_str(),
             meta,
             BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
-            &ctx.device,
+            ctx.device(),
         );
 
-        let list_read_buffer = MappableBuffer::from_buffer(&list_buffer, &ctx.device);
-        let meta_read_buffer = MappableBuffer::from_buffer(&meta_buffer, &ctx.device);
+        let list_read_buffer = MappableBuffer::from_typed_buffer(&list_buffer, ctx.device());
+        let meta_read_buffer = MappableBuffer::from_typed_buffer(&meta_buffer, ctx.device());
 
         Self {
             ctx: ctx.clone(),
             capacity,
             list_buffer,
             list_read_buffer,
-            list_buffer_size,
             meta_buffer,
             meta_read_buffer,
         }
@@ -123,7 +118,7 @@ impl<T: bytemuck::Pod> GpuList<T> {
 
     pub fn read(&self) -> Option<GpuListReadResult<T>> {
         self.map_for_reading();
-        self.ctx.device.poll(Maintain::Wait);
+        self.ctx.device().poll(Maintain::Wait);
         self.read_mapped()
     }
 
@@ -134,7 +129,7 @@ impl<T: bytemuck::Pod> GpuList<T> {
             fill_pointer: 0,
             written_at: 0,
         };
-        self.ctx.queue.write_buffer(
+        self.ctx.queue().write_buffer(
             self.meta_buffer.buffer(),
             0 as BufferAddress,
             bytemuck::bytes_of(&meta),
@@ -147,6 +142,16 @@ impl<T: bytemuck::Pod> GpuList<T> {
 
     pub fn list_as_binding(&self) -> BindingResource {
         self.list_buffer.buffer().as_entire_binding()
+    }
+}
+
+// todo: use wgpu_framework::Buffer instead which implements Drop
+impl<T: bytemuck::Pod + bytemuck::Zeroable> Drop for GpuList<T> {
+    fn drop(&mut self) {
+        self.list_buffer.buffer().destroy();
+        self.list_read_buffer.buffer().destroy();
+        self.meta_buffer.buffer().destroy();
+        self.meta_read_buffer.buffer().destroy();
     }
 }
 

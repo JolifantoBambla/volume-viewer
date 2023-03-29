@@ -1,6 +1,7 @@
 pub mod brick;
 pub mod data_source;
 pub mod meta;
+pub mod octree;
 
 pub use brick::{Brick, BrickAddress};
 pub use data_source::VolumeDataSource;

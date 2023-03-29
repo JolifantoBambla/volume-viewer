@@ -6,6 +6,12 @@ pub use wasm_bindgen_rayon::init_thread_pool;
 
 // IS ZERO
 
+#[wasm_bindgen(js_name = "initPreprocessing")]
+pub fn init_preprocessing() {
+    crate::util::init::set_panic_hook();
+    crate::util::init::set_logger(None);
+}
+
 #[wasm_bindgen(js_name = "isZeroU8")]
 pub fn is_zero_u8(data: Vec<u8>, threshold: f32) -> bool {
     let thresh = (threshold.clamp(0., 1.) * 255.) as u8;
@@ -20,8 +26,38 @@ pub fn is_zero_u16(data: Vec<u16>, threshold: f32) -> bool {
 
 #[wasm_bindgen(js_name = "isZeroF32")]
 pub fn is_zero_f32(data: Vec<f32>, threshold: f32) -> bool {
+    log::info!("called");
     let thresh = threshold.clamp(0., 1.);
     data.par_iter().all(|&x| x.abs() <= thresh)
+}
+
+// CLAMP
+
+#[wasm_bindgen(js_name = "clampU8")]
+pub fn clamp_u8(data: Vec<u8>, threshold_lower: f32, threshold_upper: f32) -> Vec<u8> {
+    let tl = (threshold_lower.clamp(0., 1.) * 255.) as u8;
+    let tu = (threshold_upper.clamp(0., 1.) * 255.) as u8;
+    data.par_iter()
+        .map(|&x| if x >= tl && x <= tu { x } else { 0 })
+        .collect()
+}
+
+#[wasm_bindgen(js_name = "clampU16")]
+pub fn clamp_u16(data: Vec<u16>, threshold_lower: f32, threshold_upper: f32) -> Vec<u16> {
+    let tl = (threshold_lower.clamp(0., 1.) * 65535.) as u16;
+    let tu = (threshold_upper.clamp(0., 1.) * 65535.) as u16;
+    data.par_iter()
+        .map(|&x| if x >= tl && x <= tu { x } else { 0 })
+        .collect()
+}
+
+#[wasm_bindgen(js_name = "clampF32")]
+pub fn clamp_f32(data: Vec<f32>, threshold_lower: f32, threshold_upper: f32) -> Vec<f32> {
+    let tl = threshold_lower.clamp(0., 1.);
+    let tu = threshold_upper.clamp(0., 1.);
+    data.par_iter()
+        .map(|&x| if x >= tl && x <= tu { x } else { 0.0 })
+        .collect()
 }
 
 // MIN
@@ -37,7 +73,7 @@ pub fn min_u16(data: Vec<u16>) -> f32 {
 }
 
 #[wasm_bindgen(js_name = "minF32")]
-pub fn min_f32(data: Vec<f32>) -> f32 {
+pub fn min_f32(data: &[f32]) -> f32 {
     *data
         .par_iter()
         .min_by(|&a, &b| a.partial_cmp(b).expect("Encountered NaN value in data"))
@@ -81,9 +117,9 @@ pub fn scale_u16_to_u8(data: Vec<u16>, max_value: f32) -> Vec<u8> {
 }
 
 #[wasm_bindgen(js_name = "scaleF32ToU8")]
-pub fn scale_f32_to_u8(data: Vec<f32>, max_value: f32) -> Vec<u8> {
+pub fn scale_f32_to_u8(data: Vec<f32>, max_value: f32) -> Vec<f32> {
     data.par_iter()
-        .map(|&x| ((x / max_value) * 255.) as u8)
+        .map(|&x| (x / max_value) * 255.)
         .collect()
 }
 

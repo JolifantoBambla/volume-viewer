@@ -119,7 +119,7 @@ pub enum DimensionArraySelection {
     Separator,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize)]
 pub struct GetOptions {
     #[serde(rename = "concurrencyLimit")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -129,15 +129,6 @@ pub struct GetOptions {
     #[serde(rename = "progressCallback")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress_callback: Option<String>,
-}
-
-impl Default for GetOptions {
-    fn default() -> Self {
-        Self {
-            concurrency_limit: None,
-            progress_callback: None,
-        }
-    }
 }
 
 #[wasm_bindgen(module = "https://cdn.skypack.dev/zarr")]
@@ -196,7 +187,7 @@ impl ZarrArray {
             path: Some(path),
             ..Default::default()
         };
-        let array = open_array(JsValue::from_serde(&options).unwrap()).await;
+        let array = open_array(serde_wasm_bindgen::to_value(&options).unwrap()).await;
         array.unchecked_into()
     }
 
@@ -206,14 +197,14 @@ impl ZarrArray {
         options: GetOptions,
     ) -> RawArray {
         self.get_raw(
-            JsValue::from_serde(&selection).unwrap(),
-            JsValue::from_serde(&options).unwrap(),
+            serde_wasm_bindgen::to_value(&selection).unwrap(),
+            serde_wasm_bindgen::to_value(&options).unwrap(),
         )
         .await
         .unchecked_into::<RawArray>()
     }
 
     pub fn data_type(&self) -> DataType {
-        self.data_type_js().into_serde().unwrap()
+        serde_wasm_bindgen::from_value(self.data_type_js()).unwrap()
     }
 }

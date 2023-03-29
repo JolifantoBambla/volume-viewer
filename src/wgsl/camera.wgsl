@@ -3,7 +3,7 @@
 @include(transform)
 @include(type_alias)
 
-type CameraType = u32;
+alias CameraType = u32;
 const PERSPECTIVE = 0u;
 const ORTHOGRAPHIC = 1u;
 

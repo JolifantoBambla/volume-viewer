@@ -1,10 +1,8 @@
-use crate::renderer::{
-    camera::CameraUniform,
-    context::GPUContext,
-    pass::{AsBindGroupEntries, GPUPass},
-};
+use crate::app::renderer::common::CameraUniform;
+use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout};
+use wgpu_framework::context::Gpu;
 use wgsl_preprocessor::WGSLPreprocessor;
 
 #[repr(C)]
@@ -48,19 +46,19 @@ pub struct Resources<'a> {
 impl<'a> AsBindGroupEntries for Resources<'a> {
     fn as_bind_group_entries(&self) -> Vec<BindGroupEntry> {
         vec![
-            wgpu::BindGroupEntry {
+            BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::TextureView(self.volume),
             },
-            wgpu::BindGroupEntry {
+            BindGroupEntry {
                 binding: 1,
                 resource: wgpu::BindingResource::Sampler(self.volume_sampler),
             },
-            wgpu::BindGroupEntry {
+            BindGroupEntry {
                 binding: 2,
                 resource: wgpu::BindingResource::TextureView(self.output),
             },
-            wgpu::BindGroupEntry {
+            BindGroupEntry {
                 binding: 3,
                 resource: self.uniforms.as_entire_binding(),
             },
@@ -69,15 +67,15 @@ impl<'a> AsBindGroupEntries for Resources<'a> {
 }
 
 pub struct DVR {
-    ctx: Arc<GPUContext>,
+    ctx: Arc<Gpu>,
     pipeline: wgpu::ComputePipeline,
-    bind_group_layout: wgpu::BindGroupLayout,
+    bind_group_layout: BindGroupLayout,
 }
 
 impl DVR {
-    pub fn new(wgsl_preprocessor: &WGSLPreprocessor, ctx: &Arc<GPUContext>) -> Self {
+    pub fn new(wgsl_preprocessor: &WGSLPreprocessor, ctx: &Arc<Gpu>) -> Self {
         let shader_module = ctx
-            .device
+            .device()
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
@@ -88,7 +86,7 @@ impl DVR {
                 )),
             });
         let pipeline = ctx
-            .device
+            .device()
             .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: None,
                 layout: None,
@@ -111,7 +109,10 @@ impl DVR {
         output_extent: &wgpu::Extent3d,
     ) {
         let mut cpass =
-            command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: None,
+                ..Default::default()
+            });
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, bind_group, &[]);
         cpass.insert_debug_marker(self.label());
@@ -124,7 +125,7 @@ impl DVR {
 }
 
 impl<'a> GPUPass<Resources<'a>> for DVR {
-    fn ctx(&self) -> &Arc<GPUContext> {
+    fn ctx(&self) -> &Arc<Gpu> {
         &self.ctx
     }
 

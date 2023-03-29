@@ -1,0 +1,56 @@
+[package]
+name = "wgpu-framework"
+version = "0.1.0"
+authors = ["Lukas Herzberger <herzberger.lukas@gmail.com>"]
+edition = "2021"
+description = "A small framework to play with the wgpu library."
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies]
+bytemuck = { version = "1.4", features = ["derive"] }
+glam = { version = "0.22.0", features = ["bytemuck", "serde"] }
+instant = "0.1.12"
+log = "0.4.6"
+obj-rs = "0.7.0"
+readonly = "0.2.0"
+serde = { version = "1.0.148", features = ["derive"] }
+serde_json = "1.0.82"
+winit = "0.27.5"
+wgpu = { git = "https://github.com/JolifantoBambla/wgpu", branch = "implement-timestamp-query-on-v0.14.2" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# The `console_error_panic_hook` crate provides better debugging of panics by
+# logging them with `console.error`. This is great for development, but requires
+# all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
+# code size when deploying.
+console_error_panic_hook = { version = "0.1.6", optional = true }
+
+js-sys = "0.3.50"
+serde-wasm-bindgen = "0.4.5"
+wasm-bindgen = "0.2.78"
+wasm-bindgen-futures = "0.4.23"
+wasm-logger = "0.2.0"
+web-sys = { version = "0.3.61", features = ["CustomEvent", "CustomEventInit", "Event", "EventTarget", "HtmlInputElement", "Location"] }
+
+# `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
+# compared to the default allocator's ~10K. It is slower than the default
+# allocator, however.
+#
+# Unfortunately, `wee_alloc` requires nightly Rust when targeting wasm for now.
+wee_alloc = { version = "0.4.5", optional = true }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.13"
+
+[build-dependencies]
+naga = { version = "0.7", features = ["glsl-in", "spv-out", "wgsl-out"]}
+
+[profile.release]
+# Tell `rustc` to optimize for small code size.
+opt-level = "s"

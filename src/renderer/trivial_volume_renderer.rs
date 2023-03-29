@@ -1,36 +1,36 @@
-use crate::renderer::context::{ContextDescriptor, GPUContext};
-use crate::renderer::pass::GPUPass;
 use crate::renderer::pass::{dvr, present_to_screen};
-use crate::resource;
-use crate::wgsl::create_wgsl_preprocessor;
-use crate::{Camera, RawVolumeBlock};
-use bytemuck;
 use std::sync::Arc;
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use web_sys::OffscreenCanvas;
-use wgpu::util::DeviceExt;
+use wgpu_framework::context::Gpu;
 
 pub struct TrivialVolumeRenderer {
-    pub(crate) ctx: Arc<GPUContext>,
+    #[allow(unused)]
+    pub(crate) ctx: Arc<Gpu>,
 
+    #[allow(unused)]
     dvr_pass: dvr::DVR,
+    #[allow(unused)]
     present_to_screen: present_to_screen::PresentToScreen,
 
+    #[allow(unused)]
     dvr_bind_group: wgpu::BindGroup,
+    #[allow(unused)]
     present_to_screen_bind_group: wgpu::BindGroup,
 
+    #[allow(unused)]
     dvr_result_extent: wgpu::Extent3d,
 
+    #[allow(unused)]
     volume_transform: glam::Mat4,
+    #[allow(unused)]
     uniform_buffer: wgpu::Buffer,
 }
 
+/*
 impl TrivialVolumeRenderer {
     pub async fn new(canvas: JsValue, volume: RawVolumeBlock) -> Self {
         let canvas = canvas.unchecked_into::<OffscreenCanvas>();
         let ctx = Arc::new(
-            GPUContext::new(&ContextDescriptor::default())
+            Gpu::new(&ContextDescriptor::default())
                 .await
                 .with_surface_from_offscreen_canvas(&canvas),
         );
@@ -102,14 +102,14 @@ impl TrivialVolumeRenderer {
     pub fn update(&self, camera: &Camera) {
         let uniforms = dvr::Uniforms::new(camera.create_uniform(), self.volume_transform);
         self.ctx
-            .queue
+            .queue()
             .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
     }
 
     pub fn render(&self, canvas_view: &wgpu::TextureView) {
         let mut encoder = self
             .ctx
-            .device
+            .device()
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         self.dvr_pass
             .encode(&mut encoder, &self.dvr_bind_group, &self.dvr_result_extent);
@@ -118,6 +118,8 @@ impl TrivialVolumeRenderer {
             &self.present_to_screen_bind_group,
             canvas_view,
         );
-        self.ctx.queue.submit(Some(encoder.finish()));
+        self.ctx.queue().submit(Some(encoder.finish()));
     }
 }
+
+ */

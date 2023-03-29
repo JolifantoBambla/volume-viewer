@@ -38,10 +38,10 @@ impl Display for IncludeResolveError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             IncludeResolveError::NotFound(err) => {
-                write!(f, "{}: no source found for identifier", err)
+                write!(f, "{err}: no source found for identifier")
             }
             IncludeResolveError::RecursiveInclude(err) => {
-                write!(f, "{}: recursive include", err)
+                write!(f, "{err}: recursive include")
             }
         }
     }
