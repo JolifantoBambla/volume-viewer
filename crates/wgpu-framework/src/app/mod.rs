@@ -59,7 +59,7 @@ impl<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> AppRunne
 
         let surface_target = match window_config.canvas_config() {
             CanvasConfig::OffscreenCanvas(offscreen_canvas) => {
-                SurfaceTarget::OffscreenCanvas(offscreen_canvas)
+                SurfaceTarget::OffscreenCanvas(offscreen_canvas.clone())
             }
             _ => SurfaceTarget::Window(&window),
         };

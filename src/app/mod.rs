@@ -433,7 +433,7 @@ impl OnUserEvent for App {
             Event::StopMonitoring => {
                 self.num_monitoring_iterations += 1;
                 let monitoring_data = self.monitoring_data.clone();
-                if (self.num_monitoring_iterations == 10) {
+                if self.num_monitoring_iterations == 10 {
                     self.is_monitoring = false;
                     self.num_monitoring_iterations = 0;
                 } else {

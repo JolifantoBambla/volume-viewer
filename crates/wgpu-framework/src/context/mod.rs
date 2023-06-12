@@ -58,9 +58,9 @@ impl Gpu {
 pub enum SurfaceTarget<'a> {
     Window(&'a Window),
     #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))]
-    Canvas(&'a web_sys::HtmlCanvasElement),
+    Canvas(web_sys::HtmlCanvasElement),
     #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))]
-    OffscreenCanvas(&'a web_sys::OffscreenCanvas),
+    OffscreenCanvas(web_sys::OffscreenCanvas),
 }
 
 impl<'a> SurfaceTarget<'a> {
@@ -68,10 +68,14 @@ impl<'a> SurfaceTarget<'a> {
         match self {
             SurfaceTarget::Window(w) => unsafe { instance.create_surface(w) },
             #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))]
-            SurfaceTarget::Canvas(c) => instance.create_surface_from_canvas(c),
+            SurfaceTarget::Canvas(c) => {
+                instance.create_surface_from_canvas(c.clone())
+            },
             #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))]
-            SurfaceTarget::OffscreenCanvas(c) => instance.create_surface_from_offscreen_canvas(c),
-        }
+            SurfaceTarget::OffscreenCanvas(c) => {
+                instance.create_surface_from_offscreen_canvas(c.clone())
+            },
+        }.expect("could not create surface")
     }
 
     pub fn width(&self) -> u32 {
@@ -170,7 +174,10 @@ impl WgpuContext {
         surface_target: Option<SurfaceTarget<'a>>,
     ) -> Self {
         // Instantiates instance of WebGPU
-        let instance = wgpu::Instance::new(context_descriptor.backends);
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: context_descriptor.backends,
+            ..Default::default()
+        });
 
         let surface = surface_target
             .as_ref()
@@ -239,9 +246,10 @@ impl WgpuContext {
         let gpu = Arc::new(Gpu { device, queue });
         if let Some(surface) = surface {
             let surface_target = surface_target.unwrap();
-            let format = surface.get_supported_formats(&adapter)[0];
-            let present_mode = surface.get_supported_present_modes(&adapter)[0];
-            let alpha_mode = surface.get_supported_alpha_modes(&adapter)[0];
+            let surface_capabilities = surface.get_capabilities(&adapter);
+            let format = surface_capabilities.formats[0];
+            let present_mode = surface_capabilities.present_modes[0];
+            let alpha_mode = surface_capabilities.alpha_modes[0];
             let surface_configuration = SurfaceConfiguration {
                 usage: TextureUsages::RENDER_ATTACHMENT,
                 format,
@@ -249,6 +257,7 @@ impl WgpuContext {
                 height: surface_target.height(),
                 present_mode,
                 alpha_mode,
+                view_formats: vec![format],
             };
             surface.configure(gpu.device(), &surface_configuration);
 

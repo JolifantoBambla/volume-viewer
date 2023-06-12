@@ -279,15 +279,12 @@ impl OctreeUpdate {
         // todo: split up into multiple passes for finer timestamp query granularity
         #[cfg(feature = "timestamp-query")]
         timestamp_query_helper.write_timestamp(command_encoder);
-        //let timestamp_writes = timestamp_query_helper.make_compute_pass_timestamp_write_pair();
-        #[cfg(not(feature = "timestamp-query"))]
-        let timestamp_writes = Vec::new();
         {
             // todo: encode on unmapped passes
             let mut update_octree_pass =
                 command_encoder.begin_compute_pass(&ComputePassDescriptor {
                     label: Label::from("update octree"),
-                    timestamp_writes: &[],//timestamp_writes.as_slice(),
+                    timestamp_writes: None,
                 });
             self.on_mapped_first_time_passes.encode(
                 &mut update_octree_pass,

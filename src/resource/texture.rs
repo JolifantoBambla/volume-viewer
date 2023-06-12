@@ -39,6 +39,7 @@ impl Texture {
             dimension: TextureDimension::D2,
             format,
             usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
+            view_formats: &[format],
         });
         let view = texture.create_view(&TextureViewDescriptor::default());
         Self {
@@ -66,6 +67,7 @@ impl Texture {
                 dimension: TextureDimension::D3,
                 format,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+                view_formats: &[format],
             },
             bytemuck::cast_slice(data.as_slice()),
         );
@@ -99,6 +101,7 @@ impl Texture {
             dimension: TextureDimension::D3,
             format,
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+            view_formats: &[format],
         });
         //device.pop_error_scope();
         let view = texture.create_view(&TextureViewDescriptor::default());
@@ -129,6 +132,7 @@ impl Texture {
                 usage: TextureUsages::TEXTURE_BINDING
                     | TextureUsages::COPY_DST
                     | TextureUsages::STORAGE_BINDING,
+                view_formats: &[format],
             },
             vec![0u8; (extent_volume(&extent) * 4) as usize].as_slice(),
         );
@@ -158,6 +162,7 @@ impl Texture {
                 dimension: TextureDimension::D3,
                 format,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+                view_formats: &[format],
             },
             bytemuck::cast_slice(data),
         );
@@ -185,14 +190,15 @@ impl Texture {
 
     pub fn data_layout(&self, extent: &Extent3d) -> ImageDataLayout {
         let physical_extent = extent.physical_size(self.format);
-        let format_info = self.format.describe();
-        let width_blocks = physical_extent.width / format_info.block_dimensions.0 as u32;
-        let height_blocks = physical_extent.height / format_info.block_dimensions.1 as u32;
-        let bytes_per_row = width_blocks * format_info.block_size as u32;
+        let block_dimensions = self.format.block_dimensions();
+        let block_size = self.format.block_size(None).expect("Could not get block size");
+        let width_blocks = physical_extent.width / block_dimensions.0 as u32;
+        let height_blocks = physical_extent.height / block_dimensions.1 as u32;
+        let bytes_per_row = width_blocks * block_size as u32;
         ImageDataLayout {
             offset: 0,
-            bytes_per_row: std::num::NonZeroU32::new(bytes_per_row),
-            rows_per_image: std::num::NonZeroU32::new(height_blocks),
+            bytes_per_row: Some(bytes_per_row),
+            rows_per_image: Some(height_blocks),
         }
     }
 

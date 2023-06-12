@@ -13,7 +13,6 @@ use crate::volume::{BrickAddress, BrickedMultiResolutionMultiVolumeMeta};
 use crate::resource::buffer::TypedBuffer;
 pub use meta::{PageDirectoryMeta, PageTableMeta};
 use wgpu_framework::context::Gpu;
-use crate::resource::sparse_residency::texture3d::page_table::PageTableEntryFlag::Mapped;
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

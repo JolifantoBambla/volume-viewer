@@ -40,36 +40,14 @@ impl TimestampQueryHelper {
         };
     }
 
-    pub fn make_compute_pass_timestamp_write(&mut self, location: wgpu::ComputePassTimestampLocation) -> Option<wgpu::ComputePassTimestampWrite> {
-        match self.query_set.make_compute_pass_timestamp_write(location) {
-            Ok(timestamp_write) => Some(timestamp_write),
-            Err(err) => {
-                log::error!("could not make compute pass beginning timestamp: {}", err);
-                None
-            },
-        }
+    pub fn make_compute_pass_timestamp_writes(&mut self) -> wgpu::ComputePassTimestampWrites {
+        self.query_set.make_compute_pass_timestamp_writes()
+            .expect("Could not create compute pass timestamp writes")
     }
 
-    pub fn make_compute_pass_timestamp_write_pair(&mut self) -> Vec<wgpu::ComputePassTimestampWrite> {
-        let beginning_index = self.query_set.next_index();
-        let end_index = self.query_set.next_index();
-
-        let mut timestamp_writes = Vec::new();
-        if let Ok(query_index) = beginning_index {
-            timestamp_writes.push(wgpu::ComputePassTimestampWrite {
-                query_set: self.query_set(),
-                query_index,
-               location:  wgpu::ComputePassTimestampLocation::Beginning,
-            });
-        }
-        if let Ok(query_index) = end_index {
-            timestamp_writes.push(wgpu::ComputePassTimestampWrite {
-                query_set: self.query_set(),
-                query_index,
-                location:  wgpu::ComputePassTimestampLocation::End,
-            });
-        }
-        timestamp_writes
+    pub fn make_render_pass_timestamp_writes(&mut self) -> wgpu::RenderPassTimestampWrites {
+        self.query_set.make_render_pass_timestamp_writes()
+            .expect("Could not create render pass timestamp writes")
     }
 
     pub fn resolve(&mut self, command_encoder: &mut CommandEncoder) {

@@ -86,32 +86,32 @@ impl PresentToScreen {
         #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
         #[cfg(feature = "timestamp-query")]
-        timestamp_query_helper.write_timestamp(command_encoder);
-        {
-            let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-            rpass.set_pipeline(&self.pipeline);
-            rpass.set_bind_group(0, bind_group, &[]);
-            rpass.insert_debug_marker(self.label());
-            rpass.draw(0..6, 0..1);
-        }
-        #[cfg(feature = "timestamp-query")]
-        timestamp_query_helper.write_timestamp(command_encoder);
+        let timestamp_writes = Some(timestamp_query_helper.make_render_pass_timestamp_writes());
+        #[cfg(not(feature = "timestamp-query"))]
+        let timestamp_writes = None;
+
+        let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: None,
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 1.0,
+                    }),
+                    store: true,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes,
+        });
+        rpass.set_pipeline(&self.pipeline);
+        rpass.set_bind_group(0, bind_group, &[]);
+        rpass.insert_debug_marker(self.label());
+        rpass.draw(0..6, 0..1);
     }
 }
 

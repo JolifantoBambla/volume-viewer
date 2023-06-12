@@ -253,13 +253,13 @@ impl LRUUpdate {
         #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
         #[cfg(feature = "timestamp-query")]
-        let timestamp_writes = timestamp_query_helper.make_compute_pass_timestamp_write_pair();
+        let timestamp_writes = Some(timestamp_query_helper.make_compute_pass_timestamp_writes());
         #[cfg(not(feature = "timestamp-query"))]
-        let timestamp_writes = Vec::new();
+        let timestamp_writes = None;
 
         let mut compute_pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
             label: Label::from("update lru"),
-            timestamp_writes: timestamp_writes.as_slice(),
+            timestamp_writes,
         });
         self.initialize_offsets_pass.encode(&mut compute_pass);
         self.scan.encode_to_pass(&mut compute_pass);

@@ -10,7 +10,6 @@ use crate::util::extent::{
     box_volume, extent_to_uvec, index_to_subscript, uvec_to_extent, uvec_to_origin,
 };
 use crate::util::multi_buffer::MultiBuffered;
-use wgpu_framework::input::Input;
 
 #[cfg(feature = "timestamp-query")]
 use crate::timing::timestamp_query_helper::TimestampQueryHelper;

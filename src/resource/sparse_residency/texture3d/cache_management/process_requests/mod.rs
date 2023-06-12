@@ -93,13 +93,13 @@ impl ProcessRequests {
         self.request_list.clear();
 
         #[cfg(feature = "timestamp-query")]
-        let timestamp_writes = timestamp_query_helper.make_compute_pass_timestamp_write_pair();
+        let timestamp_writes = Some(timestamp_query_helper.make_compute_pass_timestamp_writes());
         #[cfg(not(feature = "timestamp-query"))]
-        let timestamp_writes = Vec::new();
+        let timestamp_writes = None;
 
         let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Process Requests"),
-            timestamp_writes: timestamp_writes.as_slice(),
+            timestamp_writes,
         });
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, bind_group, &[]);

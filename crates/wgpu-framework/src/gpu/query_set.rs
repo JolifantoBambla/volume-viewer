@@ -72,20 +72,38 @@ impl TimeStampQuerySet {
         }
     }
 
-    pub fn make_compute_pass_timestamp_write(&mut self, location: wgpu::ComputePassTimestampLocation) -> Result<wgpu::ComputePassTimestampWrite, CapacityReachedError> {
-        if self.next_index >= self.capacity {
-            self.next_index += 1;
+    pub fn make_compute_pass_timestamp_writes(&mut self) -> Result<wgpu::ComputePassTimestampWrites, CapacityReachedError> {
+        if self.next_index + 1 >= self.capacity {
+            self.next_index += 2;
             Err(CapacityReachedError {
                 capacity: self.capacity,
                 index: self.next_index,
             })
         } else {
-            let timestamp_write = wgpu::ComputePassTimestampWrite {
+            let timestamp_write = wgpu::ComputePassTimestampWrites {
                 query_set: &self.query_set,
-                query_index: self.next_index as u32,
-                location,
+                beginning_of_pass_write_index: Some(self.next_index as u32),
+                end_of_pass_write_index: Some((self.next_index as u32) + 1),
             };
-            self.next_index += 1;
+            self.next_index += 2;
+            Ok(timestamp_write)
+        }
+    }
+
+    pub fn make_render_pass_timestamp_writes(&mut self) -> Result<wgpu::RenderPassTimestampWrites, CapacityReachedError> {
+        if self.next_index + 1 >= self.capacity {
+            self.next_index += 2;
+            Err(CapacityReachedError {
+                capacity: self.capacity,
+                index: self.next_index,
+            })
+        } else {
+            let timestamp_write = wgpu::RenderPassTimestampWrites {
+                query_set: &self.query_set,
+                beginning_of_pass_write_index: Some(self.next_index as u32),
+                end_of_pass_write_index: Some((self.next_index as u32) + 1),
+            };
+            self.next_index += 2;
             Ok(timestamp_write)
         }
     }
