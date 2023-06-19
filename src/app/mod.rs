@@ -313,7 +313,6 @@ impl GpuApp for App {
 
         submission_index
     }
-
     fn get_context_descriptor() -> ContextDescriptor<'static> {
         ContextDescriptor {
             #[cfg(feature = "timestamp-query")]
@@ -345,6 +344,7 @@ impl OnUserEvent for App {
                         ..
                     } => match virtual_keycode {
                         VirtualKeyCode::M => {
+                            log::info!("start monitoring");
                             self.is_monitoring = true;
                             let event_loop_proxy = self.event_loop_proxy.as_ref().unwrap().clone();
                             gloo_timers::callback::Timeout::new(

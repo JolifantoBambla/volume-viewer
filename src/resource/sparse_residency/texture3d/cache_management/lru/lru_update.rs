@@ -252,18 +252,30 @@ impl LRUUpdate {
         command_encoder: &mut CommandEncoder,
         #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
+        /* wgpu & wasm-bindgen are currently not up to date with the spec w.r.t. timestamp queries within passes
         #[cfg(feature = "timestamp-query")]
         let timestamp_writes = Some(timestamp_query_helper.make_compute_pass_timestamp_writes());
         #[cfg(not(feature = "timestamp-query"))]
         let timestamp_writes = None;
+         */
 
-        let mut compute_pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
-            label: Label::from("update lru"),
-            timestamp_writes,
-        });
-        self.initialize_offsets_pass.encode(&mut compute_pass);
-        self.scan.encode_to_pass(&mut compute_pass);
-        self.update_lru_pass.encode(&mut compute_pass);
+        #[cfg(feature = "timestamp-query")]
+        {
+            timestamp_query_helper.write_timestamp(command_encoder);
+        }
+        {
+            let mut compute_pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Label::from("update lru"),
+                timestamp_writes: None,
+            });
+            self.initialize_offsets_pass.encode(&mut compute_pass);
+            self.scan.encode_to_pass(&mut compute_pass);
+            self.update_lru_pass.encode(&mut compute_pass);
+        }
+        #[cfg(feature = "timestamp-query")]
+        {
+            timestamp_query_helper.write_timestamp(command_encoder);
+        }
     }
 
     fn encode_copy(&self, command_encoder: &mut CommandEncoder) {

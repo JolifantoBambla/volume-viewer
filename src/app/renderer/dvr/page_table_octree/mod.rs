@@ -85,24 +85,36 @@ impl PageTableOctreeDVR {
         output_extent: &wgpu::Extent3d,
         #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
+        /* wgpu & wasm-bindgen are currently not up to date with the spec w.r.t. timestamp queries within passes
         #[cfg(feature = "timestamp-query")]
         let timestamp_writes = Some(timestamp_query_helper.make_compute_pass_timestamp_writes());
         #[cfg(not(feature = "timestamp-query"))]
         let timestamp_writes = None;
+         */
 
-        let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("Ray Guided DVR"),
-            timestamp_writes,
-        });
-        cpass.set_pipeline(&self.pipeline);
-        cpass.set_bind_group(0, bind_group, &[]);
-        cpass.set_bind_group(1, &self.internal_bind_group, &[]);
-        cpass.insert_debug_marker(self.label());
-        cpass.dispatch_workgroups(
-            (output_extent.width as f32 / 16.).ceil() as u32,
-            (output_extent.height as f32 / 16.).ceil() as u32,
-            1,
-        );
+        #[cfg(feature = "timestamp-query")]
+        {
+            timestamp_query_helper.write_timestamp(command_encoder);
+        }
+        {
+            let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Ray Guided DVR"),
+                timestamp_writes: None,
+            });
+            cpass.set_pipeline(&self.pipeline);
+            cpass.set_bind_group(0, bind_group, &[]);
+            cpass.set_bind_group(1, &self.internal_bind_group, &[]);
+            cpass.insert_debug_marker(self.label());
+            cpass.dispatch_workgroups(
+                (output_extent.width as f32 / 16.).ceil() as u32,
+                (output_extent.height as f32 / 16.).ceil() as u32,
+                1,
+            );
+        }
+        #[cfg(feature = "timestamp-query")]
+        {
+            timestamp_query_helper.write_timestamp(command_encoder);
+        }
     }
 }
 
