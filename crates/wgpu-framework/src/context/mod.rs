@@ -1,7 +1,7 @@
 use crate::event::window::OnResize;
 use std::sync::Arc;
 use wgpu;
-use wgpu::{Adapter, Device, Instance, Queue, Surface, SurfaceConfiguration, TextureUsages};
+use wgpu::{ Adapter, Device, Instance, Queue, Surface, SurfaceConfiguration, TextureUsages };
 use winit::window::Window;
 
 /// Helper struct for constructing a `GPUContext`.
@@ -57,16 +57,18 @@ impl Gpu {
 #[derive(Clone, Debug)]
 pub enum SurfaceTarget<'a> {
     Window(&'a Window),
-    #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))]
-    Canvas(&'a web_sys::HtmlCanvasElement),
-    #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))]
-    OffscreenCanvas(&'a web_sys::OffscreenCanvas),
+    #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))] Canvas(
+        &'a web_sys::HtmlCanvasElement,
+    ),
+    #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))] OffscreenCanvas(
+        &'a web_sys::OffscreenCanvas,
+    ),
 }
 
 impl<'a> SurfaceTarget<'a> {
     pub fn create_surface(&self, instance: &Instance) -> Surface {
         match self {
-            SurfaceTarget::Window(w) => unsafe { instance.create_surface(w) },
+            SurfaceTarget::Window(w) => unsafe { instance.create_surface(w) }
             #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))]
             SurfaceTarget::Canvas(c) => instance.create_surface_from_canvas(c),
             #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))]
@@ -125,8 +127,7 @@ pub struct SurfaceContext {
 
 impl SurfaceContext {
     pub fn configure_surface(&self) {
-        self.surface
-            .configure(self.gpu.device(), &self.surface_configuration);
+        self.surface.configure(self.gpu.device(), &self.surface_configuration);
     }
 
     pub fn instance(&self) -> &Instance {
@@ -167,10 +168,13 @@ pub enum WgpuContext {
 impl WgpuContext {
     pub async fn new<'a>(
         context_descriptor: &ContextDescriptor<'a>,
-        surface_target: Option<SurfaceTarget<'a>>,
+        surface_target: Option<SurfaceTarget<'a>>
     ) -> Self {
         // Instantiates instance of WebGPU
-        let instance = wgpu::Instance::new(context_descriptor.backends);
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            ..Default::default()
+        });
 
         let surface = surface_target
             .as_ref()
@@ -185,13 +189,14 @@ impl WgpuContext {
 
         // `request_adapter` instantiates the general connection to the GPU
         let adapter = instance
-            .request_adapter(&request_adapter_options)
-            .await
+            .request_adapter(&request_adapter_options).await
             .expect("No suitable GPU adapters found on the system!");
 
         // todo: as soon as there is a newer (working) version of wgpu, use the actual available features
         let adapter_features = wgpu::Features::all(); // adapter.features();
-        log::warn!("wgpu 0.14.2 does not query available features. We assume that everything we need is available - might break!");
+        log::warn!(
+            "wgpu 0.14.2 does not query available features. We assume that everything we need is available - might break!"
+        );
         assert!(
             adapter_features.contains(context_descriptor.required_features),
             "Adapter does not support required features: {:?}",
@@ -200,40 +205,34 @@ impl WgpuContext {
 
         let downlevel_capabilities = adapter.get_downlevel_capabilities();
         assert!(
-            downlevel_capabilities.shader_model
-                >= context_descriptor
-                    .required_downlevel_capabilities
-                    .shader_model,
+            downlevel_capabilities.shader_model >=
+                context_descriptor.required_downlevel_capabilities.shader_model,
             "Adapter does not support the minimum shader model required: {:?}",
-            context_descriptor
-                .required_downlevel_capabilities
-                .shader_model
+            context_descriptor.required_downlevel_capabilities.shader_model
         );
         assert!(
-            downlevel_capabilities
-                .flags
-                .contains(context_descriptor.required_downlevel_capabilities.flags),
+            downlevel_capabilities.flags.contains(
+                context_descriptor.required_downlevel_capabilities.flags
+            ),
             "Adapter does not support the downlevel capabilities required: {:?}",
             context_descriptor.required_downlevel_capabilities.flags - downlevel_capabilities.flags
         );
 
         // Make sure we use the texture resolution limits from the adapter, so we can support images the size of the surface.
-        let needed_limits = context_descriptor
-            .required_limits
+        let needed_limits = context_descriptor.required_limits
             .clone()
             .using_resolution(adapter.limits());
         let (device, queue) = adapter
             .request_device(
-                &wgpu::DeviceDescriptor {
+                &(wgpu::DeviceDescriptor {
                     label: None,
-                    features: (context_descriptor.optional_features & adapter_features)
-                        | context_descriptor.required_features,
+                    features: (context_descriptor.optional_features & adapter_features) |
+                    context_descriptor.required_features,
                     limits: needed_limits,
-                },
+                }),
                 // Tracing isn't supported on the Web target
-                Option::None,
-            )
-            .await
+                Option::None
+            ).await
             .expect("Unable to find a suitable GPU adapter!");
 
         let gpu = Arc::new(Gpu { device, queue });
@@ -292,9 +291,7 @@ impl WgpuContext {
     pub fn surface_context(&self) -> &SurfaceContext {
         match self {
             WgpuContext::Surface(s) => s,
-            WgpuContext::Headless(_) => {
-                panic!("surface_context called on a headless context")
-            }
+            WgpuContext::Headless(_) => { panic!("surface_context called on a headless context") }
         }
     }
 
