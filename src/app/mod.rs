@@ -10,8 +10,6 @@ use crate::event::handler::register_default_js_event_handlers;
 use crate::event::{ChannelSettingsChange, Event, SettingsChange};
 use crate::resource::sparse_residency::texture3d::SparseResidencyTexture3DOptions;
 use crate::resource::VolumeManager;
-#[cfg(feature = "timestamp-query")]
-use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use crate::util::vec::vec_equals;
 use crate::volume::octree::OctreeDescriptor;
 use crate::volume::HtmlEventTargetVolumeDataSource;
@@ -64,11 +62,6 @@ pub struct App {
     settings: MultiChannelVolumeRendererSettings,
     last_channel_selection: Vec<u32>,
     channel_selection_changed: bool,
-
-    #[cfg(feature = "timestamp-query")]
-    render_timestamp_query_set: TimestampQueryHelper,
-    #[cfg(feature = "timestamp-query")]
-    octree_update_timestamp_query_set: TimestampQueryHelper,
 
     #[cfg(target_arch = "wasm32")]
     event_target: EventTarget,
@@ -172,27 +165,7 @@ impl App {
 
         let last_channel_selection = render_settings.get_sorted_visible_channel_indices();
 
-        #[cfg(feature = "timestamp-query")]
-        let render_timestamp_query_set = {
-            let labels = vec![
-                "DVR [begin]",
-                "DVR [end]",
-                "present [begin]",
-                "present [end]",
-                "LRU update [begin]",
-                "LRU update [end]",
-                "process requests [begin]",
-                "process requests [end]",
-            ];
-            TimestampQueryHelper::new("render", labels.as_slice(), gpu)
-        };
-
-        #[cfg(feature = "timestamp-query")]
-        let octree_update_timestamp_query_set = {
-            let labels = vec!["octree update [begin]", "octree update [end]"];
-            TimestampQueryHelper::new("render", labels.as_slice(), gpu)
-        };
-
+     
         Self {
             ctx: gpu.clone(),
             renderer,
@@ -201,10 +174,6 @@ impl App {
             settings: render_settings,
             last_channel_selection,
             channel_selection_changed: false,
-            #[cfg(feature = "timestamp-query")]
-            render_timestamp_query_set,
-            #[cfg(feature = "timestamp-query")]
-            octree_update_timestamp_query_set,
             event_target,
             brick_poll_interval: None,
             event_loop_proxy: None,

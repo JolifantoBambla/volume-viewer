@@ -1,8 +1,6 @@
 use crate::app::renderer::dvr::Resources;
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use crate::resource::VolumeManager;
-#[cfg(feature = "timestamp-query")]
-use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupLayout};
 use wgpu_framework::context::Gpu;
@@ -68,17 +66,13 @@ impl PageTableDVR {
         &self,
         command_encoder: &mut wgpu::CommandEncoder,
         bind_group: &BindGroup,
-        output_extent: &wgpu::Extent3d,
-        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
+        output_extent: &wgpu::Extent3d
     ) {
-        #[cfg(feature = "timestamp-query")]
-        let timestamp_writes = timestamp_query_helper.make_compute_pass_timestamp_write_pair();
-        #[cfg(not(feature = "timestamp-query"))]
-        let timestamp_writes = Vec::new();
+     
 
         let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Ray Guided DVR"),
-            timestamp_writes: timestamp_writes.as_slice(),
+            timestamp_writes: None,
         });
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, bind_group, &[]);

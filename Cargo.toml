@@ -15,7 +15,6 @@ members = ["crates/*"]
 
 [features]
 page-table-only = []
-timestamp-query = []
 default = [
     "console_error_panic_hook"
 ]
@@ -45,8 +44,7 @@ wasm-bindgen = { version = "0.2.63", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4.30"
 wasm-bindgen-rayon = { version = "1.0.3", features = ["no-bundler"] }
 wasm-logger = "0.2.0"
-web-sys = { version = "=0.3.61", features = ["Document", "HtmlCanvasElement", "HtmlInputElement", "Gpu", "GpuDevice", "OffscreenCanvas", "Performance", "Window", "Event", "EventInit", "CustomEvent", "CustomEventInit","EventTarget", "WorkerNavigator"] }
-wgpu = { git = "https://github.com/JolifantoBambla/wgpu", branch = "implement-timestamp-query-on-v0.14.2" }
+web-sys = { version = "^0.3.64", features = ["Document", "HtmlCanvasElement", "HtmlInputElement", "Gpu", "GpuDevice", "OffscreenCanvas", "Performance", "Window", "Event", "EventInit", "CustomEvent", "CustomEventInit","EventTarget", "WorkerNavigator"] }
 winit = "0.27.5"
 
 ome-zarr = { path = "crates/ome-zarr" }
@@ -69,6 +67,8 @@ console_error_panic_hook = { version = "0.1.6", optional = true }
 #
 # Unfortunately, `wee_alloc` requires nightly Rust when targeting wasm for now.
 wee_alloc = { version = "0.4.5", optional = true }
+proc-macro2 = "1.0.70"
+wgpu = "0.18.0"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.13"

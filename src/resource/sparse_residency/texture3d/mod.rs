@@ -21,8 +21,6 @@ use wgpu_framework::input::Input;
 use crate::resource::sparse_residency::texture3d::brick_cache_update::CacheUpdateMeta;
 use crate::resource::sparse_residency::texture3d::cache_management::lru::LRUCacheSettings;
 use crate::resource::sparse_residency::texture3d::page_table::PageTableDirectory;
-#[cfg(feature = "timestamp-query")]
-use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use crate::BrickedMultiResolutionMultiVolumeMeta;
 use cache_management::{
     lru::LRUCache,
@@ -231,9 +229,8 @@ impl VolumeManager {
     pub fn encode_cache_management(
         &self,
         command_encoder: &mut CommandEncoder,
-        timestamp: u32,
-        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
-    ) {
+        timestamp: u32
+        ) {
         self.ctx.queue().write_buffer(
             &self.timestamp_uniform_buffer,
             0 as BufferAddress,

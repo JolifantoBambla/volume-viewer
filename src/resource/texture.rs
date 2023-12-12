@@ -4,8 +4,18 @@ use glam::UVec4;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 use wgpu::{
-    Device, Extent3d, ImageCopyTexture, ImageDataLayout, Origin3d, Queue, TextureAspect,
-    TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView,
+    Device,
+    Extent3d,
+    ImageCopyTexture,
+    ImageDataLayout,
+    Origin3d,
+    Queue,
+    TextureAspect,
+    TextureDescriptor,
+    TextureDimension,
+    TextureFormat,
+    TextureUsages,
+    TextureView,
     TextureViewDescriptor,
 };
 use wgpu_framework::context::Gpu;
@@ -31,15 +41,18 @@ impl Texture {
             height,
             depth_or_array_layers: 1,
         };
-        let texture = device.create_texture(&TextureDescriptor {
-            label: None,
-            size: extent,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format,
-            usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
-        });
+        let texture = device.create_texture(
+            &(TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format,
+                usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+        );
         let view = texture.create_view(&TextureViewDescriptor::default());
         Self {
             texture,
@@ -52,13 +65,13 @@ impl Texture {
     pub fn create_page_directory(
         device: &Device,
         queue: &Queue,
-        extent: Extent3d,
+        extent: Extent3d
     ) -> (Self, Vec<UVec4>) {
         let data = vec![UVec4::ZERO; extent_volume(&extent) as usize];
         let format = TextureFormat::Rgba32Uint;
         let texture = device.create_texture_with_data(
             queue,
-            &TextureDescriptor {
+            &(TextureDescriptor {
                 label: Some("Page Directory"),
                 size: extent,
                 mip_level_count: 1,
@@ -66,8 +79,9 @@ impl Texture {
                 dimension: TextureDimension::D3,
                 format,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-            },
-            bytemuck::cast_slice(data.as_slice()),
+                view_formats: &[],
+            }),
+            bytemuck::cast_slice(data.as_slice())
         );
         let view = texture.create_view(&TextureViewDescriptor::default());
         (
@@ -85,21 +99,24 @@ impl Texture {
         let format = TextureFormat::R8Unorm;
         let max_texture_dimension = device.limits().max_texture_dimension_3d;
         assert!(
-            extent.width <= max_texture_dimension
-                && extent.height <= max_texture_dimension
-                && extent.depth_or_array_layers <= max_texture_dimension,
+            extent.width <= max_texture_dimension &&
+                extent.height <= max_texture_dimension &&
+                extent.depth_or_array_layers <= max_texture_dimension,
             "Brick cache extent must not exceed device limits"
         );
         //device.push_error_scope(ErrorFilter::OutOfMemory);
-        let texture = device.create_texture(&TextureDescriptor {
-            label: Some("Brick Cache"),
-            size: extent,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D3,
-            format,
-            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-        });
+        let texture = device.create_texture(
+            &(TextureDescriptor {
+                label: Some("Brick Cache"),
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D3,
+                format,
+                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+                view_formats: &[],
+            })
+        );
         //device.pop_error_scope();
         let view = texture.create_view(&TextureViewDescriptor::default());
         Self {
@@ -114,23 +131,24 @@ impl Texture {
         label: String,
         device: &Device,
         queue: &Queue,
-        extent: Extent3d,
+        extent: Extent3d
     ) -> Self {
         let format = TextureFormat::R32Uint;
         let texture = device.create_texture_with_data(
             queue,
-            &TextureDescriptor {
+            &(TextureDescriptor {
                 label: Some(label.as_str()),
                 size: extent,
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: TextureDimension::D3,
                 format,
-                usage: TextureUsages::TEXTURE_BINDING
-                    | TextureUsages::COPY_DST
-                    | TextureUsages::STORAGE_BINDING,
-            },
-            vec![0u8; (extent_volume(&extent) * 4) as usize].as_slice(),
+                usage: TextureUsages::TEXTURE_BINDING |
+                TextureUsages::COPY_DST |
+                TextureUsages::STORAGE_BINDING,
+                view_formats: &[],
+            }),
+            vec![0u8; (extent_volume(&extent) * 4) as usize].as_slice()
         );
         let view = texture.create_view(&TextureViewDescriptor::default());
         Self {
@@ -145,12 +163,12 @@ impl Texture {
         device: &Device,
         queue: &Queue,
         data: &[u8],
-        extent: Extent3d,
+        extent: Extent3d
     ) -> Self {
         let format = TextureFormat::R8Unorm;
         let texture = device.create_texture_with_data(
             queue,
-            &TextureDescriptor {
+            &(TextureDescriptor {
                 label: Some("Texture3D"),
                 size: extent,
                 mip_level_count: 1,
@@ -158,8 +176,9 @@ impl Texture {
                 dimension: TextureDimension::D3,
                 format,
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-            },
-            bytemuck::cast_slice(data),
+                view_formats: &[],
+            }),
+            bytemuck::cast_slice(data)
         );
         let view = texture.create_view(&TextureViewDescriptor::default());
         Self {
@@ -171,12 +190,7 @@ impl Texture {
     }
 
     pub fn from_raw_volume_block(device: &Device, queue: &Queue, volume: &RawVolumeBlock) -> Self {
-        Texture::create_texture_3d(
-            device,
-            queue,
-            volume.data.as_slice(),
-            volume.create_extent(),
-        )
+        Texture::create_texture_3d(device, queue, volume.data.as_slice(), volume.create_extent())
     }
 
     pub fn num_pixels(&self) -> usize {
@@ -185,14 +199,16 @@ impl Texture {
 
     pub fn data_layout(&self, extent: &Extent3d) -> ImageDataLayout {
         let physical_extent = extent.physical_size(self.format);
-        let format_info = self.format.describe();
-        let width_blocks = physical_extent.width / format_info.block_dimensions.0 as u32;
-        let height_blocks = physical_extent.height / format_info.block_dimensions.1 as u32;
-        let bytes_per_row = width_blocks * format_info.block_size as u32;
+        // let format_info = self.format.describe();
+        let block_dimensions = self.format.block_dimensions();
+        let block_size = self.format.block_size(None).unwrap();
+        let width_blocks = physical_extent.width / (block_dimensions.0 as u32);
+        let height_blocks = physical_extent.height / (block_dimensions.1 as u32);
+        let bytes_per_row = width_blocks * (block_size as u32);
         ImageDataLayout {
             offset: 0,
-            bytes_per_row: std::num::NonZeroU32::new(bytes_per_row),
-            rows_per_image: std::num::NonZeroU32::new(height_blocks),
+            bytes_per_row: Some(bytes_per_row),
+            rows_per_image: Some(height_blocks),
         }
     }
 
@@ -201,17 +217,17 @@ impl Texture {
             self.texture.as_image_copy(),
             bytemuck::cast_slice(data),
             self.data_layout(&self.extent),
-            self.extent,
+            self.extent
         );
     }
 
     fn is_whole_texture(&self, origin: &Origin3d, extent: &Extent3d) -> bool {
-        origin.x == 0
-            && origin.y == 0
-            && origin.z == 0
-            && extent.width == self.extent.width
-            && extent.height == self.extent.height
-            && extent.depth_or_array_layers == self.extent.depth_or_array_layers
+        origin.x == 0 &&
+            origin.y == 0 &&
+            origin.z == 0 &&
+            extent.width == self.extent.width &&
+            extent.height == self.extent.height &&
+            extent.depth_or_array_layers == self.extent.depth_or_array_layers
     }
 
     pub fn write_subregion<T: bytemuck::Pod>(
@@ -219,7 +235,7 @@ impl Texture {
         data: &[T],
         origin: Origin3d,
         extent: Extent3d,
-        ctx: &Arc<Gpu>,
+        ctx: &Arc<Gpu>
     ) {
         if self.is_whole_texture(&origin, &extent) {
             self.write(data, ctx);
@@ -235,7 +251,7 @@ impl Texture {
                 image_copy_texture,
                 bytemuck::cast_slice(data),
                 self.data_layout(&extent),
-                extent,
+                extent
             );
         }
     }
