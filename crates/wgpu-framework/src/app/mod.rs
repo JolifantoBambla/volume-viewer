@@ -60,8 +60,12 @@ impl<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> AppRunne
     pub async fn new(window_config: WindowConfig) -> Self {
         let event_loop = EventLoopBuilder::<G::UserEvent>::with_user_event().build();
         let window = get_or_create_window(&window_config, &event_loop);
+        log::info!("Creating Window: {:?}", window_config);
 
         let surface_target = match window_config.canvas_config() {
+            CanvasConfig::OffscreenCanvas(offscreen_canvas) => {
+                SurfaceTarget::OffscreenCanvas(offscreen_canvas.clone())
+            }
             _ => SurfaceTarget::Window(&window),
         };
 

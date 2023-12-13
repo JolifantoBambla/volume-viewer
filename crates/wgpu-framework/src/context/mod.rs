@@ -58,21 +58,22 @@ impl Gpu {
 pub enum SurfaceTarget<'a> {
     Window(&'a Window),
     #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))] Canvas(
-        &'a web_sys::HtmlCanvasElement,
+        web_sys::HtmlCanvasElement,
     ),
     #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))] OffscreenCanvas(
-        &'a web_sys::OffscreenCanvas,
+        web_sys::OffscreenCanvas,
     ),
 }
 
 impl<'a> SurfaceTarget<'a> {
-    pub fn create_surface(&self, instance: &Instance) -> Surface {
+    pub fn create_surface(self, instance: &Instance) -> Surface {
         match self {
-            SurfaceTarget::Window(w) => unsafe { instance.create_surface(w) }
+            SurfaceTarget::Window(w) => unsafe { instance.create_surface(w).unwrap() }
             #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))]
-            SurfaceTarget::Canvas(c) => instance.create_surface_from_canvas(c),
+            SurfaceTarget::Canvas(c) => instance.create_surface_from_canvas(c).unwrap(),
             #[cfg(all(target_arch = "wasm32", not(feature = "emscripten")))]
-            SurfaceTarget::OffscreenCanvas(c) => instance.create_surface_from_offscreen_canvas(c),
+            SurfaceTarget::OffscreenCanvas(c) =>
+                instance.create_surface_from_offscreen_canvas(c).unwrap(),
         }
     }
 
@@ -178,7 +179,7 @@ impl WgpuContext {
 
         let surface = surface_target
             .as_ref()
-            .map(|surface_target| surface_target.create_surface(&instance));
+            .map(|surface_target| surface_target.clone().create_surface(&instance));
 
         let mut request_adapter_options = context_descriptor.request_adapter_options.clone();
         request_adapter_options.compatible_surface = if let Some(surface) = surface.as_ref() {
@@ -238,16 +239,25 @@ impl WgpuContext {
         let gpu = Arc::new(Gpu { device, queue });
         if let Some(surface) = surface {
             let surface_target = surface_target.unwrap();
-            let format = surface.get_supported_formats(&adapter)[0];
-            let present_mode = surface.get_supported_present_modes(&adapter)[0];
-            let alpha_mode = surface.get_supported_alpha_modes(&adapter)[0];
+            let surface_caps = surface.get_capabilities(&adapter);
+            let surface_format = surface_caps.formats
+                .iter()
+                .copied()
+                .filter(|f| f.is_srgb())
+                .next()
+                .unwrap_or(surface_caps.formats[0]);
+
+            // let format = surface.get_supported_formats(&adapter)[0];
+            // let present_mode = surface.get_supported_present_modes(&adapter)[0];
+            // let alpha_mode = surface.get_supported_alpha_modes(&adapter)[0];
             let surface_configuration = SurfaceConfiguration {
                 usage: TextureUsages::RENDER_ATTACHMENT,
-                format,
+                format: surface_format,
                 width: surface_target.width(),
                 height: surface_target.height(),
-                present_mode,
-                alpha_mode,
+                present_mode: surface_caps.present_modes[0],
+                alpha_mode: surface_caps.alpha_modes[0],
+                view_formats: vec![],
             };
             surface.configure(gpu.device(), &surface_configuration);
 
