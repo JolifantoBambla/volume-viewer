@@ -220,9 +220,9 @@ impl WgpuContext {
         );
 
         // Make sure we use the texture resolution limits from the adapter, so we can support images the size of the surface.
-        let needed_limits = context_descriptor.required_limits
-            .clone()
-            .using_resolution(adapter.limits());
+        let needed_limits = adapter.limits();
+        // log needed_limits
+        log::info!("Max Limits: {:?}", needed_limits);
         let (device, queue) = adapter
             .request_device(
                 &(wgpu::DeviceDescriptor {
