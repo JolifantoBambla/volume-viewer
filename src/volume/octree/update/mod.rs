@@ -4,8 +4,6 @@ use crate::renderer::pass::{
 };
 use crate::resource::sparse_residency::texture3d::brick_cache_update::CacheUpdateMeta;
 use crate::resource::VolumeManager;
-#[cfg(feature = "timestamp-query")]
-use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use crate::volume::octree::octree_manager::Octree;
 use glam::UVec3;
 use std::borrow::Cow;
@@ -240,7 +238,6 @@ impl OctreeUpdate {
         &self,
         command_encoder: &mut CommandEncoder,
         cache_update_meta: &CacheUpdateMeta,
-        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
         //log::info!("{:?}", cache_update_meta);
 
@@ -277,17 +274,13 @@ impl OctreeUpdate {
             .write_buffer(cache_update_meta.unmapped_local_brick_ids().as_slice());
 
         // todo: split up into multiple passes for finer timestamp query granularity
-        #[cfg(feature = "timestamp-query")]
-        timestamp_query_helper.write_timestamp(command_encoder);
-        //let timestamp_writes = timestamp_query_helper.make_compute_pass_timestamp_write_pair();
-        #[cfg(not(feature = "timestamp-query"))]
-        let timestamp_writes = Vec::new();
+ 
         {
             // todo: encode on unmapped passes
             let mut update_octree_pass =
                 command_encoder.begin_compute_pass(&ComputePassDescriptor {
                     label: Label::from("update octree"),
-                    timestamp_writes: &[],//timestamp_writes.as_slice(),
+                    timestamp_writes: None,
                 });
             self.on_mapped_first_time_passes.encode(
                 &mut update_octree_pass,

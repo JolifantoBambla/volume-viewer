@@ -1,8 +1,6 @@
 use crate::gpu_list::{GpuList, GpuListReadResult};
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
 use crate::resource::Texture;
-#[cfg(feature = "timestamp-query")]
-use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Buffer, CommandEncoder};
 use wgpu_framework::context::Gpu;
@@ -92,14 +90,9 @@ impl ProcessRequests {
     ) {
         self.request_list.clear();
 
-        #[cfg(feature = "timestamp-query")]
-        let timestamp_writes = timestamp_query_helper.make_compute_pass_timestamp_write_pair();
-        #[cfg(not(feature = "timestamp-query"))]
-        let timestamp_writes = Vec::new();
-
         let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Process Requests"),
-            timestamp_writes: timestamp_writes.as_slice(),
+            timestamp_writes: None,
         });
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, bind_group, &[]);

@@ -11,8 +11,6 @@ use crate::app::scene::MultiChannelVolumeScene;
 use crate::renderer::pass::present_to_screen::PresentToScreen;
 use crate::renderer::pass::{present_to_screen, GPUPass};
 use crate::renderer::settings::RenderMode;
-#[cfg(feature = "timestamp-query")]
-use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use crate::{resource, MultiChannelVolumeRendererSettings};
 use glam::{UVec2, Vec4};
 use std::sync::Arc;
@@ -186,7 +184,6 @@ impl MultiChannelVolumeRenderer {
         channel_settings: &Vec<GpuChannelSettings>,
         input: &Input,
         command_encoder: &mut CommandEncoder,
-        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
         let mut uniforms = Uniforms::new(
             CameraUniform::from(scene.camera()),

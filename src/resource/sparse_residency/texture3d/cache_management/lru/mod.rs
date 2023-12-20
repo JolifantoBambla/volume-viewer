@@ -10,10 +10,7 @@ use crate::util::extent::{
     box_volume, extent_to_uvec, index_to_subscript, uvec_to_extent, uvec_to_origin,
 };
 use crate::util::multi_buffer::MultiBuffered;
-use wgpu_framework::input::Input;
 
-#[cfg(feature = "timestamp-query")]
-use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use lru_update::{LRUUpdate, LRUUpdateResources};
 use wgpu_framework::context::Gpu;
 
@@ -47,9 +44,7 @@ impl LRUCacheGpuOps {
         #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
         self.lru_update_pass.encode(
-            command_encoder,
-            #[cfg(feature = "timestamp-query")]
-            timestamp_query_helper,
+            command_encoder
         );
 
         if self.lru.copy_to_readable(command_encoder).is_err() {
@@ -211,14 +206,12 @@ impl LRUCache {
     pub fn encode_lru_update(
         &self,
         encoder: &mut CommandEncoder,
-        timestamp: u32,
-        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
+        timestamp: u32
     ) {
         self.lru_stuff.get(timestamp as usize).encode(
             encoder,
             timestamp,
-            #[cfg(feature = "timestamp-query")]
-            timestamp_query_helper,
+
         );
     }
 

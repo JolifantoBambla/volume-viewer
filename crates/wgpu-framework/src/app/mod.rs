@@ -1,23 +1,23 @@
 use std::marker::PhantomData;
-use wgpu::{SubmissionIndex, TextureView};
+use wgpu::{ SubmissionIndex, TextureView };
 use winit::event_loop::EventLoopBuilder;
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::EventLoopExtWebSys;
-use winit::{
-    event::{self, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::Window,
-};
+use winit::{ event::{ self, WindowEvent }, event_loop::{ ControlFlow, EventLoop }, window::Window };
 
-use crate::context::{ContextDescriptor, SurfaceContext, SurfaceTarget, WgpuContext};
+use crate::context::{ ContextDescriptor, SurfaceContext, SurfaceTarget, WgpuContext };
 use crate::event::lifecycle::{
-    OnCommandsSubmitted, OnFrameBegin, OnFrameEnd, PrepareRender, Update,
+    OnCommandsSubmitted,
+    OnFrameBegin,
+    OnFrameEnd,
+    PrepareRender,
+    Update,
 };
-use crate::event::window::{OnResize, OnUserEvent, OnWindowEvent};
+use crate::event::window::{ OnResize, OnUserEvent, OnWindowEvent };
 use crate::input::Input;
 #[cfg(target_arch = "wasm32")]
 use crate::util::web::get_or_create_window;
-use crate::util::window::{CanvasConfig, WindowConfig};
+use crate::util::window::{ CanvasConfig, WindowConfig };
 
 pub trait MapToWindowEvent: OnUserEvent {
     /// Maps an instance of `Self::UserEvent` to a `WindowEvent`.
@@ -30,14 +30,18 @@ pub trait MapToWindowEvent: OnUserEvent {
     fn map_to_window_event(&self, user_event: &Self::UserEvent) -> Option<WindowEvent>;
 }
 
-pub trait GpuApp:
-    OnUserEvent + OnFrameBegin + PrepareRender + Update + OnCommandsSubmitted + OnFrameEnd
+pub trait GpuApp: OnUserEvent +
+    OnFrameBegin +
+    PrepareRender +
+    Update +
+    OnCommandsSubmitted +
+    OnFrameEnd
 {
     fn init(
         &mut self,
         window: &Window,
         event_loop: &EventLoop<Self::UserEvent>,
-        context: &SurfaceContext,
+        context: &SurfaceContext
     );
     fn render(&mut self, view: &TextureView, input: &Input) -> SubmissionIndex;
 
@@ -56,10 +60,11 @@ impl<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> AppRunne
     pub async fn new(window_config: WindowConfig) -> Self {
         let event_loop = EventLoopBuilder::<G::UserEvent>::with_user_event().build();
         let window = get_or_create_window(&window_config, &event_loop);
+        log::info!("Creating Window: {:?}", window_config);
 
         let surface_target = match window_config.canvas_config() {
             CanvasConfig::OffscreenCanvas(offscreen_canvas) => {
-                SurfaceTarget::OffscreenCanvas(offscreen_canvas)
+                SurfaceTarget::OffscreenCanvas(offscreen_canvas.clone())
             }
             _ => SurfaceTarget::Window(&window),
         };
@@ -78,7 +83,7 @@ impl<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> AppRunne
     pub fn run(mut self, mut app: G) {
         let mut input = Input::new(
             self.ctx().surface_configuration().width,
-            self.ctx().surface_configuration().height,
+            self.ctx().surface_configuration().height
         );
 
         let event_loop = self.event_loop.take().unwrap();
@@ -96,12 +101,8 @@ impl<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> AppRunne
                     self.window.request_redraw();
                 }
                 event::Event::WindowEvent {
-                    event:
-                        WindowEvent::Resized(size)
-                        | WindowEvent::ScaleFactorChanged {
-                            new_inner_size: &mut size,
-                            ..
-                        },
+                    event: | WindowEvent::Resized(size)
+                    | WindowEvent::ScaleFactorChanged { new_inner_size: &mut size, .. },
                     ..
                 } => {
                     log::debug!("Resizing to {:?}", size);
@@ -111,24 +112,24 @@ impl<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> AppRunne
                     app.on_resize(width, height);
                     input.on_resize(width, height);
                 }
-                event::Event::WindowEvent { event, .. } => match event {
-                    WindowEvent::KeyboardInput {
-                        input:
-                            event::KeyboardInput {
-                                virtual_keycode: Some(event::VirtualKeyCode::Escape),
-                                state: event::ElementState::Pressed,
-                                ..
-                            },
-                        ..
+                event::Event::WindowEvent { event, .. } =>
+                    match event {
+                        | WindowEvent::KeyboardInput {
+                              input: event::KeyboardInput {
+                                  virtual_keycode: Some(event::VirtualKeyCode::Escape),
+                                  state: event::ElementState::Pressed,
+                                  ..
+                              },
+                              ..
+                          }
+                        | WindowEvent::CloseRequested => {
+                            *control_flow = ControlFlow::Exit;
+                        }
+                        _ => {
+                            input.on_window_event(&event);
+                            app.on_window_event(&event);
+                        }
                     }
-                    | WindowEvent::CloseRequested => {
-                        *control_flow = ControlFlow::Exit;
-                    }
-                    _ => {
-                        input.on_window_event(&event);
-                        app.on_window_event(&event);
-                    }
-                },
                 event::Event::UserEvent(e) => {
                     app.on_user_event(&e);
                     let window_event = app.map_to_window_event(&e);
@@ -154,9 +155,7 @@ impl<G: 'static + GpuApp + OnResize + OnWindowEvent + MapToWindowEvent> AppRunne
                                 .expect("Failed to acquire next surface texture!")
                         }
                     };
-                    let view = frame
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor::default());
+                    let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
                     let submission_index = app.render(&view, &frame_input);
                     app.on_commands_submitted(&frame_input, &submission_index);

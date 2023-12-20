@@ -72,23 +72,23 @@ impl TimeStampQuerySet {
         }
     }
 
-    pub fn make_compute_pass_timestamp_write(&mut self, location: wgpu::ComputePassTimestampLocation) -> Result<wgpu::ComputePassTimestampWrite, CapacityReachedError> {
-        if self.next_index >= self.capacity {
-            self.next_index += 1;
-            Err(CapacityReachedError {
-                capacity: self.capacity,
-                index: self.next_index,
-            })
-        } else {
-            let timestamp_write = wgpu::ComputePassTimestampWrite {
-                query_set: &self.query_set,
-                query_index: self.next_index as u32,
-                location,
-            };
-            self.next_index += 1;
-            Ok(timestamp_write)
-        }
-    }
+    // pub fn make_compute_pass_timestamp_write(&mut self, location: wgpu::ComputePassTimestampLocation) -> Result<wgpu::ComputePassTimestampWrite, CapacityReachedError> {
+    //     if self.next_index >= self.capacity {
+    //         self.next_index += 1;
+    //         Err(CapacityReachedError {
+    //             capacity: self.capacity,
+    //             index: self.next_index,
+    //         })
+    //     } else {
+    //         let timestamp_write = wgpu::ComputePassTimestampWrite {
+    //             query_set: &self.query_set,
+    //             query_index: self.next_index as u32,
+    //             location,
+    //         };
+    //         self.next_index += 1;
+    //         Ok(timestamp_write)
+    //     }
+    // }
 
     pub fn next_index(&mut self) -> Result<u32, CapacityReachedError> {
         if self.next_index >= self.capacity {

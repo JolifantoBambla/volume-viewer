@@ -127,6 +127,7 @@ export class VolumeRenderer {
     }
 
     async initialize(offscreenCanvas, config) {
+        console.log('Simon', offscreenCanvas);
         // to accept an OffscreenCanvas as a raw window handle, winit needs some properties to exist on both the window and
         // the canvas. This is a hack to make sure that the window has the properties that winit needs.
         // see: https://github.com/rust-windowing/winit/issues/1518

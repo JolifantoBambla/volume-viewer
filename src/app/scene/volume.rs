@@ -1,6 +1,4 @@
 use crate::resource::VolumeManager;
-#[cfg(feature = "timestamp-query")]
-use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use crate::volume::octree::octree_manager::Octree;
 use crate::volume::octree::update::OctreeUpdate;
 use crate::volume::octree::OctreeDescriptor;

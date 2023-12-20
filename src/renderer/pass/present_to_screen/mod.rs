@@ -1,6 +1,4 @@
 use crate::renderer::pass::{AsBindGroupEntries, GPUPass};
-#[cfg(feature = "timestamp-query")]
-use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use std::{borrow::Cow, sync::Arc};
 use wgpu::{BindGroup, BindGroupEntry, BindGroupLayout, Buffer, CommandEncoder, RenderPipeline, SurfaceConfiguration, TextureView};
 use wgpu_framework::context::Gpu;
@@ -83,10 +81,7 @@ impl PresentToScreen {
         command_encoder: &mut CommandEncoder,
         bind_group: &BindGroup,
         view: &TextureView,
-        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
     ) {
-        #[cfg(feature = "timestamp-query")]
-        timestamp_query_helper.write_timestamp(command_encoder);
         {
             let mut rpass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
@@ -100,18 +95,18 @@ impl PresentToScreen {
                             b: 0.0,
                             a: 1.0,
                         }),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
             });
             rpass.set_pipeline(&self.pipeline);
             rpass.set_bind_group(0, bind_group, &[]);
             rpass.insert_debug_marker(self.label());
             rpass.draw(0..6, 0..1);
         }
-        #[cfg(feature = "timestamp-query")]
-        timestamp_query_helper.write_timestamp(command_encoder);
     }
 }
 

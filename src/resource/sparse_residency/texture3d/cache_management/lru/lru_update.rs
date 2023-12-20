@@ -3,8 +3,6 @@ use crate::renderer::pass::{ComputePipelineData, StaticComputeEncodeDescriptor};
 use crate::resource::buffer::TypedBuffer;
 use crate::resource::sparse_residency::texture3d::cache_management::lru::NumUsedEntries;
 use crate::resource::Texture;
-#[cfg(feature = "timestamp-query")]
-use crate::timing::timestamp_query_helper::TimestampQueryHelper;
 use std::borrow::Cow;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -231,8 +229,7 @@ impl LRUUpdate {
 
     pub fn encode(
         &self,
-        command_encoder: &mut CommandEncoder,
-        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
+        command_encoder: &mut CommandEncoder
     ) {
         self.ctx.queue().write_buffer(
             self.num_used_entries.buffer(),
@@ -240,26 +237,18 @@ impl LRUUpdate {
             bytemuck::bytes_of(&NumUsedEntries { num: 0 }),
         );
         self.encode_passes(
-            command_encoder,
-            #[cfg(feature = "timestamp-query")]
-            timestamp_query_helper,
+            command_encoder
         );
         self.encode_copy(command_encoder);
     }
 
     fn encode_passes(
         &self,
-        command_encoder: &mut CommandEncoder,
-        #[cfg(feature = "timestamp-query")] timestamp_query_helper: &mut TimestampQueryHelper,
+        command_encoder: &mut CommandEncoder
     ) {
-        #[cfg(feature = "timestamp-query")]
-        let timestamp_writes = timestamp_query_helper.make_compute_pass_timestamp_write_pair();
-        #[cfg(not(feature = "timestamp-query"))]
-        let timestamp_writes = Vec::new();
-
         let mut compute_pass = command_encoder.begin_compute_pass(&ComputePassDescriptor {
             label: Label::from("update lru"),
-            timestamp_writes: timestamp_writes.as_slice(),
+            timestamp_writes: None,
         });
         self.initialize_offsets_pass.encode(&mut compute_pass);
         self.scan.encode_to_pass(&mut compute_pass);
